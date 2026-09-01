@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('http://localhost:3000'),
+  metadataBase: new URL('https://aurum-guard-trading.a4jin69.chatgpt.site'),
   title: 'Aurum Guard — Gold & Silver Trading Intelligence',
   description:
     'A risk-first paper-trading dashboard for explainable gold and silver signals, position sizing and news-risk awareness.',
