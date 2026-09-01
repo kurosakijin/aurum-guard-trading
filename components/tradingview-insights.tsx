@@ -91,7 +91,7 @@ export function TradingViewTechnicalAnalysis({
         colorTheme: 'dark',
       }}
       label="Live TradingView technical rating"
-      className="tradingview-widget-container h-[440px] w-full"
+      className="tradingview-widget-container h-[680px] w-full sm:h-[760px]"
     />
   );
 }
