@@ -56,12 +56,13 @@ const timeframes = [
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
 const pineScript = String.raw`//@version=6
-strategy("Aurum Guard EMA + RSI", overlay = true, pyramiding = 0,
+strategy("Aurum Guard Confirmed MTF", overlay = true, pyramiding = 0,
      initial_capital = 10000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 1,
      commission_type = strategy.commission.percent,
-     commission_value = 0.05)
+     commission_value = 0.05,
+     process_orders_on_close = true)
 
 fastLength = input.int(20, "Fast EMA", minval = 2)
 slowLength = input.int(50, "Slow EMA", minval = 3)
@@ -69,6 +70,9 @@ rsiLength = input.int(14, "RSI length", minval = 2)
 atrLength = input.int(14, "ATR length", minval = 2)
 atrMultiple = input.float(1.5, "ATR stop multiple", minval = 0.5, step = 0.1)
 rewardRisk = input.float(2.0, "Reward / risk", minval = 1.0, step = 0.25)
+confirmationTimeframe = input.timeframe("15", "Confirmed trend timeframe")
+slopeBars = input.int(3, "EMA slope lookback", minval = 1)
+cooldownBars = input.int(10, "Bars between setups", minval = 1)
 
 fastEMA = ta.ema(close, fastLength)
 slowEMA = ta.ema(close, slowLength)
@@ -76,33 +80,56 @@ rsiValue = ta.rsi(close, rsiLength)
 atrValue = ta.atr(atrLength)
 atrBaseline = ta.sma(atrValue, 50)
 volatilityOK = atrValue > atrBaseline * 0.65
+fastCrossUp = ta.crossover(fastEMA, slowEMA)
+fastCrossDown = ta.crossunder(fastEMA, slowEMA)
+slowSlopeUp = slowEMA > slowEMA[slopeBars]
+slowSlopeDown = slowEMA < slowEMA[slopeBars]
 
-buySignal = barstate.isconfirmed and ta.crossover(fastEMA, slowEMA) and rsiValue > 52 and volatilityOK
-sellSignal = barstate.isconfirmed and ta.crossunder(fastEMA, slowEMA) and rsiValue < 48 and volatilityOK
+// Previous completed higher-timeframe bar: avoids using an unfinished 15m candle on a 3m chart.
+confirmedHTFClose = request.security(syminfo.tickerid, confirmationTimeframe, close[1], lookahead = barmerge.lookahead_on)
+confirmedHTFEMA = request.security(syminfo.tickerid, confirmationTimeframe, ta.ema(close, slowLength)[1], lookahead = barmerge.lookahead_on)
+higherTrendUp = confirmedHTFClose > confirmedHTFEMA
+higherTrendDown = confirmedHTFClose < confirmedHTFEMA
 
-if buySignal
-    strategy.entry("BUY", strategy.long)
+var int lastSetupBar = na
+cooldownOK = na(lastSetupBar) or bar_index - lastSetupBar > cooldownBars
 
-if sellSignal
-    strategy.entry("SELL", strategy.short)
+longSetup = barstate.isconfirmed and cooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and volatilityOK and higherTrendUp
+shortSetup = barstate.isconfirmed and cooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and volatilityOK and higherTrendDown
 
-if strategy.position_size > 0
-    longStop = strategy.position_avg_price - atrValue * atrMultiple
-    longTarget = strategy.position_avg_price + atrValue * atrMultiple * rewardRisk
-    strategy.exit("BUY exit", from_entry = "BUY", stop = longStop, limit = longTarget)
+var float setupATR = na
 
-if strategy.position_size < 0
-    shortStop = strategy.position_avg_price + atrValue * atrMultiple
-    shortTarget = strategy.position_avg_price - atrValue * atrMultiple * rewardRisk
-    strategy.exit("SELL exit", from_entry = "SELL", stop = shortStop, limit = shortTarget)
+if longSetup
+    strategy.entry("LONG", strategy.long)
+    setupATR := atrValue
+    lastSetupBar := bar_index
+
+if shortSetup
+    strategy.entry("SHORT", strategy.short)
+    setupATR := atrValue
+    lastSetupBar := bar_index
+
+if strategy.position_size > 0 and not na(setupATR)
+    longStop = strategy.position_avg_price - setupATR * atrMultiple
+    longTarget = strategy.position_avg_price + setupATR * atrMultiple * rewardRisk
+    strategy.exit("LONG exit", from_entry = "LONG", stop = longStop, limit = longTarget)
+
+if strategy.position_size < 0 and not na(setupATR)
+    shortStop = strategy.position_avg_price + setupATR * atrMultiple
+    shortTarget = strategy.position_avg_price - setupATR * atrMultiple * rewardRisk
+    strategy.exit("SHORT exit", from_entry = "SHORT", stop = shortStop, limit = shortTarget)
+
+if strategy.position_size == 0 and not longSetup and not shortSetup
+    setupATR := na
 
 plot(fastEMA, "EMA 20", color = color.aqua, linewidth = 2)
 plot(slowEMA, "EMA 50", color = color.orange, linewidth = 2)
-plotshape(buySignal, title = "BUY", text = "BUY", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.tiny)
-plotshape(sellSignal, title = "SELL", text = "SELL", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.tiny)
+plot(confirmedHTFEMA, "Confirmed HTF EMA", color = color.new(color.purple, 35), linewidth = 2, style = plot.style_stepline)
+plotshape(longSetup, title = "LONG SETUP", text = "LONG SETUP", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.tiny)
+plotshape(shortSetup, title = "SHORT SETUP", text = "SHORT SETUP", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.tiny)
 
-alertcondition(buySignal, title = "Aurum Guard BUY", message = "Aurum Guard BUY setup")
-alertcondition(sellSignal, title = "Aurum Guard SELL", message = "Aurum Guard SELL setup")`;
+alertcondition(longSetup, title = "Aurum Guard LONG SETUP", message = "Confirmed Aurum Guard long setup")
+alertcondition(shortSetup, title = "Aurum Guard SHORT SETUP", message = "Confirmed Aurum Guard short setup")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -323,8 +350,8 @@ export default function Home() {
 
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> BUY / SELL strategy for TradingView</CardTitle>
-              <CardDescription>Pine Script v6 · EMA crossover + RSI confirmation + ATR stop and target</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Confirmed trade setups for TradingView</CardTitle>
+              <CardDescription>Pine Script v6 · completed 15m trend filter + EMA slope + RSI + ATR risk exits</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -335,9 +362,9 @@ export default function Home() {
             <CardContent className="pt-4">
               <div className="mb-4 grid gap-2 sm:grid-cols-3">
                 {[
-                  ['BUY label', 'EMA 20 crosses above EMA 50, RSI > 52 and volatility passes.'],
-                  ['SELL label', 'EMA 20 crosses below EMA 50, RSI < 48 and volatility passes.'],
-                  ['Risk exit', '1.5× ATR stop with a configurable 2R profit target.'],
+                  ['LONG setup', 'Cross up + rising EMA + RSI > 55 + confirmed higher-timeframe uptrend.'],
+                  ['SHORT setup', 'Cross down + falling EMA + RSI < 45 + confirmed higher-timeframe downtrend.'],
+                  ['Noise control', 'Candle-close confirmation, volatility gate and a 10-bar signal cooldown.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
                     <p className={`text-xs font-semibold ${index === 0 ? 'text-emerald-300' : index === 1 ? 'text-red-300' : 'text-primary'}`}>{title}</p>
@@ -348,7 +375,7 @@ export default function Home() {
 
               <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f12]">
                 <div className="flex items-center justify-between border-b border-white/8 px-4 py-2 text-[10px] uppercase tracking-[.12em] text-muted-foreground">
-                  <span>aurum-guard-strategy.pine</span>
+                  <span>aurum-guard-confirmed-mtf.pine</span>
                   <span>Version 6</span>
                 </div>
                 <pre className="max-h-[730px] overflow-auto p-4 font-mono text-[11px] leading-[1.7] text-zinc-300"><code>{pineScript}</code></pre>
@@ -357,14 +384,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy the script, open Pine Editor, paste, then select “Add to chart.” Backtest each market and timeframe before considering a paper trade.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy the script, open Pine Editor, paste, then select “Add to chart.” On a 3m chart it uses the previous completed 15m trend—not the still-forming candle.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">No strategy can guarantee profit. Historical backtests omit some real-world effects and must not be treated as future-performance promises.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Labels now say SETUP because they are filtered conditions, not precise predictions. The extra filters reduce noisy 1–3m signals but cannot remove losing trades or guarantee profit.</p>
             </CardContent>
           </Card>
         </section>
