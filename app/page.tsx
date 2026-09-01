@@ -33,7 +33,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TradingViewChart } from '@/components/tradingview-chart';
 import {
   TradingViewSymbolInfo,
@@ -41,10 +40,8 @@ import {
 } from '@/components/tradingview-insights';
 
 const liveMarkets = [
-  { key: 'gold-spot', label: 'Gold spot', short: 'XAU / USD', symbol: 'OANDA:XAUUSD', instrument: 'gold' },
-  { key: 'gold-cfd', label: 'Gold CFD', short: 'CMC GOLD', symbol: 'CMCMARKETS:GOLD', instrument: 'gold' },
-  { key: 'silver-spot', label: 'Silver spot', short: 'XAG / USD', symbol: 'OANDA:XAGUSD', instrument: 'silver' },
-  { key: 'silver-cfd', label: 'Silver CFD', short: 'CMC SILVER', symbol: 'CMCMARKETS:SILVER', instrument: 'silver' },
+  { key: 'gold', label: 'Gold', short: 'XAU / USD', symbol: 'OANDA:XAUUSD' },
+  { key: 'silver', label: 'Silver', short: 'XAG / USD', symbol: 'OANDA:XAGUSD' },
 ] as const;
 
 const timeframes = [
@@ -58,8 +55,6 @@ const timeframes = [
 ] as const;
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
-type InstrumentKey = 'gold' | 'silver';
-
 const pineScript = String.raw`//@version=6
 strategy("Aurum Guard EMA + RSI", overlay = true, pyramiding = 0,
      initial_capital = 10000,
@@ -110,12 +105,11 @@ alertcondition(buySignal, title = "Aurum Guard BUY", message = "Aurum Guard BUY 
 alertcondition(sellSignal, title = "Aurum Guard SELL", message = "Aurum Guard SELL setup")`;
 
 export default function Home() {
-  const [instrument, setInstrument] = useState<InstrumentKey>('gold');
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
   const [widgetRefresh, setWidgetRefresh] = useState(0);
   const [scriptCopied, setScriptCopied] = useState(false);
-  const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold-spot');
+  const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('15');
   const [equity, setEquity] = useState(25000);
   const [riskPct, setRiskPct] = useState(0.5);
@@ -140,9 +134,8 @@ export default function Home() {
     window.setTimeout(() => setScriptCopied(false), 1600);
   }
 
-  function changeInstrument(value: InstrumentKey) {
-    setInstrument(value);
-    setLiveMarket(value === 'gold' ? 'gold-spot' : 'silver-spot');
+  function selectMetal(value: LiveMarketKey) {
+    setLiveMarket(value);
     setPlanCreated(false);
     if (value === 'gold') {
       setEntry(4805.2);
@@ -153,13 +146,6 @@ export default function Home() {
       setStop(64.9);
       setTarget(70.6);
     }
-  }
-
-  function chooseLiveMarket(value: LiveMarketKey) {
-    const selected = liveMarkets.find((market) => market.key === value);
-    if (!selected) return;
-    changeInstrument(selected.instrument);
-    setLiveMarket(value);
   }
 
   const riskBudget = Math.max(0, equity * (riskPct / 100));
@@ -203,7 +189,7 @@ export default function Home() {
       </header>
 
       <div className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <section className="mb-5">
           <div>
             <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-primary">
               <Sparkles className="size-3.5" /> Probability-weighted setup
@@ -211,12 +197,6 @@ export default function Home() {
             <h1 className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Protect capital. Trade only the clearest setup.</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Live TradingView market context, a transparent rules-based strategy and strict manual risk sizing in one workspace.</p>
           </div>
-          <Tabs value={instrument} onValueChange={(value) => changeInstrument(value as InstrumentKey)}>
-            <TabsList className="h-10 border border-white/8 bg-white/[.035] p-1">
-              <TabsTrigger value="gold" className="min-w-28">Gold · XAU</TabsTrigger>
-              <TabsTrigger value="silver" className="min-w-28">Silver · XAG</TabsTrigger>
-            </TabsList>
-          </Tabs>
         </section>
 
         <section id="live-chart" className="mb-4">
@@ -229,9 +209,23 @@ export default function Home() {
                     <Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-300"><RadioTower className="size-3" /> STREAMING</Badge>
                     <Badge variant="outline" className="border-white/10 text-muted-foreground">1 MINUTE +</Badge>
                   </div>
-                  <CardDescription className="mt-1.5">Switch between embeddable spot and commodity CFD charts, then choose any supported timeframe from 1 minute upward.</CardDescription>
+                  <CardDescription className="mt-1.5">Switch directly between viewable Gold and Silver spot charts, then choose any supported timeframe from 1 minute upward.</CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex rounded-xl border border-primary/20 bg-black/25 p-1" aria-label="Metal chart">
+                    {liveMarkets.map((market) => (
+                      <button
+                        key={market.key}
+                        type="button"
+                        aria-pressed={liveMarket === market.key}
+                        onClick={() => selectMetal(market.key)}
+                        className={`flex min-h-11 min-w-28 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold transition ${liveMarket === market.key ? 'bg-primary text-primary-foreground shadow-[0_8px_26px_rgba(225,177,78,.18)]' : 'text-muted-foreground hover:bg-white/6 hover:text-foreground'}`}
+                      >
+                        <span className={`size-2 rounded-full ${market.key === 'gold' ? 'bg-amber-200' : 'bg-zinc-200'}`} />
+                        {market.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex flex-wrap gap-1 rounded-lg border border-white/8 bg-black/15 p-1" aria-label="Chart timeframe">
                     {timeframes.map((item) => (
                       <button
@@ -248,20 +242,10 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="mt-2 flex flex-wrap gap-2" aria-label="TradingView market">
-                {liveMarkets.map((market) => (
-                  <button
-                    key={market.key}
-                    type="button"
-                    aria-pressed={liveMarket === market.key}
-                    onClick={() => chooseLiveMarket(market.key)}
-                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition ${liveMarket === market.key ? 'border-primary/40 bg-primary/10 text-foreground' : 'border-white/8 bg-white/[.02] text-muted-foreground hover:border-white/15 hover:text-foreground'}`}
-                  >
-                    <span className={`size-1.5 rounded-full ${market.instrument === 'gold' ? 'bg-primary' : 'bg-zinc-300'}`} />
-                    <span className="text-xs font-medium">{market.label}</span>
-                    <span className="font-mono text-[10px] opacity-65">{market.short}</span>
-                  </button>
-                ))}
+              <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-emerald-400" />
+                <span className="font-medium text-foreground">{activeLiveMarket.label}</span>
+                <span className="font-mono">{activeLiveMarket.short}</span>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -273,7 +257,7 @@ export default function Home() {
               />
             </CardContent>
             <div className="flex flex-col gap-1 border-t border-white/7 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>COMEX futures cannot be displayed in third-party TradingView widgets, so CFD charts are used as reference proxies—not as the futures contract itself.</span>
+              <span>Gold uses OANDA:XAUUSD and Silver uses OANDA:XAGUSD so both spot markets remain viewable inside the embedded chart.</span>
               <a href="https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">Chart details <ExternalLink className="size-3" /></a>
             </div>
           </Card>
@@ -284,7 +268,7 @@ export default function Home() {
             <Card className="border-emerald-400/15 bg-card/92">
               <CardHeader className="border-b border-white/7 pb-4">
                 <CardTitle className="flex items-center gap-2"><RadioTower className="size-4 text-emerald-300" /> Live market quote</CardTitle>
-                <CardDescription>{activeLiveMarket.label} · supplied by TradingView</CardDescription>
+                <CardDescription>{activeLiveMarket.label} spot · supplied by TradingView</CardDescription>
                 <CardAction><Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">LIVE</Badge></CardAction>
               </CardHeader>
               <CardContent className="px-2 py-3">

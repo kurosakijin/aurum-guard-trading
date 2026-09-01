@@ -71,7 +71,7 @@ export function TradingViewChart({
       hotlist: false,
       show_popup_button: true,
       popup_width: '1200',
-      popup_height: '720',
+      popup_height: '900',
       support_host: 'https://www.tradingview.com',
     });
 
@@ -88,7 +88,7 @@ export function TradingViewChart({
     <div
       ref={container}
       aria-label={`Interactive ${label} TradingView chart`}
-      className="tradingview-widget-container h-[650px] w-full sm:h-[760px] xl:h-[880px]"
+      className="tradingview-widget-container h-[820px] w-full sm:h-[1000px] xl:h-[1200px]"
     />
   );
 }
