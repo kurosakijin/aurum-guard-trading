@@ -209,23 +209,9 @@ export default function Home() {
                     <Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-300"><RadioTower className="size-3" /> STREAMING</Badge>
                     <Badge variant="outline" className="border-white/10 text-muted-foreground">1 MINUTE +</Badge>
                   </div>
-                  <CardDescription className="mt-1.5">Switch directly between viewable Gold and Silver spot charts, then choose any supported timeframe from 1 minute upward.</CardDescription>
+                  <CardDescription className="mt-1.5">Gold and Silver spot charts are shown together. One shared control changes both charts from 1 minute upward.</CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex rounded-xl border border-primary/20 bg-black/25 p-1" aria-label="Metal chart">
-                    {liveMarkets.map((market) => (
-                      <button
-                        key={market.key}
-                        type="button"
-                        aria-pressed={liveMarket === market.key}
-                        onClick={() => selectMetal(market.key)}
-                        className={`flex min-h-11 min-w-28 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold transition ${liveMarket === market.key ? 'bg-primary text-primary-foreground shadow-[0_8px_26px_rgba(225,177,78,.18)]' : 'text-muted-foreground hover:bg-white/6 hover:text-foreground'}`}
-                      >
-                        <span className={`size-2 rounded-full ${market.key === 'gold' ? 'bg-amber-200' : 'bg-zinc-200'}`} />
-                        {market.label}
-                      </button>
-                    ))}
-                  </div>
                   <div className="flex flex-wrap gap-1 rounded-lg border border-white/8 bg-black/15 p-1" aria-label="Chart timeframe">
                     {timeframes.map((item) => (
                       <button
@@ -241,23 +227,40 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-
-              <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span className="size-1.5 rounded-full bg-emerald-400" />
-                <span className="font-medium text-foreground">{activeLiveMarket.label}</span>
-                <span className="font-mono">{activeLiveMarket.short}</span>
-              </div>
             </CardHeader>
-            <CardContent className="p-0">
-              <TradingViewChart
-                key={`${activeLiveMarket.symbol}-${timeframe}-${widgetRefresh}`}
-                symbol={activeLiveMarket.symbol}
-                interval={timeframe}
-                label={activeLiveMarket.label}
-              />
+            <CardContent className="p-3 sm:p-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                {liveMarkets.map((market) => (
+                  <div key={market.key} className={`overflow-hidden rounded-xl border bg-black/15 ${liveMarket === market.key ? 'border-primary/35' : 'border-white/10'}`}>
+                    <div className="flex min-h-14 items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className={`size-2.5 rounded-full ${market.key === 'gold' ? 'bg-amber-300' : 'bg-zinc-200'}`} />
+                        <div>
+                          <p className="text-sm font-semibold">{market.label}</p>
+                          <p className="font-mono text-[10px] text-muted-foreground">{market.short} · {market.symbol}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        aria-pressed={liveMarket === market.key}
+                        onClick={() => selectMetal(market.key)}
+                        className={`rounded-lg border px-3 py-1.5 text-[10px] font-medium transition ${liveMarket === market.key ? 'border-primary/30 bg-primary/10 text-primary' : 'border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground'}`}
+                      >
+                        {liveMarket === market.key ? 'Analysis focused' : 'Focus analysis'}
+                      </button>
+                    </div>
+                    <TradingViewChart
+                      key={`${market.symbol}-${timeframe}-${widgetRefresh}`}
+                      symbol={market.symbol}
+                      interval={timeframe}
+                      label={market.label}
+                    />
+                  </div>
+                ))}
+              </div>
             </CardContent>
             <div className="flex flex-col gap-1 border-t border-white/7 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>Gold uses OANDA:XAUUSD and Silver uses OANDA:XAGUSD so both spot markets remain viewable inside the embedded chart.</span>
+              <span>Both charts are always visible: Gold uses OANDA:XAUUSD and Silver uses OANDA:XAGUSD. “Focus analysis” changes the quote and rating panels below.</span>
               <a href="https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">Chart details <ExternalLink className="size-3" /></a>
             </div>
           </Card>
