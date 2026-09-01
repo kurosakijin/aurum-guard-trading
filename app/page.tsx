@@ -11,6 +11,7 @@ import {
   Clipboard,
   Clock3,
   Code2,
+  Crosshair,
   ExternalLink,
   Landmark,
   LineChart,
@@ -18,6 +19,7 @@ import {
   Newspaper,
   RadioTower,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   TriangleAlert,
@@ -131,11 +133,127 @@ plotshape(shortSetup, title = "SHORT SETUP", text = "SHORT SETUP", style = shape
 alertcondition(longSetup, title = "Aurum Guard LONG SETUP", message = "Confirmed Aurum Guard long setup")
 alertcondition(shortSetup, title = "Aurum Guard SHORT SETUP", message = "Confirmed Aurum Guard short setup")`;
 
+const reversalPineScript = String.raw`//@version=6
+strategy("Aurum Guard Gold Reversal Scout", overlay = true, pyramiding = 0,
+     initial_capital = 10000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 0.5,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.05)
+
+pivotLength = input.int(5, "Prior swing length", minval = 2)
+rsiLength = input.int(14, "RSI length", minval = 2)
+atrLength = input.int(14, "ATR length", minval = 2)
+minimumWickBody = input.float(1.5, "Minimum wick / body", minval = 0.5, step = 0.1)
+rewardRisk = input.float(2.0, "Target reward / risk", minval = 1.0, step = 0.25)
+expiryBars = input.int(3, "Entry expiry bars", minval = 1, maxval = 10)
+confirmationTimeframe = input.timeframe("15", "Confirmed trend timeframe")
+tradeSession = input.session("0700-1700", "Active session in UTC")
+
+if timeframe.in_seconds() >= timeframe.in_seconds(confirmationTimeframe)
+    runtime.error("Use a chart timeframe below the confirmation timeframe.")
+
+rsiValue = ta.rsi(close, rsiLength)
+atrValue = ta.atr(atrLength)
+atrBaseline = ta.sma(atrValue, 50)
+volatilityOK = atrValue > atrBaseline * 0.7
+sessionOK = not na(time(timeframe.period, tradeSession, "Etc/UTC"))
+
+body = math.max(math.abs(close - open), syminfo.mintick)
+lowerWick = math.min(open, close) - low
+upperWick = high - math.max(open, close)
+
+pivotLow = ta.pivotlow(low, pivotLength, pivotLength)
+pivotHigh = ta.pivothigh(high, pivotLength, pivotLength)
+priorSwingLow = ta.valuewhen(not na(pivotLow), pivotLow, 0)
+priorSwingHigh = ta.valuewhen(not na(pivotHigh), pivotHigh, 0)
+
+confirmedHTFClose = request.security(syminfo.tickerid, confirmationTimeframe, close[1], lookahead = barmerge.lookahead_on)
+confirmedHTFEMA = request.security(syminfo.tickerid, confirmationTimeframe, ta.ema(close, 50)[1], lookahead = barmerge.lookahead_on)
+higherTrendUp = confirmedHTFClose > confirmedHTFEMA
+higherTrendDown = confirmedHTFClose < confirmedHTFEMA
+
+rsiRecentLow = ta.lowest(rsiValue, 4)
+rsiRecentHigh = ta.highest(rsiValue, 4)
+sweptLow = not na(priorSwingLow) and low < priorSwingLow and close > priorSwingLow
+sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSwingHigh
+
+longWatch = barstate.isconfirmed and sessionOK and volatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
+shortWatch = barstate.isconfirmed and sessionOK and volatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
+
+var float pendingLongEntry = na
+var float pendingLongStop = na
+var int pendingLongBar = na
+var float pendingShortEntry = na
+var float pendingShortStop = na
+var int pendingShortBar = na
+
+if longWatch and strategy.position_size == 0
+    strategy.cancel("REV SHORT")
+    pendingShortEntry := na
+    pendingShortStop := na
+    pendingShortBar := na
+    pendingLongEntry := high + syminfo.mintick
+    pendingLongStop := low - syminfo.mintick * 2
+    pendingLongBar := bar_index
+
+if shortWatch and strategy.position_size == 0
+    strategy.cancel("REV LONG")
+    pendingLongEntry := na
+    pendingLongStop := na
+    pendingLongBar := na
+    pendingShortEntry := low - syminfo.mintick
+    pendingShortStop := high + syminfo.mintick * 2
+    pendingShortBar := bar_index
+
+if not na(pendingLongBar) and strategy.position_size == 0
+    if bar_index - pendingLongBar <= expiryBars
+        strategy.entry("REV LONG", strategy.long, stop = pendingLongEntry)
+    else
+        strategy.cancel("REV LONG")
+        pendingLongEntry := na
+        pendingLongStop := na
+        pendingLongBar := na
+
+if not na(pendingShortBar) and strategy.position_size == 0
+    if bar_index - pendingShortBar <= expiryBars
+        strategy.entry("REV SHORT", strategy.short, stop = pendingShortEntry)
+    else
+        strategy.cancel("REV SHORT")
+        pendingShortEntry := na
+        pendingShortStop := na
+        pendingShortBar := na
+
+if strategy.position_size > 0 and not na(pendingLongStop)
+    longRisk = strategy.position_avg_price - pendingLongStop
+    if longRisk > syminfo.mintick
+        strategy.exit("REV LONG exit", from_entry = "REV LONG", stop = pendingLongStop, limit = strategy.position_avg_price + longRisk * rewardRisk)
+    pendingLongEntry := na
+    pendingLongBar := na
+
+if strategy.position_size < 0 and not na(pendingShortStop)
+    shortRisk = pendingShortStop - strategy.position_avg_price
+    if shortRisk > syminfo.mintick
+        strategy.exit("REV SHORT exit", from_entry = "REV SHORT", stop = pendingShortStop, limit = strategy.position_avg_price - shortRisk * rewardRisk)
+    pendingShortEntry := na
+    pendingShortBar := na
+
+plot(priorSwingLow, "Prior swing low", color = color.new(color.lime, 72), style = plot.style_linebr)
+plot(priorSwingHigh, "Prior swing high", color = color.new(color.red, 72), style = plot.style_linebr)
+plot(strategy.position_size == 0 ? pendingLongEntry : na, "Long trigger", color = color.lime, linewidth = 2, style = plot.style_linebr)
+plot(strategy.position_size == 0 ? pendingShortEntry : na, "Short trigger", color = color.red, linewidth = 2, style = plot.style_linebr)
+plotshape(longWatch, title = "POSSIBLE LONG REVERSAL", text = "REV WATCH", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.tiny)
+plotshape(shortWatch, title = "POSSIBLE SHORT REVERSAL", text = "REV WATCH", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.tiny)
+
+alertcondition(longWatch, title = "Possible long reversal", message = "Aurum Guard possible long reversal; wait for trigger")
+alertcondition(shortWatch, title = "Possible short reversal", message = "Aurum Guard possible short reversal; wait for trigger")`;
+
 export default function Home() {
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
   const [widgetRefresh, setWidgetRefresh] = useState(0);
   const [scriptCopied, setScriptCopied] = useState(false);
+  const [reversalCopied, setReversalCopied] = useState(false);
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('15');
   const [equity, setEquity] = useState(25000);
@@ -159,6 +277,12 @@ export default function Home() {
     await navigator.clipboard.writeText(pineScript);
     setScriptCopied(true);
     window.setTimeout(() => setScriptCopied(false), 1600);
+  }
+
+  async function copyReversalStrategy() {
+    await navigator.clipboard.writeText(reversalPineScript);
+    setReversalCopied(true);
+    window.setTimeout(() => setReversalCopied(false), 1600);
   }
 
   function selectMetal(value: LiveMarketKey) {
@@ -392,6 +516,94 @@ export default function Home() {
               </div>
 
               <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Labels now say SETUP because they are filtered conditions, not precise predictions. The extra filters reduce noisy 1–3m signals but cannot remove losing trades or guarantee profit.</p>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section id="reversal-playbook" className="mt-4 grid gap-4 xl:grid-cols-[.72fr_1.28fr]">
+          <Card className="border-fuchsia-400/15 bg-[linear-gradient(145deg,rgba(192,132,252,.08),rgba(18,22,27,.95)_45%)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle className="flex items-center gap-2"><RotateCcw className="size-4 text-fuchsia-300" /> Gold reversal scalping playbook</CardTitle>
+              <CardDescription>A conditional 1m–5m process—not a prediction of the exact turning point.</CardDescription>
+              <CardAction><Badge className="border border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200">POSSIBLE REVERSAL</Badge></CardAction>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="space-y-2">
+                {[
+                  ['1 · Context', 'Use a 1m, 3m or 5m chart. The previous completed 15m close must remain on the correct side of its EMA 50.'],
+                  ['2 · Reversal watch', 'Price sweeps a confirmed prior swing, closes back through it and prints a rejection wick with RSI recovery.'],
+                  ['3 · Entry trigger', 'Long only one tick above the reversal candle high; short only one tick below its low. No trigger means no trade.'],
+                  ['4 · Risk and expiry', 'Stop beyond the sweep candle, target 2R, and cancel the pending entry if it does not trigger within three bars.'],
+                ].map(([title, description]) => (
+                  <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
+                    <p className="text-xs font-semibold text-foreground">{title}</p>
+                    <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">{description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[.055] p-4">
+                <div className="flex items-center gap-2 text-primary"><Crosshair className="size-4" /><p className="text-xs font-semibold">Objective “best entry”</p></div>
+                <p className="mt-2 text-sm font-semibold">Reversal candle → confirmation break → immediate predefined risk</p>
+                <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The sweep candle is only a watch condition. Entry is allowed after price breaks its rejection extreme. This sacrifices the exact bottom or top to demand evidence that price is actually reversing.</p>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-amber-300/15 bg-amber-300/[.04] p-3 text-[11px] leading-5 text-muted-foreground">
+                <p className="font-medium text-amber-200">Skip the setup</p>
+                <p className="mt-1">During CPI, payrolls or central-bank releases; when spread/slippage is abnormal; when the 15m filter disagrees; or after the daily loss cap is reached.</p>
+              </div>
+
+              <p className="mt-4 text-[10px] leading-4 text-muted-foreground">For paper testing, start at 0.25% risk or less per attempt. “Possible reversal” means conditions aligned—it does not mean the market must reverse.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden border-fuchsia-400/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-fuchsia-300" /> Gold Reversal Scout · Pine v6</CardTitle>
+              <CardDescription>Swing sweep + wick rejection + RSI recovery + confirmed 15m context + expiring stop-entry</CardDescription>
+              <CardAction>
+                <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyReversalStrategy}>
+                  {reversalCopied ? <Check /> : <Clipboard />}
+                  {reversalCopied ? 'Copied' : 'Copy reversal script'}
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="mb-4 grid gap-2 sm:grid-cols-3">
+                {[
+                  ['REV WATCH', 'The swing sweep and rejection conditions are present. Do not enter yet.'],
+                  ['Trigger line', 'A stop-entry waits beyond the rejection candle so price must confirm.'],
+                  ['Auto cancel', 'The unfilled trigger expires after three bars instead of chasing price.'],
+                ].map(([title, description], index) => (
+                  <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
+                    <p className={`text-xs font-semibold ${index === 0 ? 'text-fuchsia-300' : index === 1 ? 'text-primary' : 'text-amber-200'}`}>{title}</p>
+                    <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f12]">
+                <div className="flex items-center justify-between border-b border-white/8 px-4 py-2 text-[10px] uppercase tracking-[.12em] text-muted-foreground">
+                  <span>aurum-guard-gold-reversal-scout.pine</span>
+                  <span>Version 6</span>
+                </div>
+                <pre className="max-h-[860px] overflow-auto p-4 font-mono text-[11px] leading-[1.7] text-zinc-300"><code>{reversalPineScript}</code></pre>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-fuchsia-300/12 bg-fuchsia-300/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="max-w-2xl">
+                  <p className="text-xs font-medium">Backtest before using alerts</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Paste it into Pine Editor on XAU/USD, use a 1m–5m chart and keep the confirmation timeframe above the chart timeframe.</p>
+                </div>
+                <a href="https://www.tradingview.com/chart/?symbol=OANDA%3AXAUUSD" target="_blank" rel="noreferrer">
+                  <Button className="w-full bg-fuchsia-300 text-fuchsia-950 hover:bg-fuchsia-200 sm:w-auto">Open Gold chart <ExternalLink /></Button>
+                </a>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[10px]">
+                <a href="https://www.tradingview.com/pine-script-docs/concepts/repainting/" target="_blank" rel="noreferrer" className="text-primary hover:underline">Confirmed HTF data <ExternalLink className="ml-1 inline size-3" /></a>
+                <a href="https://www.tradingview.com/pine-script-docs/concepts/strategies/" target="_blank" rel="noreferrer" className="text-primary hover:underline">Strategy order behavior <ExternalLink className="ml-1 inline size-3" /></a>
+              </div>
             </CardContent>
           </Card>
         </section>
