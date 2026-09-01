@@ -1,17 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
-  Activity,
   ArrowUpRight,
   Bot,
   Calculator,
   CandlestickChart,
   Check,
   ChevronDown,
+  Clipboard,
   Clock3,
+  Code2,
   ExternalLink,
-  Gauge,
   Landmark,
   LineChart,
   LockKeyhole,
@@ -22,7 +22,6 @@ import {
   Sparkles,
   TriangleAlert,
 } from 'lucide-react';
-import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from 'recharts';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,14 +33,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TradingViewChart } from '@/components/tradingview-chart';
+import {
+  TradingViewSymbolInfo,
+  TradingViewTechnicalAnalysis,
+} from '@/components/tradingview-insights';
 
 const liveMarkets = [
   { key: 'gold-spot', label: 'Gold spot', short: 'XAU / USD', symbol: 'OANDA:XAUUSD', instrument: 'gold' },
@@ -61,50 +58,63 @@ const timeframes = [
 ] as const;
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
+type InstrumentKey = 'gold' | 'silver';
 
-const goldData = [
-  4354, 4378, 4362, 4401, 4428, 4412, 4446, 4461, 4450, 4488, 4522, 4504,
-  4538, 4562, 4546, 4581, 4608, 4588, 4621, 4644, 4630, 4668, 4696, 4681,
-  4715, 4742, 4720, 4758, 4788, 4771, 4805,
-].map((price, index) => ({ day: index + 1, price }));
+const pineScript = String.raw`//@version=6
+strategy("Aurum Guard EMA + RSI", overlay = true, pyramiding = 0,
+     initial_capital = 10000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 1,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.05)
 
-const silverData = [
-  56.2, 56.8, 56.4, 57.1, 57.9, 57.3, 58.2, 58.7, 58.4, 59.2, 60.1, 59.4,
-  60.5, 61.1, 60.4, 61.6, 62.3, 61.7, 62.8, 63.2, 62.6, 63.7, 64.4, 63.8,
-  64.9, 65.5, 64.7, 65.8, 66.5, 65.9, 66.8,
-].map((price, index) => ({ day: index + 1, price }));
+fastLength = input.int(20, "Fast EMA", minval = 2)
+slowLength = input.int(50, "Slow EMA", minval = 3)
+rsiLength = input.int(14, "RSI length", minval = 2)
+atrLength = input.int(14, "ATR length", minval = 2)
+atrMultiple = input.float(1.5, "ATR stop multiple", minval = 0.5, step = 0.1)
+rewardRisk = input.float(2.0, "Reward / risk", minval = 1.0, step = 0.25)
 
-const instruments = {
-  gold: {
-    symbol: 'XAU / USD',
-    name: 'Gold spot',
-    price: 4805.2,
-    change: '+1.34%',
-    confidence: 72,
-    signal: 'LONG WATCH',
-    support: 4742,
-    resistance: 4868,
-    data: goldData,
-  },
-  silver: {
-    symbol: 'XAG / USD',
-    name: 'Silver spot',
-    price: 66.8,
-    change: '+0.86%',
-    confidence: 64,
-    signal: 'WAIT',
-    support: 64.9,
-    resistance: 68.4,
-    data: silverData,
-  },
-};
+fastEMA = ta.ema(close, fastLength)
+slowEMA = ta.ema(close, slowLength)
+rsiValue = ta.rsi(close, rsiLength)
+atrValue = ta.atr(atrLength)
+atrBaseline = ta.sma(atrValue, 50)
+volatilityOK = atrValue > atrBaseline * 0.65
 
-type InstrumentKey = keyof typeof instruments;
+buySignal = barstate.isconfirmed and ta.crossover(fastEMA, slowEMA) and rsiValue > 52 and volatilityOK
+sellSignal = barstate.isconfirmed and ta.crossunder(fastEMA, slowEMA) and rsiValue < 48 and volatilityOK
+
+if buySignal
+    strategy.entry("BUY", strategy.long)
+
+if sellSignal
+    strategy.entry("SELL", strategy.short)
+
+if strategy.position_size > 0
+    longStop = strategy.position_avg_price - atrValue * atrMultiple
+    longTarget = strategy.position_avg_price + atrValue * atrMultiple * rewardRisk
+    strategy.exit("BUY exit", from_entry = "BUY", stop = longStop, limit = longTarget)
+
+if strategy.position_size < 0
+    shortStop = strategy.position_avg_price + atrValue * atrMultiple
+    shortTarget = strategy.position_avg_price - atrValue * atrMultiple * rewardRisk
+    strategy.exit("SELL exit", from_entry = "SELL", stop = shortStop, limit = shortTarget)
+
+plot(fastEMA, "EMA 20", color = color.aqua, linewidth = 2)
+plot(slowEMA, "EMA 50", color = color.orange, linewidth = 2)
+plotshape(buySignal, title = "BUY", text = "BUY", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.tiny)
+plotshape(sellSignal, title = "SELL", text = "SELL", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.tiny)
+
+alertcondition(buySignal, title = "Aurum Guard BUY", message = "Aurum Guard BUY setup")
+alertcondition(sellSignal, title = "Aurum Guard SELL", message = "Aurum Guard SELL setup")`;
 
 export default function Home() {
   const [instrument, setInstrument] = useState<InstrumentKey>('gold');
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
+  const [widgetRefresh, setWidgetRefresh] = useState(0);
+  const [scriptCopied, setScriptCopied] = useState(false);
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold-spot');
   const [timeframe, setTimeframe] = useState('15');
   const [equity, setEquity] = useState(25000);
@@ -113,20 +123,21 @@ export default function Home() {
   const [stop, setStop] = useState(4742);
   const [target, setTarget] = useState(4931.6);
   const [planCreated, setPlanCreated] = useState(false);
-  const active = instruments[instrument];
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
-  const chartPad = instrument === 'gold' ? 40 : 2;
-  const formatter = useMemo(
-    () => new Intl.NumberFormat('en-US', { maximumFractionDigits: instrument === 'gold' ? 0 : 1 }),
-    [instrument],
-  );
 
   function runScan() {
     setScanning(true);
     window.setTimeout(() => {
       setScanning(false);
+      setWidgetRefresh((current) => current + 1);
       setLastScan(new Date().toLocaleTimeString([], { hour12: false }));
     }, 700);
+  }
+
+  async function copyStrategy() {
+    await navigator.clipboard.writeText(pineScript);
+    setScriptCopied(true);
+    window.setTimeout(() => setScriptCopied(false), 1600);
   }
 
   function changeInstrument(value: InstrumentKey) {
@@ -156,11 +167,18 @@ export default function Home() {
   const positionSize = riskPerOunce > 0 ? riskBudget / riskPerOunce : 0;
   const projectedReward = Math.abs(target - entry) * positionSize;
   const rewardRisk = riskBudget > 0 ? projectedReward / riskBudget : 0;
+  const riskFields: Array<[string, number, (next: number) => void, number]> = [
+    ['Account equity', equity, setEquity, 100],
+    ['Risk %', riskPct, setRiskPct, 0.05],
+    ['Entry', entry, setEntry, 0.1],
+    ['Stop', stop, setStop, 0.1],
+    ['Target', target, setTarget, 0.1],
+  ];
 
   return (
     <main className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-white/8 bg-background/88 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-[1800px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="grid size-9 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-primary shadow-[0_0_32px_rgba(225,177,78,.12)]">
               <Bot className="size-5" />
@@ -179,19 +197,19 @@ export default function Home() {
           </div>
           <Button variant="outline" className="border-white/10 bg-white/[.03] text-xs" onClick={runScan} disabled={scanning}>
             <RefreshCw className={scanning ? 'animate-spin' : ''} />
-            {scanning ? 'Scanning' : 'Run scan'}
+            {scanning ? 'Refreshing' : 'Refresh live data'}
           </Button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8">
         <section className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
             <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-primary">
               <Sparkles className="size-3.5" /> Probability-weighted setup
             </div>
             <h1 className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Protect capital. Trade only the clearest setup.</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Trend, momentum, volatility and news risk are combined into one explainable paper-trading signal.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Live TradingView market context, a transparent rules-based strategy and strict manual risk sizing in one workspace.</p>
           </div>
           <Tabs value={instrument} onValueChange={(value) => changeInstrument(value as InstrumentKey)}>
             <TabsList className="h-10 border border-white/8 bg-white/[.035] p-1">
@@ -248,7 +266,7 @@ export default function Home() {
             </CardHeader>
             <CardContent className="p-0">
               <TradingViewChart
-                key={`${activeLiveMarket.symbol}-${timeframe}`}
+                key={`${activeLiveMarket.symbol}-${timeframe}-${widgetRefresh}`}
                 symbol={activeLiveMarket.symbol}
                 interval={timeframe}
                 label={activeLiveMarket.label}
@@ -261,85 +279,36 @@ export default function Home() {
           </Card>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,.65fr)]">
-          <Card className="border-white/8 bg-card/90 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
-            <CardHeader className="border-b border-white/7 pb-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">{active.name}</span>
-                    <Badge variant="outline" className="border-white/10 text-[10px] text-muted-foreground">DEMO</Badge>
-                  </div>
-                  <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-3xl font-semibold tracking-tight">${active.price.toLocaleString()}</span>
-                    <span className="text-sm font-medium text-emerald-300">{active.change}</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-[11px] uppercase tracking-[.14em] text-muted-foreground">AI posture</p>
-                  <div className="mt-1 flex items-center justify-end gap-2 text-lg font-semibold text-primary">
-                    <Activity className="size-4" /> {active.signal}
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">30-session structure</span>
-                <span className="font-mono text-[11px] text-muted-foreground">Last scan {lastScan}</span>
-              </div>
-              <ChartContainer
-                config={{ price: { label: active.symbol, color: '#e1b14e' } }}
-                className="h-[285px] w-full aspect-auto"
-              >
-                <AreaChart data={active.data} margin={{ top: 18, right: 4, bottom: 0, left: 4 }}>
-                  <defs>
-                    <linearGradient id="goldArea" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--color-price)" stopOpacity={0.28} />
-                      <stop offset="100%" stopColor="var(--color-price)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid vertical={false} stroke="rgba(255,255,255,.06)" />
-                  <XAxis dataKey="day" tickLine={false} axisLine={false} tickFormatter={(v) => v % 5 === 0 ? `D${v}` : ''} />
-                  <YAxis domain={[(min: number) => min - chartPad, (max: number) => max + chartPad]} orientation="right" tickLine={false} axisLine={false} width={52} tickFormatter={(v) => formatter.format(v)} />
-                  <ReferenceLine y={active.support} stroke="rgba(76,211,159,.55)" strokeDasharray="4 5" />
-                  <Area type="monotone" dataKey="price" stroke="var(--color-price)" strokeWidth={2.2} fill="url(#goldArea)" />
-                  <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
-                </AreaChart>
-              </ChartContainer>
-              <div className="mt-2 grid grid-cols-3 gap-2 border-t border-white/7 pt-4 text-xs">
-                <div><span className="text-muted-foreground">Support</span><p className="mt-1 font-mono font-medium text-emerald-300">${formatter.format(active.support)}</p></div>
-                <div><span className="text-muted-foreground">Resistance</span><p className="mt-1 font-mono font-medium">${formatter.format(active.resistance)}</p></div>
-                <div><span className="text-muted-foreground">Feed</span><p className="mt-1 font-medium">Illustrative</p></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4">
-            <Card className="border-primary/15 bg-[linear-gradient(145deg,rgba(225,177,78,.11),rgba(18,22,27,.94)_48%)]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Gauge className="size-4 text-primary" /> Signal confidence</CardTitle>
-                <CardDescription>Confluence score, not a win guarantee</CardDescription>
-                <CardAction><span className="font-mono text-2xl font-semibold text-primary">{active.confidence}%</span></CardAction>
+        <section className="grid gap-4 xl:grid-cols-[minmax(360px,.72fr)_minmax(0,1.28fr)]">
+          <div className="grid content-start gap-4">
+            <Card className="border-emerald-400/15 bg-card/92">
+              <CardHeader className="border-b border-white/7 pb-4">
+                <CardTitle className="flex items-center gap-2"><RadioTower className="size-4 text-emerald-300" /> Live market quote</CardTitle>
+                <CardDescription>{activeLiveMarket.label} · supplied by TradingView</CardDescription>
+                <CardAction><Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">LIVE</Badge></CardAction>
               </CardHeader>
-              <CardContent>
-                <Progress value={active.confidence} className="[&_[data-slot=progress-indicator]]:bg-primary [&_[data-slot=progress-track]]:h-1.5" />
-                <div className="mt-5 space-y-3">
-                  {[
-                    ['Trend above 20 / 50 EMA', true, '+24'],
-                    ['Momentum confirms', true, '+18'],
-                    ['Volatility acceptable', true, '+16'],
-                    ['Macro regime supportive', instrument === 'gold', instrument === 'gold' ? '+14' : '+6'],
-                  ].map(([label, on, score]) => (
-                    <div key={String(label)} className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        <span className={`grid size-4 place-items-center rounded-full ${on ? 'bg-emerald-400/12 text-emerald-300' : 'bg-white/6 text-muted-foreground'}`}>{on ? <Check className="size-3" /> : '–'}</span>
-                        {label}
-                      </span>
-                      <span className="font-mono text-foreground">{score}</span>
-                    </div>
-                  ))}
+              <CardContent className="px-2 py-3">
+                <TradingViewSymbolInfo key={`${activeLiveMarket.symbol}-${widgetRefresh}`} symbol={activeLiveMarket.symbol} />
+                <div className="flex items-center justify-between border-t border-white/7 px-3 pt-3 text-[10px] text-muted-foreground">
+                  <span>Last refreshed {lastScan}</span>
+                  <span>Provider latency may apply</span>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-primary/15 bg-[linear-gradient(145deg,rgba(225,177,78,.09),rgba(18,22,27,.94)_48%)]">
+              <CardHeader className="border-b border-white/7 pb-4">
+                <CardTitle className="flex items-center gap-2"><LineChart className="size-4 text-primary" /> Live technical rating</CardTitle>
+                <CardDescription>TradingView oscillator + moving-average summary</CardDescription>
+                <CardAction><Badge variant="outline" className="border-primary/25 text-primary">{timeframes.find((item) => item.value === timeframe)?.label}</Badge></CardAction>
+              </CardHeader>
+              <CardContent className="px-2 py-3">
+                <TradingViewTechnicalAnalysis
+                  key={`${activeLiveMarket.symbol}-${timeframe}-${widgetRefresh}`}
+                  symbol={activeLiveMarket.symbol}
+                  interval={timeframe}
+                />
+                <p className="border-t border-white/7 px-3 pt-3 text-[10px] leading-4 text-muted-foreground">This rating summarizes current indicators. Treat it as context, not an instruction or probability of profit.</p>
               </CardContent>
             </Card>
 
@@ -358,29 +327,70 @@ export default function Home() {
                 </div>
                 <div className="mt-3 flex items-center justify-between text-xs">
                   <span className="flex items-center gap-2 text-muted-foreground"><ShieldCheck className="size-3.5 text-emerald-300" /> Risk gate active</span>
-                  <button className="flex items-center gap-1 text-primary hover:underline">Review events <ArrowUpRight className="size-3" /></button>
+                  <a href="#news" className="flex items-center gap-1 text-primary hover:underline">Review sources <ArrowUpRight className="size-3" /></a>
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> BUY / SELL strategy for TradingView</CardTitle>
+              <CardDescription>Pine Script v6 · EMA crossover + RSI confirmation + ATR stop and target</CardDescription>
+              <CardAction>
+                <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
+                  {scriptCopied ? <Check /> : <Clipboard />}
+                  {scriptCopied ? 'Copied' : 'Copy script'}
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="mb-4 grid gap-2 sm:grid-cols-3">
+                {[
+                  ['BUY label', 'EMA 20 crosses above EMA 50, RSI > 52 and volatility passes.'],
+                  ['SELL label', 'EMA 20 crosses below EMA 50, RSI < 48 and volatility passes.'],
+                  ['Risk exit', '1.5× ATR stop with a configurable 2R profit target.'],
+                ].map(([title, description], index) => (
+                  <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
+                    <p className={`text-xs font-semibold ${index === 0 ? 'text-emerald-300' : index === 1 ? 'text-red-300' : 'text-primary'}`}>{title}</p>
+                    <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f12]">
+                <div className="flex items-center justify-between border-b border-white/8 px-4 py-2 text-[10px] uppercase tracking-[.12em] text-muted-foreground">
+                  <span>aurum-guard-strategy.pine</span>
+                  <span>Version 6</span>
+                </div>
+                <pre className="max-h-[730px] overflow-auto p-4 font-mono text-[11px] leading-[1.7] text-zinc-300"><code>{pineScript}</code></pre>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="max-w-2xl">
+                  <p className="text-xs font-medium">Use it in TradingView</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy the script, open Pine Editor, paste, then select “Add to chart.” Backtest each market and timeframe before considering a paper trade.</p>
+                </div>
+                <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
+                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
+                </a>
+              </div>
+
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">No strategy can guarantee profit. Historical backtests omit some real-world effects and must not be treated as future-performance promises.</p>
+            </CardContent>
+          </Card>
         </section>
 
         <section className="mt-4 grid gap-4 xl:grid-cols-[.82fr_1.18fr]">
           <Card id="risk-plan" className="border-emerald-400/12 bg-card/92">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Calculator className="size-4 text-emerald-300" /> Risk-first position plan</CardTitle>
-              <CardDescription>Size the trade from the loss limit—not from conviction.</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Calculator className="size-4 text-emerald-300" /> Manual risk-first position plan</CardTitle>
+              <CardDescription>Enter your intended prices, then size the trade from the loss limit—not from conviction.</CardDescription>
               <CardAction><Badge className="bg-emerald-400/10 text-emerald-300">MAX {riskPct.toFixed(2)}%</Badge></CardAction>
             </CardHeader>
             <CardContent className="pt-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 xl:grid-cols-2 2xl:grid-cols-5">
-                {[
-                  ['Account equity', equity, setEquity, 100],
-                  ['Risk %', riskPct, setRiskPct, 0.05],
-                  ['Entry', entry, setEntry, 0.1],
-                  ['Stop', stop, setStop, 0.1],
-                  ['Target', target, setTarget, 0.1],
-                ].map(([label, value, setter, step]) => (
+                {riskFields.map(([label, value, setter, step]) => (
                   <label key={String(label)} className="text-[11px] text-muted-foreground">
                     {label}
                     <input
@@ -524,7 +534,7 @@ export default function Home() {
         </section>
 
         <div className="mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border border-white/8 bg-white/[.025] px-4 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center">
-          <span>Paper-trading prototype · AI prices, macro readings and signals are illustrative; TradingView panels stream separately and may be delayed.</span>
+          <span>TradingView supplies the live quote, chart and technical rating; provider latency may apply. The Pine strategy is a testable ruleset—not financial advice or a profit guarantee.</span>
           <a href="#risk-plan" className="flex items-center gap-1 text-foreground hover:text-primary">Review risk controls <ChevronDown className="size-3" /></a>
         </div>
       </div>

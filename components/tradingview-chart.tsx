@@ -41,10 +41,8 @@ export function TradingViewChart({
     attributionLink.style.color = '#e1b14e';
     attributionLink.style.textDecoration = 'none';
     attributionLink.textContent = `${label} chart`;
-    attribution.append(
-      attributionLink,
-      document.createTextNode(' by TradingView'),
-    );
+    attribution.appendChild(attributionLink);
+    attribution.appendChild(document.createTextNode(' by TradingView'));
 
     const script = document.createElement('script');
     script.src =
@@ -77,7 +75,9 @@ export function TradingViewChart({
       support_host: 'https://www.tradingview.com',
     });
 
-    element.append(widget, attribution, script);
+    element.appendChild(widget);
+    element.appendChild(attribution);
+    element.appendChild(script);
 
     return () => {
       element.replaceChildren();
@@ -88,7 +88,7 @@ export function TradingViewChart({
     <div
       ref={container}
       aria-label={`Interactive ${label} TradingView chart`}
-      className="tradingview-widget-container h-[520px] w-full sm:h-[620px]"
+      className="tradingview-widget-container h-[650px] w-full sm:h-[760px] xl:h-[880px]"
     />
   );
 }
