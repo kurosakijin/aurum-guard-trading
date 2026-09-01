@@ -1,6 +1,22 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
+
+const mobileChartQuery = '(max-width: 639px)';
+
+function subscribeToMobileChart(callback: () => void) {
+  const mediaQuery = window.matchMedia(mobileChartQuery);
+  mediaQuery.addEventListener('change', callback);
+  return () => mediaQuery.removeEventListener('change', callback);
+}
+
+function getMobileChartSnapshot() {
+  return window.matchMedia(mobileChartQuery).matches;
+}
+
+function getServerMobileChartSnapshot() {
+  return false;
+}
 
 type TradingViewChartProps = {
   symbol: string;
@@ -14,6 +30,11 @@ export function TradingViewChart({
   label,
 }: TradingViewChartProps) {
   const container = useRef<HTMLDivElement>(null);
+  const isMobile = useSyncExternalStore(
+    subscribeToMobileChart,
+    getMobileChartSnapshot,
+    getServerMobileChartSnapshot,
+  );
 
   useEffect(() => {
     const element = container.current;
@@ -59,17 +80,17 @@ export function TradingViewChart({
       gridColor: 'rgba(255, 255, 255, 0.05)',
       style: '1',
       locale: 'en',
-      withdateranges: true,
-      hide_side_toolbar: false,
-      hide_top_toolbar: false,
-      hide_legend: false,
-      hide_volume: false,
-      allow_symbol_change: true,
+      withdateranges: !isMobile,
+      hide_side_toolbar: isMobile,
+      hide_top_toolbar: isMobile,
+      hide_legend: isMobile,
+      hide_volume: isMobile,
+      allow_symbol_change: !isMobile,
       save_image: false,
       calendar: false,
       details: false,
       hotlist: false,
-      show_popup_button: true,
+      show_popup_button: !isMobile,
       popup_width: '1200',
       popup_height: '1100',
       support_host: 'https://www.tradingview.com',
@@ -82,13 +103,13 @@ export function TradingViewChart({
     return () => {
       element.replaceChildren();
     };
-  }, [symbol, interval, label]);
+  }, [symbol, interval, label, isMobile]);
 
   return (
     <div
       ref={container}
       aria-label={`Interactive ${label} TradingView chart`}
-      className="tradingview-widget-container h-[1000px] w-full sm:h-[1300px] xl:h-[1600px]"
+      className="tradingview-widget-container h-[620px] w-full sm:h-[950px] lg:h-[1200px] xl:h-[1600px]"
     />
   );
 }

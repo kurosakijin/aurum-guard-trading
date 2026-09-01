@@ -162,7 +162,7 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-white/8 bg-background/88 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-[1800px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
@@ -172,7 +172,7 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-[15px] font-semibold tracking-tight">Aurum Guard</span>
-                <Badge className="border border-emerald-400/20 bg-emerald-400/10 text-[10px] text-emerald-300">PAPER</Badge>
+                <Badge className="hidden border border-emerald-400/20 bg-emerald-400/10 text-[10px] text-emerald-300 min-[380px]:inline-flex">PAPER</Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">Precious metals decision engine</p>
             </div>
@@ -183,7 +183,8 @@ export default function Home() {
           </div>
           <Button variant="outline" className="border-white/10 bg-white/[.03] text-xs" onClick={runScan} disabled={scanning}>
             <RefreshCw className={scanning ? 'animate-spin' : ''} />
-            {scanning ? 'Refreshing' : 'Refresh live data'}
+            <span className="hidden sm:inline">{scanning ? 'Refreshing' : 'Refresh live data'}</span>
+            <span className="sm:hidden">{scanning ? 'Wait' : 'Refresh'}</span>
           </Button>
         </div>
       </header>
@@ -231,7 +232,7 @@ export default function Home() {
             <CardContent className="p-3 sm:p-4">
               <div className="grid gap-4 lg:grid-cols-2">
                 {liveMarkets.map((market) => (
-                  <div key={market.key} className={`overflow-hidden rounded-xl border bg-black/15 ${liveMarket === market.key ? 'border-primary/35' : 'border-white/10'}`}>
+                  <div key={market.key} className={`min-w-0 overflow-hidden rounded-xl border bg-black/15 ${liveMarket === market.key ? 'border-primary/35' : 'border-white/10'}`}>
                     <div className="flex min-h-14 items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span className={`size-2.5 rounded-full ${market.key === 'gold' ? 'bg-amber-300' : 'bg-zinc-200'}`} />
