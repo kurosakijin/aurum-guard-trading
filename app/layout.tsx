@@ -16,11 +16,11 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://aurum-guard-trading.a4jin69.chatgpt.site'),
   title: 'Aurum Guard — Gold & Silver Trading Intelligence',
   description:
-    'A risk-first paper-trading dashboard for explainable gold and silver signals, position sizing and news-risk awareness.',
+    'Live TradingView charts from 1 minute upward, plus risk-first gold and silver paper signals, position sizing and news awareness.',
   openGraph: {
     title: 'Aurum Guard — Gold & Silver Trading Intelligence',
     description:
-      'Risk-first gold and silver intelligence with explainable paper-trading signals, position sizing and news-risk awareness.',
+      'Live multi-timeframe gold and silver charts with risk-first paper signals, position sizing and news-risk awareness.',
     images: [{ url: '/og.png', width: 1731, height: 909, alt: 'Aurum Guard trading intelligence dashboard' }],
     type: 'website',
   },
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Aurum Guard — Gold & Silver Trading Intelligence',
     description:
-      'Risk-first gold and silver intelligence with explainable paper-trading signals, position sizing and news-risk awareness.',
+      'Live multi-timeframe gold and silver charts with risk-first paper signals, position sizing and news-risk awareness.',
     images: ['/og.png'],
   },
 };

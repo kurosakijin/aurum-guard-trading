@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Bot,
   Calculator,
+  CandlestickChart,
   Check,
   ChevronDown,
   Clock3,
@@ -15,6 +16,7 @@ import {
   LineChart,
   LockKeyhole,
   Newspaper,
+  RadioTower,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -39,6 +41,26 @@ import {
 } from '@/components/ui/chart';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TradingViewChart } from '@/components/tradingview-chart';
+
+const liveMarkets = [
+  { key: 'gold-spot', label: 'Gold spot', short: 'XAU / USD', symbol: 'OANDA:XAUUSD', instrument: 'gold' },
+  { key: 'gold-futures', label: 'Gold futures', short: 'GC1!', symbol: 'COMEX:GC1!', instrument: 'gold' },
+  { key: 'silver-spot', label: 'Silver spot', short: 'XAG / USD', symbol: 'OANDA:XAGUSD', instrument: 'silver' },
+  { key: 'silver-futures', label: 'Silver futures', short: 'SI1!', symbol: 'COMEX:SI1!', instrument: 'silver' },
+] as const;
+
+const timeframes = [
+  { label: '1m', value: '1' },
+  { label: '5m', value: '5' },
+  { label: '15m', value: '15' },
+  { label: '1h', value: '60' },
+  { label: '4h', value: '240' },
+  { label: '1D', value: 'D' },
+  { label: '1W', value: 'W' },
+] as const;
+
+type LiveMarketKey = (typeof liveMarkets)[number]['key'];
 
 const goldData = [
   4354, 4378, 4362, 4401, 4428, 4412, 4446, 4461, 4450, 4488, 4522, 4504,
@@ -83,6 +105,8 @@ export default function Home() {
   const [instrument, setInstrument] = useState<InstrumentKey>('gold');
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
+  const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold-spot');
+  const [timeframe, setTimeframe] = useState('15');
   const [equity, setEquity] = useState(25000);
   const [riskPct, setRiskPct] = useState(0.5);
   const [entry, setEntry] = useState(4805.2);
@@ -90,6 +114,7 @@ export default function Home() {
   const [target, setTarget] = useState(4931.6);
   const [planCreated, setPlanCreated] = useState(false);
   const active = instruments[instrument];
+  const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
   const chartPad = instrument === 'gold' ? 40 : 2;
   const formatter = useMemo(
     () => new Intl.NumberFormat('en-US', { maximumFractionDigits: instrument === 'gold' ? 0 : 1 }),
@@ -106,6 +131,7 @@ export default function Home() {
 
   function changeInstrument(value: InstrumentKey) {
     setInstrument(value);
+    setLiveMarket(value === 'gold' ? 'gold-spot' : 'silver-spot');
     setPlanCreated(false);
     if (value === 'gold') {
       setEntry(4805.2);
@@ -116,6 +142,13 @@ export default function Home() {
       setStop(64.9);
       setTarget(70.6);
     }
+  }
+
+  function chooseLiveMarket(value: LiveMarketKey) {
+    const selected = liveMarkets.find((market) => market.key === value);
+    if (!selected) return;
+    changeInstrument(selected.instrument);
+    setLiveMarket(value);
   }
 
   const riskBudget = Math.max(0, equity * (riskPct / 100));
@@ -142,7 +175,7 @@ export default function Home() {
           </div>
           <div className="hidden items-center gap-5 text-xs text-muted-foreground md:flex">
             <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-400" /> Engine online</span>
-            <span className="flex items-center gap-2"><Clock3 className="size-3.5" /> Illustrative delayed feed</span>
+            <span className="flex items-center gap-2"><Clock3 className="size-3.5" /> Live charts · paper signals</span>
           </div>
           <Button variant="outline" className="border-white/10 bg-white/[.03] text-xs" onClick={runScan} disabled={scanning}>
             <RefreshCw className={scanning ? 'animate-spin' : ''} />
@@ -166,6 +199,66 @@ export default function Home() {
               <TabsTrigger value="silver" className="min-w-28">Silver · XAG</TabsTrigger>
             </TabsList>
           </Tabs>
+        </section>
+
+        <section id="live-chart" className="mb-4">
+          <Card className="border-primary/15 bg-card/95 shadow-[0_30px_100px_rgba(0,0,0,.28)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-lg"><CandlestickChart className="size-5 text-primary" /> Live TradingView workspace</CardTitle>
+                    <Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-300"><RadioTower className="size-3" /> STREAMING</Badge>
+                    <Badge variant="outline" className="border-white/10 text-muted-foreground">1 MINUTE +</Badge>
+                  </div>
+                  <CardDescription className="mt-1.5">Switch spot and futures charts, then choose any supported timeframe from 1 minute upward.</CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap gap-1 rounded-lg border border-white/8 bg-black/15 p-1" aria-label="Chart timeframe">
+                    {timeframes.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        aria-pressed={timeframe === item.value}
+                        onClick={() => setTimeframe(item.value)}
+                        className={`min-w-10 rounded-md px-2.5 py-1.5 text-xs font-medium transition ${timeframe === item.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-white/6 hover:text-foreground'}`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-2" aria-label="TradingView market">
+                {liveMarkets.map((market) => (
+                  <button
+                    key={market.key}
+                    type="button"
+                    aria-pressed={liveMarket === market.key}
+                    onClick={() => chooseLiveMarket(market.key)}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition ${liveMarket === market.key ? 'border-primary/40 bg-primary/10 text-foreground' : 'border-white/8 bg-white/[.02] text-muted-foreground hover:border-white/15 hover:text-foreground'}`}
+                  >
+                    <span className={`size-1.5 rounded-full ${market.instrument === 'gold' ? 'bg-primary' : 'bg-zinc-300'}`} />
+                    <span className="text-xs font-medium">{market.label}</span>
+                    <span className="font-mono text-[10px] opacity-65">{market.short}</span>
+                  </button>
+                ))}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <TradingViewChart
+                key={`${activeLiveMarket.symbol}-${timeframe}`}
+                symbol={activeLiveMarket.symbol}
+                interval={timeframe}
+                label={activeLiveMarket.label}
+              />
+            </CardContent>
+            <div className="flex flex-col gap-1 border-t border-white/7 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>Streaming chart supplied by TradingView. Exchange data permissions and delays can vary by symbol.</span>
+              <a href="https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">Chart details <ExternalLink className="size-3" /></a>
+            </div>
+          </Card>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,.65fr)]">
@@ -431,7 +524,7 @@ export default function Home() {
         </section>
 
         <div className="mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border border-white/8 bg-white/[.025] px-4 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center">
-          <span>Paper-trading prototype · prices, macro readings and signals are illustrative—not live, guaranteed or investment advice.</span>
+          <span>Paper-trading prototype · AI prices, macro readings and signals are illustrative; TradingView panels stream separately and may be delayed.</span>
           <a href="#risk-plan" className="flex items-center gap-1 text-foreground hover:text-primary">Review risk controls <ChevronDown className="size-3" /></a>
         </div>
       </div>
