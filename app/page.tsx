@@ -45,9 +45,9 @@ import { TradingViewChart } from '@/components/tradingview-chart';
 
 const liveMarkets = [
   { key: 'gold-spot', label: 'Gold spot', short: 'XAU / USD', symbol: 'OANDA:XAUUSD', instrument: 'gold' },
-  { key: 'gold-futures', label: 'Gold futures', short: 'GC1!', symbol: 'COMEX:GC1!', instrument: 'gold' },
+  { key: 'gold-cfd', label: 'Gold CFD', short: 'CMC GOLD', symbol: 'CMCMARKETS:GOLD', instrument: 'gold' },
   { key: 'silver-spot', label: 'Silver spot', short: 'XAG / USD', symbol: 'OANDA:XAGUSD', instrument: 'silver' },
-  { key: 'silver-futures', label: 'Silver futures', short: 'SI1!', symbol: 'COMEX:SI1!', instrument: 'silver' },
+  { key: 'silver-cfd', label: 'Silver CFD', short: 'CMC SILVER', symbol: 'CMCMARKETS:SILVER', instrument: 'silver' },
 ] as const;
 
 const timeframes = [
@@ -211,7 +211,7 @@ export default function Home() {
                     <Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-300"><RadioTower className="size-3" /> STREAMING</Badge>
                     <Badge variant="outline" className="border-white/10 text-muted-foreground">1 MINUTE +</Badge>
                   </div>
-                  <CardDescription className="mt-1.5">Switch spot and futures charts, then choose any supported timeframe from 1 minute upward.</CardDescription>
+                  <CardDescription className="mt-1.5">Switch between embeddable spot and commodity CFD charts, then choose any supported timeframe from 1 minute upward.</CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex flex-wrap gap-1 rounded-lg border border-white/8 bg-black/15 p-1" aria-label="Chart timeframe">
@@ -255,7 +255,7 @@ export default function Home() {
               />
             </CardContent>
             <div className="flex flex-col gap-1 border-t border-white/7 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>Streaming chart supplied by TradingView. Exchange data permissions and delays can vary by symbol.</span>
+              <span>COMEX futures cannot be displayed in third-party TradingView widgets, so CFD charts are used as reference proxies—not as the futures contract itself.</span>
               <a href="https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">Chart details <ExternalLink className="size-3" /></a>
             </div>
           </Card>
