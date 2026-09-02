@@ -111,7 +111,7 @@ shockPauseBars = input.int(3, "Closed candles to pause after shock", minval = 1,
 maxDailyLossPercent = input.float(2.00, "Strategy daily-loss lock (%)", minval = 0.10, maxval = 100.00, step = 0.10, group = "Volatility Shock Guard")
 
 requireMetalSync = input.bool(true, "Require Gold / Silver sync for entries", group = "Gold / Silver Sync")
-showMetalSyncMarks = input.bool(true, "Show sync state-change marks", group = "Gold / Silver Sync")
+showMetalSyncMarks = input.bool(false, "Show sync state-change marks", group = "Gold / Silver Sync")
 goldSyncSymbol = input.symbol("OANDA:XAUUSD", "Gold symbol", group = "Gold / Silver Sync")
 silverSyncSymbol = input.symbol("OANDA:XAGUSD", "Silver symbol", group = "Gold / Silver Sync")
 syncLookbackBars = input.int(5, "Direction lookback bars", minval = 2, maxval = 50, group = "Gold / Silver Sync")
@@ -123,11 +123,12 @@ syncMinimumCorrelation = input.float(0.25, "Minimum correlation", minval = -1.00
 strategy.risk.max_intraday_loss(maxDailyLossPercent, strategy.percent_of_equity, "Aurum Guard daily-loss lock")
 
 pivotLength = input.int(5, "Liquidity / structure swing length", minval = 2, maxval = 30, group = "Automatic chart map")
+simpleChartMode = input.bool(true, "Simple chart mode (recommended)", group = "Automatic chart map")
 showLiquidity = input.bool(true, "Show confirmed liquidity levels", group = "Automatic chart map")
-showStructure = input.bool(true, "Show HH / HL / LH / LL", group = "Automatic chart map")
+showStructure = input.bool(false, "Show HH / HL / LH / LL", group = "Automatic chart map")
 showTradePlan = input.bool(true, "Show Entry / TP / SL zones", group = "Automatic chart map")
 showTimeframeSync = input.bool(true, "Show timeframe sync panel", group = "Automatic chart map")
-showPriorityMarks = input.bool(true, "Show P1 / P2 / Watch marks", group = "Automatic chart map")
+showPriorityMarks = input.bool(true, "Show confirmed BUY / SELL marks", group = "Automatic chart map")
 structureStopLookback = input.int(7, "Trend structural stop lookback", minval = 2, maxval = 50, group = "Automatic chart map")
 planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 200, group = "Automatic chart map")
 
@@ -240,14 +241,14 @@ var float previousPivotHigh = na
 var float previousPivotLow = na
 
 if not na(pivotHigh)
-    if showStructure and not na(previousPivotHigh)
+    if showStructure and not simpleChartMode and not na(previousPivotHigh)
         highStructureText = pivotHigh > previousPivotHigh ? "HH" : "LH"
         highStructureColor = pivotHigh > previousPivotHigh ? color.lime : color.orange
         label.new(bar_index - pivotLength, pivotHigh, highStructureText, style = label.style_label_down, color = color.new(highStructureColor, 12), textcolor = color.black, size = size.tiny)
     previousPivotHigh := pivotHigh
 
 if not na(pivotLow)
-    if showStructure and not na(previousPivotLow)
+    if showStructure and not simpleChartMode and not na(previousPivotLow)
         lowStructureText = pivotLow > previousPivotLow ? "HL" : "LL"
         lowStructureColor = pivotLow > previousPivotLow ? color.aqua : color.red
         label.new(bar_index - pivotLength, pivotLow, lowStructureText, style = label.style_label_up, color = color.new(lowStructureColor, 12), textcolor = color.black, size = size.tiny)
@@ -282,20 +283,29 @@ noChaseLong = showBadEntryGuard and decisionBarReady and not shockPauseActive an
 noChaseShort = showBadEntryGuard and decisionBarReady and not shockPauseActive and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and not avoidLong and not noChaseLong and rawNoChaseShort
 
 if avoidShort
-    label.new(bar_index, high, "AVOID SHORT\n" + (sellSideSweepTrap ? "SELL-SIDE SWEEP" : "BULLISH PULLBACK"), style = label.style_label_down, color = color.new(color.orange, 6), textcolor = color.black, size = size.small)
+    if not simpleChartMode
+        label.new(bar_index, high, "AVOID SHORT\n" + (sellSideSweepTrap ? "SELL-SIDE SWEEP" : "BULLISH PULLBACK"), style = label.style_label_down, color = color.new(color.orange, 6), textcolor = color.black, size = size.small)
     lastBadEntryBar := bar_index
 
 if avoidLong
-    label.new(bar_index, low, "AVOID LONG\n" + (buySideSweepTrap ? "BUY-SIDE SWEEP" : "BEARISH RALLY"), style = label.style_label_up, color = color.new(color.red, 6), textcolor = color.white, size = size.small)
+    if not simpleChartMode
+        label.new(bar_index, low, "AVOID LONG\n" + (buySideSweepTrap ? "BUY-SIDE SWEEP" : "BEARISH RALLY"), style = label.style_label_up, color = color.new(color.red, 6), textcolor = color.white, size = size.small)
     lastBadEntryBar := bar_index
 
 if noChaseLong
-    label.new(bar_index, high, "NO CHASE LONG\nWAIT PULLBACK", style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+    if not simpleChartMode
+        label.new(bar_index, high, "NO CHASE LONG\nWAIT PULLBACK", style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
     lastBadEntryBar := bar_index
 
 if noChaseShort
-    label.new(bar_index, low, "NO CHASE SHORT\nWAIT RALLY", style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+    if not simpleChartMode
+        label.new(bar_index, low, "NO CHASE SHORT\nWAIT RALLY", style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
     lastBadEntryBar := bar_index
+
+// Optional early heads-up for the compact panel. FORMING is not a signal: P1
+// still requires the actual EMA cross and every filter at a completed candle.
+p1LongForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendLongSetup and slowSlopeUp and higherTrendUp and metalSyncLongOK and trendVolatilityOK and rsiValue > 50 and fastEMA <= slowEMA and slowEMA - fastEMA <= atrValue * 0.20 and not rawAvoidLong and not rawNoChaseLong
+p1ShortForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendShortSetup and slowSlopeDown and higherTrendDown and metalSyncShortOK and trendVolatilityOK and rsiValue < 50 and fastEMA >= slowEMA and fastEMA - slowEMA <= atrValue * 0.20 and not rawAvoidShort and not rawNoChaseShort
 
 var float trendStopPrice = na
 var float trendTargetPrice = na
@@ -459,7 +469,7 @@ if trendLongSetup
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? "BUY ENTRY\nP1" : "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -494,7 +504,7 @@ if trendShortSetup
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? "SELL ENTRY\nP1" : "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -534,7 +544,7 @@ if longWatch and strategy.position_size == 0
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, "REV LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? "WAIT · P2 BUY\nTRIGGER" : "REV LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -562,7 +572,7 @@ if shortWatch and strategy.position_size == 0
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, "REV SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? "WAIT · P2 SELL\nTRIGGER" : "REV SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -818,7 +828,7 @@ if closedTradeThisBar
         reentryTarget := na
         reentryPendingBar := na
         if showPriorityMarks
-            label.new(bar_index, lastExitPrice, "SL HIT · PLAN CLEARED\nWAIT NEXT CLOSE · P3 SCAN", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.purple, 18), textcolor = color.white, size = size.tiny)
+            label.new(bar_index, lastExitPrice, simpleChartMode ? "STOP HIT\nWAIT 1 CLOSE" : "SL HIT · PLAN CLEARED\nWAIT NEXT CLOSE · P3 SCAN", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.purple, 18), textcolor = color.white, size = size.tiny)
     else
         reentryArmed := false
         reentryDirection := 0
@@ -830,7 +840,7 @@ if closedTradeThisBar
         reentryTarget := na
         reentryPendingBar := na
         if showPriorityMarks and closedWasReentry and stopHitThisBar
-            label.new(bar_index, lastExitPrice, "RE-ENTRY SL\nSTOP THIS SETUP", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.red, 12), textcolor = color.white, size = size.tiny)
+            label.new(bar_index, lastExitPrice, simpleChartMode ? "STOP HIT\nP3 ENDED" : "RE-ENTRY SL\nSTOP THIS SETUP", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.red, 12), textcolor = color.white, size = size.tiny)
 
 // After the wait, every completed chart candle is re-evaluated during the scan
 // window. The first fully aligned direction may be opposite the stopped trade.
@@ -846,7 +856,7 @@ if reentryScanExpired
     reentrySLBar := na
     reentryRecoveryPrice := na
     reentryQty := na
-    if showPriorityMarks
+    if showPriorityMarks and not simpleChartMode
         label.new(bar_index, close, "P3 RESET EXPIRED\nNO RE-ENTRY", style = label.style_label_left, color = color.new(color.gray, 28), textcolor = color.white, size = size.tiny)
 
 if reentryLongCandidate
@@ -870,7 +880,7 @@ if reentryLongCandidate
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, reentryEntry, "P3 RESET BUY\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, reentryEntry, simpleChartMode ? "WAIT · P3 BUY\nTRIGGER" : "P3 RESET BUY\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -897,7 +907,7 @@ if reentryShortCandidate
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, reentryEntry, "P3 RESET SELL\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_down, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, reentryEntry, simpleChartMode ? "WAIT · P3 SELL\nTRIGGER" : "P3 RESET SELL\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_down, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -931,7 +941,7 @@ if not na(reentryPendingBar) and strategy.position_size == 0
         planTarget2Label := na
         planTarget3Label := na
         planStopLabel := na
-        if showPriorityMarks and resumeResetScan
+        if showPriorityMarks and not simpleChartMode and resumeResetScan
             label.new(bar_index, close, "P3 TRIGGER EXPIRED\nRESCAN NEXT CLOSE", style = label.style_label_left, color = color.new(color.purple, 32), textcolor = color.white, size = size.tiny)
 
 reentryLongConfirmed = strategy.position_size > 0 and strategy.position_size[1] <= 0 and reentryDirection == 1 and not na(reentryStop)
@@ -987,21 +997,21 @@ planTargetPlot = plot(planVisible ? plannedTarget : na, "Possible TP3 · final t
 planStopPlot = plot(planVisible ? plannedStop : na, "Possible SL", color = color.red, linewidth = 3, style = plot.style_linebr)
 fill(planEntryPlot, planTargetPlot, color = color.new(color.lime, 88), title = "Reward zone")
 fill(planEntryPlot, planStopPlot, color = color.new(color.red, 88), title = "Risk zone")
-plotshape(showPriorityMarks and trendLongSetup, title = "P1 CONFIRMED TREND BUY", text = "P1 CONFIRMED\nBUY", style = shape.labelup, location = location.belowbar, color = color.aqua, textcolor = color.black, size = size.small)
-plotshape(showPriorityMarks and trendShortSetup, title = "P1 CONFIRMED TREND SELL", text = "P1 CONFIRMED\nSELL", style = shape.labeldown, location = location.abovebar, color = color.orange, textcolor = color.black, size = size.small)
-plotshape(showPriorityMarks and longWatch, title = "WATCH ONLY LONG REVERSAL", text = "WATCH ONLY\nLONG", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 28), textcolor = color.black, size = size.tiny)
-plotshape(showPriorityMarks and shortWatch, title = "WATCH ONLY SHORT REVERSAL", text = "WATCH ONLY\nSHORT", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 24), textcolor = color.white, size = size.tiny)
-plotshape(showPriorityMarks and reversalLongConfirmed, title = "P2 CONFIRMED REVERSAL BUY", text = "P2 CONFIRMED\nBUY", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
-plotshape(showPriorityMarks and reversalShortConfirmed, title = "P2 CONFIRMED REVERSAL SELL", text = "P2 CONFIRMED\nSELL", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
-plotshape(showPriorityMarks and reentryLongCandidate, title = "P3 RESET WATCH BUY", text = "P3 RESET BUY\nWAIT TRIGGER", style = shape.labelup, location = location.belowbar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
-plotshape(showPriorityMarks and reentryShortCandidate, title = "P3 RESET WATCH SELL", text = "P3 RESET SELL\nWAIT TRIGGER", style = shape.labeldown, location = location.abovebar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
-plotshape(showPriorityMarks and reentryLongConfirmed, title = "P3 CONFIRMED RESET BUY", text = "P3 CONFIRMED\nRESET BUY", style = shape.labelup, location = location.belowbar, color = color.purple, textcolor = color.white, size = size.small)
-plotshape(showPriorityMarks and reentryShortConfirmed, title = "P3 CONFIRMED RESET SELL", text = "P3 CONFIRMED\nRESET SELL", style = shape.labeldown, location = location.abovebar, color = color.purple, textcolor = color.white, size = size.small)
-plotshape(volatilityShock, title = "VOLATILITY SHOCK", text = "VOLATILITY SHOCK\nNO NEW TRADES", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
-plotshape(shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
-plotshape(showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
-plotshape(showMetalSyncMarks and metalSyncBearishChanged, title = "GOLD SILVER SYNC BEARISH", text = "SYNC GOOD\nBEARISH", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 8), textcolor = color.white, size = size.tiny)
-plotshape(showMetalSyncMarks and metalSyncLost, title = "GOLD SILVER NOT SYNCED", text = "NOT SYNCED\nWAIT", style = shape.labeldown, location = location.abovebar, color = color.new(color.orange, 5), textcolor = color.black, size = size.tiny)
+plotshape(showPriorityMarks and trendLongSetup, title = "P1 CONFIRMED TREND BUY", text = "BUY\nP1", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and trendShortSetup, title = "P1 CONFIRMED TREND SELL", text = "SELL\nP1", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(showPriorityMarks and not simpleChartMode and longWatch, title = "WATCH ONLY LONG REVERSAL", text = "WATCH ONLY\nLONG", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 28), textcolor = color.black, size = size.tiny)
+plotshape(showPriorityMarks and not simpleChartMode and shortWatch, title = "WATCH ONLY SHORT REVERSAL", text = "WATCH ONLY\nSHORT", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 24), textcolor = color.white, size = size.tiny)
+plotshape(showPriorityMarks and reversalLongConfirmed, title = "P2 CONFIRMED REVERSAL BUY", text = "BUY\nP2", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and reversalShortConfirmed, title = "P2 CONFIRMED REVERSAL SELL", text = "SELL\nP2", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(showPriorityMarks and not simpleChartMode and reentryLongCandidate, title = "P3 RESET WATCH BUY", text = "P3 RESET BUY\nWAIT TRIGGER", style = shape.labelup, location = location.belowbar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
+plotshape(showPriorityMarks and not simpleChartMode and reentryShortCandidate, title = "P3 RESET WATCH SELL", text = "P3 RESET SELL\nWAIT TRIGGER", style = shape.labeldown, location = location.abovebar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
+plotshape(showPriorityMarks and reentryLongConfirmed, title = "P3 CONFIRMED RESET BUY", text = "BUY\nP3", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and reentryShortConfirmed, title = "P3 CONFIRMED RESET SELL", text = "SELL\nP3", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(volatilityShock, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
+plotshape(not simpleChartMode and shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
+plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
+plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBearishChanged, title = "GOLD SILVER SYNC BEARISH", text = "SYNC GOOD\nBEARISH", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 8), textcolor = color.white, size = size.tiny)
+plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncLost, title = "GOLD SILVER NOT SYNCED", text = "NOT SYNCED\nWAIT", style = shape.labeldown, location = location.abovebar, color = color.new(color.orange, 5), textcolor = color.black, size = size.tiny)
 bgcolor(enableReversal and not reversalTimeframeOK ? color.new(color.orange, 92) : na, title = "Reversal timeframe warning")
 bgcolor(shockPauseActive ? color.new(color.fuchsia, 92) : na, title = "Volatility shock pause")
 
@@ -1026,27 +1036,49 @@ metalSyncTextColor = metalsBullishSync ? color.black : color.white
 tradeHealthText = strategy.position_size == 0 ? "NO ACTIVE TRADE" : tp1FailureWarned ? "TP1 FAILED · REVERSE RISK" : halfStopWarned ? "HALF TO SL" : tp1Reached ? "TP1 REACHED" : tp1ApproachArmed ? "TP1 APPROACHED" : "NORMAL"
 tradeHealthColor = strategy.position_size == 0 ? color.new(color.gray, 82) : tp1FailureWarned ? color.new(color.orange, 52) : halfStopWarned ? color.new(color.red, 54) : tp1Reached ? color.new(color.lime, 62) : tp1ApproachArmed ? color.new(color.yellow, 60) : color.new(color.aqua, 82)
 tradeHealthTextColor = tp1ApproachArmed and not tp1FailureWarned and not halfStopWarned ? color.black : color.white
+buySignalNow = trendLongSetup or reversalLongConfirmed or reentryLongConfirmed
+sellSignalNow = trendShortSetup or reversalShortConfirmed or reentryShortConfirmed
+activeEntryId = strategy.opentrades > 0 ? strategy.opentrades.entry_id(0) : ""
+activeSignalText = str.contains(activeEntryId, "TREND") ? "P1 · TREND" : str.contains(activeEntryId, "REENTRY") ? "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
+simpleActionText = buySignalNow ? "BUY SIGNAL" : sellSignalNow ? "SELL SIGNAL" : strategy.position_size > 0 ? "LONG ACTIVE" : strategy.position_size < 0 ? "SHORT ACTIVE" : shockPauseActive ? "NO TRADE" : "WAIT"
+simpleActionColor = buySignalNow ? color.new(color.lime, 44) : sellSignalNow ? color.new(color.red, 42) : strategy.position_size != 0 ? color.new(color.aqua, 68) : shockPauseActive ? color.new(color.fuchsia, 48) : color.new(color.orange, 68)
+simpleSignalText = trendLongSetup or trendShortSetup ? "P1 · TREND" : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? "P1 BUY · FORMING" : p1ShortForming ? "P1 SELL · FORMING" : "NONE · KEEP WAITING"
+simpleSignalColor = buySignalNow ? color.new(color.lime, 60) : sellSignalNow ? color.new(color.red, 56) : strategy.position_size != 0 ? color.new(color.aqua, 76) : not na(reentryPendingBar) or reentryArmed ? color.new(color.purple, 68) : not na(pendingLongBar) or not na(pendingShortBar) or p1LongForming or p1ShortForming ? color.new(color.yellow, 68) : color.new(color.gray, 82)
+simpleMetalText = metalsBullishSync ? "BULLISH" : metalsBearishSync ? "BEARISH" : "WAIT · NOT SYNCED"
+simpleRiskText = shockPauseActive ? "HIGH · NO NEW TRADE" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
+simpleRiskColor = shockPauseActive ? color.new(color.fuchsia, 48) : tp1FailureWarned ? color.new(color.orange, 48) : halfStopWarned ? color.new(color.red, 48) : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? color.new(color.orange, 62) : color.new(color.lime, 78)
 
 if barstate.islast
+    table.clear(syncPanel, 0, 0, 1, 7)
     if showTimeframeSync
-        table.cell(syncPanel, 0, 0, "CHART", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 0, timeframe.period, bgcolor = color.new(color.aqua, 82), text_color = color.white, text_size = size.tiny)
-        table.cell(syncPanel, 0, 1, "FILTER", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 1, confirmationTimeframe, bgcolor = color.new(color.purple, 78), text_color = color.white, text_size = size.tiny)
-        table.cell(syncPanel, 0, 2, "NEXT CHECK", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 2, updateText, bgcolor = decisionBarReady ? color.new(color.lime, 76) : color.new(color.orange, 78), text_color = color.white, text_size = size.tiny)
-        table.cell(syncPanel, 0, 3, "PRIORITY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 3, priorityText, bgcolor = priorityColor, text_color = color.white, text_size = size.tiny)
-        table.cell(syncPanel, 0, 4, "ENTRY GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 4, entryGuardText, bgcolor = entryGuardColor, text_color = entryGuardTextColor, text_size = size.tiny)
-        table.cell(syncPanel, 0, 5, "SHOCK GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 5, shockStatusText, bgcolor = shockStatusColor, text_color = color.white, text_size = size.tiny)
-        table.cell(syncPanel, 0, 6, "GOLD + SILVER", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 6, metalSyncText, bgcolor = metalSyncColor, text_color = metalSyncTextColor, text_size = size.tiny)
-        table.cell(syncPanel, 0, 7, "TRADE HEALTH", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
-        table.cell(syncPanel, 1, 7, tradeHealthText, bgcolor = tradeHealthColor, text_color = tradeHealthTextColor, text_size = size.tiny)
-    else
-        table.clear(syncPanel, 0, 0, 1, 7)
+        if simpleChartMode
+            table.cell(syncPanel, 0, 0, "ACTION", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 0, simpleActionText, bgcolor = simpleActionColor, text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 1, "SIGNAL", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 1, simpleSignalText, bgcolor = simpleSignalColor, text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 2, "NEXT CLOSE", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 2, updateText, bgcolor = decisionBarReady ? color.new(color.lime, 76) : color.new(color.orange, 78), text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 3, "METALS", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 3, simpleMetalText, bgcolor = metalSyncColor, text_color = metalSyncTextColor, text_size = size.tiny)
+            table.cell(syncPanel, 0, 4, "RISK", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 4, simpleRiskText, bgcolor = simpleRiskColor, text_color = color.white, text_size = size.tiny)
+        else
+            table.cell(syncPanel, 0, 0, "CHART", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 0, timeframe.period, bgcolor = color.new(color.aqua, 82), text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 1, "FILTER", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 1, confirmationTimeframe, bgcolor = color.new(color.purple, 78), text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 2, "NEXT CHECK", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 2, updateText, bgcolor = decisionBarReady ? color.new(color.lime, 76) : color.new(color.orange, 78), text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 3, "PRIORITY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 3, priorityText, bgcolor = priorityColor, text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 4, "ENTRY GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 4, entryGuardText, bgcolor = entryGuardColor, text_color = entryGuardTextColor, text_size = size.tiny)
+            table.cell(syncPanel, 0, 5, "SHOCK GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 5, shockStatusText, bgcolor = shockStatusColor, text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 6, "GOLD + SILVER", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 6, metalSyncText, bgcolor = metalSyncColor, text_color = metalSyncTextColor, text_size = size.tiny)
+            table.cell(syncPanel, 0, 7, "TRADE HEALTH", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 7, tradeHealthText, bgcolor = tradeHealthColor, text_color = tradeHealthTextColor, text_size = size.tiny)
 
 // Strategies cannot create alert triggers with alertcondition(). In TradingView,
 // select "Order fills and alert() function calls" to receive signals and fills.
@@ -1190,6 +1222,7 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="border border-fuchsia-300/25 bg-fuchsia-300/10 text-fuchsia-200">FREE PLAN READY</Badge>
                   <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
+                  <Badge variant="outline" className="border-lime-300/25 text-lime-200">SIMPLE MODE DEFAULT</Badge>
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">TP1 / TP2 / TP3 + SL</Badge>
                   <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
@@ -1216,10 +1249,37 @@ export default function Home() {
           <Card className="overflow-hidden border-cyan-300/15 bg-[linear-gradient(145deg,rgba(34,211,238,.055),rgba(18,22,27,.96)_42%)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="chart-guide-heading" className="flex items-center gap-2 text-lg"><BookOpenCheck className="size-5 text-cyan-300" /> How to read the chart</CardTitle>
-              <CardDescription>Use this order: trend first, structure second, trade plan last.</CardDescription>
-              <CardAction><Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">QUICK GUIDE</Badge></CardAction>
+              <CardDescription>Read ACTION first. If it says WAIT, do not treat anything else as an entry.</CardDescription>
+              <CardAction><Badge className="border border-lime-300/20 bg-lime-300/10 text-lime-200">SIMPLE MODE</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-4 pt-4 xl:grid-cols-[1.15fr_.85fr]">
+              <div className="rounded-xl border border-lime-300/20 bg-lime-300/[.045] p-4 xl:col-span-2">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-lime-100">The simple rule: trust the ACTION row</p>
+                    <p className="mt-1 max-w-3xl text-[11px] leading-5 text-muted-foreground">The small panel at the chart’s top-right now combines every filter. A P1, P2 or P3 idea is actionable only when ACTION changes from WAIT to a confirmed BUY SIGNAL or SELL SIGNAL at candle close.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+                    <span className="rounded-lg border border-lime-300/20 bg-lime-300/10 px-3 py-2 text-lime-200">BUY SIGNAL · GREEN</span>
+                    <span className="rounded-lg border border-red-300/20 bg-red-300/10 px-3 py-2 text-red-200">SELL SIGNAL · RED</span>
+                    <span className="rounded-lg border border-orange-300/20 bg-orange-300/10 px-3 py-2 text-orange-200">WAIT · NO ENTRY</span>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  {[
+                    ['P1 · TREND', 'FORMING means the EMAs and filters are getting close. BUY/SELL appears only after the EMA cross and all filters confirm at candle close.', 'border-cyan-300/20 text-cyan-200'],
+                    ['P2 · REVERSAL', 'ARMED means a liquidity-sweep reversal passed its first check. Keep waiting until price crosses the yellow trigger and BUY/SELL P2 appears.', 'border-emerald-300/20 text-emerald-200'],
+                    ['P3 · RESET', 'SCANNING or ARMED means the post-stop reset is searching. It becomes actionable only when BUY/SELL P3 appears after its trigger.', 'border-purple-300/20 text-purple-200'],
+                  ].map(([label, description, color]) => (
+                    <div key={label} className={`rounded-lg border bg-black/15 p-3 ${color}`}>
+                      <p className="text-[10px] font-bold tracking-[.05em]">{label}</p>
+                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 border-t border-lime-300/10 pt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-amber-200">FORMING, ARMED and SCANNING are advance warnings—not entries.</span> There is no honest way to know that P1–P3 “will” appear before the completed candle satisfies every rule.</p>
+              </div>
+
               <div>
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Lines and zones</p>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -1247,10 +1307,10 @@ export default function Home() {
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Signal priority</p>
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                     {[
-                      ['P1 CONFIRMED', 'Highest priority', 'Trend setup confirmed at candle close and aligned with the higher-timeframe filter.', 'border-cyan-300/20 bg-cyan-300/[.055] text-cyan-200'],
-                      ['P2 CONFIRMED', 'Second priority', 'Reversal watch became valid only after price crossed its yellow trigger.', 'border-emerald-300/20 bg-emerald-300/[.055] text-emerald-200'],
-                      ['P3 RESET', 'Third priority', 'After an SL, checks every completed candle and may confirm a smaller BUY or SELL in the newly qualified direction.', 'border-purple-300/20 bg-purple-300/[.055] text-purple-200'],
-                      ['WATCH ONLY', 'No trade yet', 'A possible reversal exists, but it is unconfirmed until the trigger is crossed.', 'border-amber-300/20 bg-amber-300/[.055] text-amber-200'],
+                      ['BUY / SELL · P1', 'Highest priority', 'A trend entry confirmed at candle close after EMA cross, higher-timeframe direction, RSI, volatility, entry guard and metals sync all passed.', 'border-cyan-300/20 bg-cyan-300/[.055] text-cyan-200'],
+                      ['BUY / SELL · P2', 'Second priority', 'A reversal setup became valid only after price crossed its yellow trigger. P2 ARMED still means wait.', 'border-emerald-300/20 bg-emerald-300/[.055] text-emerald-200'],
+                      ['BUY / SELL · P3', 'Third priority', 'After an SL and one closed candle, the smaller reset trade crossed its trigger with all direction filters aligned.', 'border-purple-300/20 bg-purple-300/[.055] text-purple-200'],
+                      ['WAIT', 'No trade yet', 'FORMING, ARMED, SCANNING, NOT SYNCED or BLOCKED means the complete signal is not ready.', 'border-amber-300/20 bg-amber-300/[.055] text-amber-200'],
                     ].map(([label, rank, description, color]) => (
                       <div key={label} className={`rounded-xl border p-3 ${color}`}>
                         <p className="text-[10px] font-bold tracking-[.08em]">{label}</p>
@@ -1259,7 +1319,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">P1 outranks P2, and either fresh P1/P2 setup cancels a P3 reset idea. Liquidity lines and HH/HL/LH/LL labels are context only—not BUY or SELL confirmation.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">On the candle, the only entry marks are green BUY P1/P2/P3 or red SELL P1/P2/P3. Liquidity lines and optional HH/HL/LH/LL labels are context only.</p>
                 </div>
 
                 <div>
@@ -1609,7 +1669,7 @@ export default function Home() {
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
                   ['Three-target plan', 'Yellow candidate entry, green TP1 at 1R, TP2 at 1.5R, TP3 at the final target, and one red SL.'],
-                  ['Priority marks', 'P1 trend, P2 reversal, P3 post-SL direction reset, and Watch Only for an untriggered possibility.'],
+                  ['Simple chart mode', 'Shows only confirmed BUY/SELL marks and serious safety warnings; detailed context labels stay hidden.'],
                   ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
                   ['Shock circuit breaker', 'Cancels pending ideas, pauses new setups and enforces a configurable strategy daily-loss lock.'],
                   ['Gold / Silver Sync', 'Requires both metals to agree on bullish or bearish direction before that side can enter.'],
@@ -1646,7 +1706,7 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor and select “Add to chart.” For signals plus TP/SL fills, choose Create Alert → Aurum Guard → “Order fills and alert() function calls.” Settings → Gold / Silver Sync controls both symbols, lookback and correlation threshold.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor and select “Add to chart.” Keep Settings → Automatic chart map → Simple chart mode enabled. For signals plus TP/SL fills, choose Create Alert → Aurum Guard → “Order fills and alert() function calls.”</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
