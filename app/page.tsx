@@ -13,6 +13,7 @@ import {
   Clock3,
   Code2,
   Crosshair,
+  Download,
   ExternalLink,
   Landmark,
   LineChart,
@@ -1427,6 +1428,12 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2">
             <a
+              href="#mt5-bot"
+              className="hidden h-9 items-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/[.07] px-3 text-xs font-medium text-emerald-200 transition hover:bg-emerald-300/10 lg:inline-flex"
+            >
+              <Bot className="size-4" /> MT5 bot
+            </a>
+            <a
               href="#news-radar"
               className="hidden h-9 items-center gap-2 rounded-lg border border-red-300/25 bg-red-300/[.07] px-3 text-xs font-medium text-red-200 transition hover:bg-red-300/10 sm:inline-flex"
             >
@@ -1491,6 +1498,91 @@ export default function Home() {
                 <a href="#pine-script" className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[.035] px-4 text-xs font-medium text-foreground transition hover:bg-white/[.07]">
                   View full script <ArrowUpRight className="size-3.5" />
                 </a>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section id="mt5-bot" className="mb-4 scroll-mt-20" aria-labelledby="mt5-bot-heading">
+          <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
+              <CardDescription>Downloadable Expert Advisor · H1 entries · M15 safety · automatic broker-side SL and managed TP1/TP2/TP3</CardDescription>
+              <CardAction><Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-200">DEMO-ONLY DEFAULT</Badge></CardAction>
+            </CardHeader>
+            <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
+              <div>
+                <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[.045] p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="max-w-2xl">
+                      <p className="text-sm font-semibold text-emerald-100">A real MT5 Expert Advisor—not a browser trade button</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">It waits for a completed H1 pullback signal, checks daily direction and Gold/Silver agreement, applies the M15 manipulation/shock gate, checks high-impact USD news, sizes the position from the stop distance and sends the order with SL plus final TP3.</p>
+                    </div>
+                    <a
+                      href="./downloads/AurumGuardAutoTrader.mq5"
+                      download
+                      className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
+                    >
+                      <Download className="size-4" /> Download MT5 bot
+                    </a>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {[
+                    ['1 · Confirm', 'Processes only completed H1 candles—no forming-candle entry.'],
+                    ['2 · Filter', 'Requires daily trend, 20/50 EMA retest, RSI and Gold/Silver sync.'],
+                    ['3 · Protect', 'M15 manipulation, blow-off, abnormal spread and USD news can block entry.'],
+                    ['4 · Execute', 'Risk-sized market order with SL, TP1 at 1R, TP2 at 1.5R and TP3 at 2.14R.'],
+                  ].map(([title, description]) => (
+                    <div key={title} className="rounded-xl border border-white/8 bg-black/15 p-3">
+                      <p className="text-[10px] font-semibold text-emerald-200">{title}</p>
+                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-red-100"><LockKeyhole className="size-3.5" /> Live-account lock</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The EA refuses to initialize on a real-money account while <span className="font-mono text-red-200">AllowLiveTrading = false</span>. Do not unlock it until the exact broker symbols, volume sizing, stop distance, partial exits and news behavior have been forward-tested on demo. It has no martingale and no instant revenge re-entry.</p>
+                </div>
+              </div>
+
+              <div className="grid content-start gap-4">
+                <div className="rounded-xl border border-white/9 bg-black/15 p-4">
+                  <p className="text-xs font-semibold">Safe defaults included</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+                    {[
+                      ['0.25%', 'Risk per trade'],
+                      ['1.00%', 'Daily loss lock'],
+                      ['2', 'Maximum entries/day'],
+                      ['H1 + M15', 'Signal + safety'],
+                    ].map(([value, label]) => (
+                      <div key={label} className="rounded-lg border border-white/8 bg-white/[.025] p-3">
+                        <p className="font-heading text-base font-semibold text-primary">{value}</p>
+                        <p className="mt-0.5 text-muted-foreground">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">If the calculated size is below your broker’s minimum lot, the EA skips the trade instead of rounding risk upward. Partial TP1/TP2 closes happen only when the broker’s volume step permits them; the remaining position keeps TP3.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The MT5 economic calendar guard is intentionally bypassed in Strategy Tester because historical calendar availability differs by terminal. Verify its real-time USD-event blocking during demo forward testing.</p>
+                </div>
+
+                <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-4">
+                  <p className="text-xs font-semibold text-cyan-100">Install in MetaTrader 5</p>
+                  <ol className="mt-2 space-y-2 text-[10px] leading-4 text-muted-foreground">
+                    <li><span className="mr-2 font-semibold text-cyan-200">1.</span>Download the <span className="font-mono text-foreground">.mq5</span> file.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">2.</span>In MT5: File → Open Data Folder → MQL5 → Experts, then place the file there.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">3.</span>Open MetaEditor, compile with F7, then refresh Navigator → Expert Advisors.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>Open your broker’s Gold chart on H1 and drag Aurum Guard onto it.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Enter your broker’s exact Silver symbol—such as XAGUSD, XAGUSD.a or SILVER.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">6.</span>Enable Algo Trading on demo and monitor the Experts and Journal tabs.</li>
+                  </ol>
+                </div>
+
+                <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-3 text-[10px] leading-4 text-muted-foreground">
+                  <p><span className="font-semibold text-amber-200">Keep MT5 running:</span> the public website cannot execute brokerage orders or safely hold login credentials. For 24/7 operation, MT5 must remain connected on your computer or a Windows VPS. Stops can still suffer slippage or gaps, and no bot guarantees profit.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -2079,7 +2171,7 @@ export default function Home() {
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Gold/Silver sync, shock, failure flips and bad-entry warnings are reactive rules—not forecasts. “Automatic” means simulated strategy orders and alerts inside TradingView; it does not trade a separate broker account unless you deliberately connect supported execution. Fast markets can gap through SL, create slippage and stop the replacement trade too.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Gold/Silver sync, shock, failure flips and bad-entry warnings are reactive rules—not forecasts. In this Pine section, “automatic” means simulated strategy orders and alerts inside TradingView. The separate MT5 EA above is the executable version and remains demo-locked by default. Fast markets can gap through SL, create slippage and stop the replacement trade too.</p>
             </CardContent>
           </Card>
         </section>
