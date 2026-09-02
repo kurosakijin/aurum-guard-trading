@@ -103,6 +103,14 @@ shockGapATR = input.float(0.75, "Shock opening gap in ATR", minval = 0.25, maxva
 shockPauseBars = input.int(3, "Closed candles to pause after shock", minval = 1, maxval = 20, group = "Volatility Shock Guard")
 maxDailyLossPercent = input.float(2.00, "Strategy daily-loss lock (%)", minval = 0.10, maxval = 100.00, step = 0.10, group = "Volatility Shock Guard")
 
+requireMetalSync = input.bool(true, "Require Gold / Silver sync for entries", group = "Gold / Silver Sync")
+showMetalSyncMarks = input.bool(true, "Show sync state-change marks", group = "Gold / Silver Sync")
+goldSyncSymbol = input.symbol("OANDA:XAUUSD", "Gold symbol", group = "Gold / Silver Sync")
+silverSyncSymbol = input.symbol("OANDA:XAGUSD", "Silver symbol", group = "Gold / Silver Sync")
+syncLookbackBars = input.int(5, "Direction lookback bars", minval = 2, maxval = 50, group = "Gold / Silver Sync")
+syncCorrelationLength = input.int(20, "Correlation length", minval = 5, maxval = 100, group = "Gold / Silver Sync")
+syncMinimumCorrelation = input.float(0.25, "Minimum correlation", minval = -1.00, maxval = 1.00, step = 0.05, group = "Gold / Silver Sync")
+
 // TradingView's strategy-wide circuit breaker cancels pending orders, closes an
 // open simulated position and blocks additional orders for the session at this loss.
 strategy.risk.max_intraday_loss(maxDailyLossPercent, strategy.percent_of_equity, "Aurum Guard daily-loss lock")
@@ -160,6 +168,27 @@ confirmedHTFEMA = request.security(syminfo.tickerid, confirmationTimeframe, ta.e
 higherTrendUp = confirmedHTFClose > confirmedHTFEMA
 higherTrendDown = confirmedHTFClose < confirmedHTFEMA
 
+// Compare Gold and Silver on the current chart timeframe. Actionable decisions
+// still wait for the chart candle to close, so the two feeds share one clock.
+goldSyncClose = request.security(goldSyncSymbol, timeframe.period, close)
+silverSyncClose = request.security(silverSyncSymbol, timeframe.period, close)
+goldSyncMove = goldSyncClose - goldSyncClose[syncLookbackBars]
+silverSyncMove = silverSyncClose - silverSyncClose[syncLookbackBars]
+metalsCorrelation = ta.correlation(ta.change(goldSyncClose), ta.change(silverSyncClose), syncCorrelationLength)
+rawMetalsBullishSync = goldSyncMove > 0 and silverSyncMove > 0 and metalsCorrelation >= syncMinimumCorrelation
+rawMetalsBearishSync = goldSyncMove < 0 and silverSyncMove < 0 and metalsCorrelation >= syncMinimumCorrelation
+var bool metalsBullishSync = false
+var bool metalsBearishSync = false
+if decisionBarReady
+    metalsBullishSync := rawMetalsBullishSync
+    metalsBearishSync := rawMetalsBearishSync
+metalsInSync = metalsBullishSync or metalsBearishSync
+metalSyncLongOK = not requireMetalSync or metalsBullishSync
+metalSyncShortOK = not requireMetalSync or metalsBearishSync
+metalSyncBullishChanged = decisionBarReady and metalsBullishSync and not metalsBullishSync[1]
+metalSyncBearishChanged = decisionBarReady and metalsBearishSync and not metalsBearishSync[1]
+metalSyncLost = decisionBarReady and not metalsInSync and metalsInSync[1]
+
 // Price-only shock detector. It reacts to abnormal range or opening gaps; it
 // cannot predict the first tick of a news spike, so its purpose is to stop follow-on entries.
 var int lastShockBar = na
@@ -179,8 +208,8 @@ stopClosedThisBar = closedTradeThisBar and lastExitComment == "SL"
 // Confirmed trend engine.
 var int lastTrendBar = na
 trendCooldownOK = na(lastTrendBar) or bar_index - lastTrendBar > cooldownBars
-trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp
-trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown
+trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp and metalSyncLongOK
+trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown and metalSyncShortOK
 
 // Reversal scout engine. It automatically stays inactive when the chart timeframe
 // is not below the confirmation timeframe, while the trend engine keeps working.
@@ -222,8 +251,8 @@ rsiRecentHigh = ta.highest(rsiValue, 4)
 sweptLow = not na(priorSwingLow) and low < priorSwingLow and close > priorSwingLow
 sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSwingHigh
 
-longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
-shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
+longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1] and metalSyncLongOK
+shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1] and metalSyncShortOK
 
 // Bad Entry Guard. These are warnings, never entry signals. They highlight the
 // two common mistakes shown in the sample: fading a protected trend pullback
@@ -310,6 +339,30 @@ if volatilityShock
         plannedStop := na
         plannedTarget := na
         plannedUntilBar := na
+
+// A pending trigger is withdrawn if the matching Gold/Silver direction breaks
+// before entry. An existing position keeps its original protective bracket.
+metalSyncInvalidatesPending = requireMetalSync and strategy.position_size == 0 and ((not na(pendingLongBar) and not metalsBullishSync) or (not na(pendingShortBar) and not metalsBearishSync) or (not na(reentryPendingBar) and reentryDirection == 1 and not metalsBullishSync) or (not na(reentryPendingBar) and reentryDirection == -1 and not metalsBearishSync))
+if metalSyncInvalidatesPending
+    strategy.cancel("REV LONG")
+    strategy.cancel("REV SHORT")
+    strategy.cancel("REENTRY LONG")
+    strategy.cancel("REENTRY SHORT")
+    pendingLongEntry := na
+    pendingLongStop := na
+    pendingLongBar := na
+    pendingShortEntry := na
+    pendingShortStop := na
+    pendingShortBar := na
+    reentryDirection := 0
+    reentryEntry := na
+    reentryStop := na
+    reentryTarget := na
+    reentryPendingBar := na
+    plannedEntry := na
+    plannedStop := na
+    plannedTarget := na
+    plannedUntilBar := na
 
 // Any fresh P1/P2 setup outranks and cancels a lower-priority re-entry idea.
 primarySetupStarted = trendLongSetup or trendShortSetup or longWatch or shortWatch
@@ -550,8 +603,8 @@ if closedTradeThisBar
 // Wait for the requested number of completed chart candles, then demand a
 // reclaim of the stopped price, EMA direction, RSI and HTF trend alignment.
 reentryWaitComplete = enableReentry and reentryArmed and decisionBarReady and not shockPauseActive and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar >= reentryWaitBars
-reentryLongCandidate = reentryWaitComplete and reentryDirection == 1 and higherTrendUp and close > reentryRecoveryPrice and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 50 and close > open
-reentryShortCandidate = reentryWaitComplete and reentryDirection == -1 and higherTrendDown and close < reentryRecoveryPrice and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 50 and close < open
+reentryLongCandidate = reentryWaitComplete and reentryDirection == 1 and higherTrendUp and close > reentryRecoveryPrice and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 50 and close > open and metalSyncLongOK
+reentryShortCandidate = reentryWaitComplete and reentryDirection == -1 and higherTrendDown and close < reentryRecoveryPrice and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 50 and close < open and metalSyncShortOK
 
 if reentryLongCandidate
     reentryArmed := false
@@ -653,12 +706,15 @@ plotshape(showPriorityMarks and reentryLongConfirmed, title = "P3 CONFIRMED RE-E
 plotshape(showPriorityMarks and reentryShortConfirmed, title = "P3 CONFIRMED RE-ENTRY SELL", text = "P3 CONFIRMED\nRE-SELL", style = shape.labeldown, location = location.abovebar, color = color.purple, textcolor = color.white, size = size.small)
 plotshape(volatilityShock, title = "VOLATILITY SHOCK", text = "VOLATILITY SHOCK\nNO NEW TRADES", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
 plotshape(shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
+plotshape(showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
+plotshape(showMetalSyncMarks and metalSyncBearishChanged, title = "GOLD SILVER SYNC BEARISH", text = "SYNC GOOD\nBEARISH", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 8), textcolor = color.white, size = size.tiny)
+plotshape(showMetalSyncMarks and metalSyncLost, title = "GOLD SILVER NOT SYNCED", text = "NOT SYNCED\nWAIT", style = shape.labeldown, location = location.abovebar, color = color.new(color.orange, 5), textcolor = color.black, size = size.tiny)
 bgcolor(enableReversal and not reversalTimeframeOK ? color.new(color.orange, 92) : na, title = "Reversal timeframe warning")
 bgcolor(shockPauseActive ? color.new(color.fuchsia, 92) : na, title = "Volatility shock pause")
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
 // setups remain locked until the current chart candle is confirmed.
-var table syncPanel = table.new(position.top_right, 2, 6, border_width = 1)
+var table syncPanel = table.new(position.top_right, 2, 7, border_width = 1)
 secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
 minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
@@ -671,6 +727,9 @@ entryGuardColor = avoidShort ? color.new(color.orange, 58) : avoidLong ? color.n
 entryGuardTextColor = noChaseLong or noChaseShort ? color.black : color.white
 shockStatusText = volatilityShock ? "SHOCK DETECTED" : shockPauseActive ? "PAUSE ACTIVE" : shockReset ? "RESET · WAIT SIGNAL" : "NORMAL"
 shockStatusColor = shockPauseActive ? color.new(color.fuchsia, 58) : shockReset ? color.new(color.teal, 62) : color.new(color.lime, 82)
+metalSyncText = metalsBullishSync ? "GOOD · BULLISH" : metalsBearishSync ? "GOOD · BEARISH" : "NOT SYNCED · WAIT"
+metalSyncColor = metalsBullishSync ? color.new(color.lime, 64) : metalsBearishSync ? color.new(color.red, 58) : color.new(color.orange, 62)
+metalSyncTextColor = metalsBullishSync ? color.black : color.white
 
 if barstate.islast
     if showTimeframeSync
@@ -686,8 +745,10 @@ if barstate.islast
         table.cell(syncPanel, 1, 4, entryGuardText, bgcolor = entryGuardColor, text_color = entryGuardTextColor, text_size = size.tiny)
         table.cell(syncPanel, 0, 5, "SHOCK GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
         table.cell(syncPanel, 1, 5, shockStatusText, bgcolor = shockStatusColor, text_color = color.white, text_size = size.tiny)
+        table.cell(syncPanel, 0, 6, "GOLD + SILVER", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 6, metalSyncText, bgcolor = metalSyncColor, text_color = metalSyncTextColor, text_size = size.tiny)
     else
-        table.clear(syncPanel, 0, 0, 1, 5)
+        table.clear(syncPanel, 0, 0, 1, 6)
 
 alertcondition(trendLongSetup, title = "Aurum Guard trend long", message = "Confirmed Aurum Guard trend long setup")
 alertcondition(trendShortSetup, title = "Aurum Guard trend short", message = "Confirmed Aurum Guard trend short setup")
@@ -704,7 +765,10 @@ alertcondition(avoidLong, title = "Aurum Guard avoid long", message = "Bad Entry
 alertcondition(noChaseLong, title = "Aurum Guard no-chase long", message = "Bad Entry Guard: long is ATR-extended; wait for a pullback")
 alertcondition(noChaseShort, title = "Aurum Guard no-chase short", message = "Bad Entry Guard: short is ATR-extended; wait for a rally")
 alertcondition(volatilityShock, title = "Aurum Guard volatility shock", message = "Volatility Shock Guard: abnormal candle or gap; no new trades")
-alertcondition(shockReset, title = "Aurum Guard shock pause reset", message = "Volatility Shock Guard reset; wait for a fresh P1, P2 or P3 confirmation")`;
+alertcondition(shockReset, title = "Aurum Guard shock pause reset", message = "Volatility Shock Guard reset; wait for a fresh P1, P2 or P3 confirmation")
+alertcondition(metalSyncBullishChanged, title = "Gold and Silver bullish sync", message = "Gold / Silver Sync Gate: GOOD and BULLISH; long setups may pass if all other rules confirm")
+alertcondition(metalSyncBearishChanged, title = "Gold and Silver bearish sync", message = "Gold / Silver Sync Gate: GOOD and BEARISH; short setups may pass if all other rules confirm")
+alertcondition(metalSyncLost, title = "Gold and Silver sync lost", message = "Gold / Silver Sync Gate: NOT SYNCED; wait and cancel unfilled entries")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -822,9 +886,10 @@ export default function Home() {
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">AUTO TP / SL</Badge>
                   <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
+                  <Badge variant="outline" className="border-lime-300/25 text-lime-200">GOLD + SILVER SYNC</Badge>
                 </div>
-                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and warns against bad entries</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Bad-entry warnings flag traps and chases, while the Shock Guard pauses fresh orders after abnormal volatility.</p>
+                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and checks both metals</h2>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while the bad-entry and Shock Guards block weaker or unusually volatile conditions.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -924,6 +989,26 @@ export default function Home() {
                   <p className="mt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-amber-200">Important:</span> this price-only guard reacts after a shock begins; it cannot predict the first spike or prevent an existing position from reaching its SL. The 2% strategy daily-loss lock stops further simulated orders for that session.</p>
                 </div>
 
+                <div className="rounded-xl border border-lime-300/20 bg-lime-300/[.04] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-lime-100">Gold–Silver Sync Gate</p>
+                    <Badge className="border border-lime-300/20 bg-lime-300/10 text-lime-200">SAME TIMEFRAME</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                    {[
+                      ['GOOD · BULLISH', 'Both metals rose over the lookback and their rolling correlation is strong enough. Only long setups may pass.', 'border-lime-300/20 text-lime-200'],
+                      ['GOOD · BEARISH', 'Both metals fell over the lookback and their rolling correlation is strong enough. Only short setups may pass.', 'border-red-300/20 text-red-200'],
+                      ['NOT SYNCED · WAIT', 'Direction disagrees or correlation is too weak. New entries are blocked and an unfilled trigger is cancelled.', 'border-orange-300/20 text-orange-200'],
+                    ].map(([label, description, color]) => (
+                      <div key={label} className={`rounded-lg border bg-black/15 p-3 ${color}`}>
+                        <p className="text-[10px] font-bold tracking-[.04em]">{label}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-lime-200">SYNC GOOD is a filter, not an entry.</span> Still wait for P1, P2 or P3 CONFIRMED. Defaults compare OANDA:XAUUSD with OANDA:XAGUSD over five bars using 20-bar return correlation of at least 0.25.</p>
+                </div>
+
                 <div>
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Market structure</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -943,11 +1028,12 @@ export default function Home() {
                 </div>
 
                 <div className="rounded-xl border border-primary/15 bg-primary/[.035] p-4">
-                  <p className="text-xs font-semibold">Read every setup in three checks</p>
+                  <p className="text-xs font-semibold">Read every setup in four checks</p>
                   <ol className="mt-2 space-y-2 text-[11px] leading-5 text-muted-foreground">
-                    <li><span className="mr-2 text-primary">1.</span>Cyan above orange and both rising favors longs; cyan below orange and both falling favors shorts.</li>
-                    <li><span className="mr-2 text-primary">2.</span>Confirm the structure sequence and note which liquidity line price is approaching or sweeping.</li>
-                    <li><span className="mr-2 text-primary">3.</span>Act only on P1, P2 or P3 CONFIRMED with yellow Entry, green TP and red SL. WATCH ONLY and P3 COOLDOWN are not entries.</li>
+                    <li><span className="mr-2 text-primary">1.</span>Check GOLD + SILVER: GOOD · BULLISH permits only long ideas; GOOD · BEARISH permits only short ideas; NOT SYNCED means wait.</li>
+                    <li><span className="mr-2 text-primary">2.</span>Cyan above orange and both rising favors longs; cyan below orange and both falling favors shorts.</li>
+                    <li><span className="mr-2 text-primary">3.</span>Confirm the structure sequence and note which liquidity line price is approaching or sweeping.</li>
+                    <li><span className="mr-2 text-primary">4.</span>Act only on P1, P2 or P3 CONFIRMED with yellow Entry, green TP and red SL. WATCH ONLY and P3 COOLDOWN are not entries.</li>
                   </ol>
                 </div>
 
@@ -1093,7 +1179,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · timeframe-synced setups + bad-entry warnings + volatility circuit breaker + controlled post-SL re-entry</CardDescription>
+              <CardDescription>One free-plan script slot · Gold/Silver direction sync + timeframe-synced setups + bad-entry warnings + volatility circuit breaker + controlled post-SL re-entry</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -1158,6 +1244,21 @@ export default function Home() {
                 <p className="mt-3 border-t border-fuchsia-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The guard reacts after unusual movement starts—it cannot predict the first spike. The daily lock governs TradingView’s simulated strategy and does not automatically control a separate broker account unless your execution connection enforces the strategy’s orders.</p>
               </div>
 
+              <div className="mb-4 rounded-xl border border-lime-300/20 bg-lime-300/[.04] p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-semibold text-lime-100">Gold + Silver confirmation on one clock</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The script requests OANDA Gold and Silver on the active chart timeframe, compares their five-bar direction and checks their 20-bar return correlation. It permits long logic only during bullish sync and short logic only during bearish sync.</p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                    <span className="rounded-md border border-lime-300/20 bg-black/15 px-2 py-1.5 text-lime-200">Good · bullish</span>
+                    <span className="rounded-md border border-red-300/20 bg-black/15 px-2 py-1.5 text-red-200">Good · bearish</span>
+                    <span className="rounded-md border border-orange-300/20 bg-black/15 px-2 py-1.5 text-orange-200">Not synced · wait</span>
+                  </div>
+                </div>
+                <p className="mt-3 border-t border-lime-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">This is an intermarket agreement filter—not proof a trade will win. Change the symbols, lookback, correlation length or 0.25 threshold under Settings → Gold / Silver Sync.</p>
+              </div>
+
               <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {[
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
@@ -1166,9 +1267,10 @@ export default function Home() {
                   ['Priority marks', 'P1 trend, P2 reversal, P3 controlled re-entry, and Watch Only for an untriggered possibility.'],
                   ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
                   ['Shock circuit breaker', 'Cancels pending ideas, pauses new setups and enforces a configurable strategy daily-loss lock.'],
+                  ['Gold / Silver Sync', 'Requires both metals to agree on bullish or bearish direction before that side can enter.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
-                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : index === 3 ? 'text-amber-200' : index === 4 ? 'text-orange-200' : 'text-fuchsia-200'}`}>{title}</p>
+                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : index === 3 ? 'text-amber-200' : index === 4 ? 'text-orange-200' : index === 5 ? 'text-fuchsia-200' : 'text-lime-200'}`}>{title}</p>
                     <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
                   </div>
                 ))}
@@ -1197,14 +1299,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Settings → Volatility Shock Guard controls its ATR thresholds, three-candle pause and 2% simulated daily-loss lock. Bad-entry and re-entry settings remain separately adjustable.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Settings → Gold / Silver Sync controls both symbols, lookback and correlation threshold. Shock Guard, bad-entry and re-entry settings remain separately adjustable.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Shock and bad-entry warnings are reactive rule-based cautions, not forecasts. They cannot prevent the first spike or guarantee fills at SL. New decisions wait for candle close; spread, slippage and fast markets can still produce worse results. Entry, TP and SL remain conditional projections.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Gold/Silver sync, shock and bad-entry warnings are reactive rule-based filters, not forecasts. They cannot prevent the first spike or guarantee fills at SL. New decisions wait for candle close; provider latency, spread, slippage and fast markets can still produce worse results. Entry, TP and SL remain conditional projections.</p>
             </CardContent>
           </Card>
         </section>
