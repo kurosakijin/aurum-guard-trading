@@ -1,6 +1,6 @@
 # Aurum Guard
 
-A responsive gold and silver market dashboard with live TradingView widgets, a combined Pine Script v6 strategy, Gold/Silver confirmation, automatic projected SL/TP levels, and risk-first entry guidance.
+A responsive gold and silver market dashboard with live TradingView widgets, a combined Pine Script v6 strategy, Gold/Silver confirmation, automatic projected SL/TP levels, a confirmed-swing Fibonacci golden zone, Philippine-time US news monitoring, and risk-first entry guidance.
 
 ## Public website
 

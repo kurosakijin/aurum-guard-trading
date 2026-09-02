@@ -69,7 +69,9 @@ strategy("Aurum Guard Combined: Trend + Reversal", overlay = true, pyramiding = 
      calc_on_every_tick = true,
      calc_on_order_fills = true,
      process_orders_on_close = true,
-     max_labels_count = 300)
+     max_labels_count = 300,
+     max_lines_count = 100,
+     max_boxes_count = 20)
 
 // One strategy slot, two independently switchable engines.
 enableTrend = input.bool(true, "Enable confirmed trend setups", group = "Engines")
@@ -141,6 +143,12 @@ showTimeframeSync = input.bool(true, "Show timeframe sync panel", group = "Autom
 showPriorityMarks = input.bool(true, "Show confirmed BUY / SELL marks", group = "Automatic chart map")
 structureStopLookback = input.int(7, "Trend structural stop lookback", minval = 2, maxval = 50, group = "Automatic chart map")
 planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 200, group = "Automatic chart map")
+
+showAutoFibonacci = input.bool(true, "Show automatic swing Fibonacci", group = "Automatic Fibonacci")
+showFibonacciLabels = input.bool(true, "Show Fibonacci level names", group = "Automatic Fibonacci")
+showFibonacciRejections = input.bool(true, "Mark confirmed golden-zone rejection", group = "Automatic Fibonacci")
+fibonacciProjectionBars = input.int(35, "Project levels for bars", minval = 10, maxval = 200, group = "Automatic Fibonacci")
+fibonacciSignalCooldown = input.int(5, "Bars between rejection watches", minval = 1, maxval = 50, group = "Automatic Fibonacci")
 
 fastEMA = ta.ema(close, fastLength)
 slowEMA = ta.ema(close, slowLength)
@@ -264,6 +272,8 @@ recentStructureHigh = ta.highest(high, structureStopLookback)
 // so they do not pretend the turning point was known in advance.
 var float previousPivotHigh = na
 var float previousPivotLow = na
+var int previousPivotHighBar = na
+var int previousPivotLowBar = na
 
 if not na(pivotHigh)
     if showStructure and not simpleChartMode and not na(previousPivotHigh)
@@ -271,6 +281,7 @@ if not na(pivotHigh)
         highStructureColor = pivotHigh > previousPivotHigh ? color.lime : color.orange
         label.new(bar_index - pivotLength, pivotHigh, highStructureText, style = label.style_label_down, color = color.new(highStructureColor, 12), textcolor = color.black, size = size.tiny)
     previousPivotHigh := pivotHigh
+    previousPivotHighBar := bar_index - pivotLength
 
 if not na(pivotLow)
     if showStructure and not simpleChartMode and not na(previousPivotLow)
@@ -278,6 +289,40 @@ if not na(pivotLow)
         lowStructureColor = pivotLow > previousPivotLow ? color.aqua : color.red
         label.new(bar_index - pivotLength, pivotLow, lowStructureText, style = label.style_label_up, color = color.new(lowStructureColor, 12), textcolor = color.black, size = size.tiny)
     previousPivotLow := pivotLow
+    previousPivotLowBar := bar_index - pivotLength
+
+// Automatic Fibonacci map uses only confirmed pivots. For a bullish markup,
+// 0% sits at the swing high and 100% at the swing low so the numbered levels
+// measure the pullback. A bearish markup is mirrored from low back to high.
+fibReady = showAutoFibonacci and not na(previousPivotHigh) and not na(previousPivotLow) and not na(previousPivotHighBar) and not na(previousPivotLowBar) and previousPivotHigh != previousPivotLow
+fibBullishMove = fibReady and previousPivotHighBar > previousPivotLowBar
+fibBearishMove = fibReady and previousPivotLowBar > previousPivotHighBar
+fibAnchorZero = fibBullishMove ? previousPivotHigh : fibBearishMove ? previousPivotLow : na
+fibAnchorOne = fibBullishMove ? previousPivotLow : fibBearishMove ? previousPivotHigh : na
+fibRange = math.abs(previousPivotHigh - previousPivotLow)
+
+getFibPrice(level) =>
+    fibAnchorZero + (fibAnchorOne - fibAnchorZero) * level
+
+fibZero = fibReady ? getFibPrice(0.0) : na
+fib236 = fibReady ? getFibPrice(0.236) : na
+fib382 = fibReady ? getFibPrice(0.382) : na
+fib500 = fibReady ? getFibPrice(0.500) : na
+fib618 = fibReady ? getFibPrice(0.618) : na
+fib705 = fibReady ? getFibPrice(0.705) : na
+fib786 = fibReady ? getFibPrice(0.786) : na
+fibOne = fibReady ? getFibPrice(1.0) : na
+fibGoldenTop = fibReady ? math.max(fib618, fib705) : na
+fibGoldenBottom = fibReady ? math.min(fib618, fib705) : na
+fibTouchesGoldenZone = fibReady and low <= fibGoldenTop and high >= fibGoldenBottom
+
+var int lastFibonacciWatchBar = na
+fibonacciWatchCooldownOK = na(lastFibonacciWatchBar) or bar_index - lastFibonacciWatchBar > fibonacciSignalCooldown
+fibLongRejection = showFibonacciRejections and decisionBarReady and fibonacciWatchCooldownOK and fibBullishMove and fibTouchesGoldenZone and close > open and close >= fib618 and higherTrendUp and fastEMA > slowEMA and metalSyncLongOK and not shockPauseActive
+fibShortRejection = showFibonacciRejections and decisionBarReady and fibonacciWatchCooldownOK and fibBearishMove and fibTouchesGoldenZone and close < open and close <= fib618 and higherTrendDown and fastEMA < slowEMA and metalSyncShortOK and not shockPauseActive
+
+if fibLongRejection or fibShortRejection
+    lastFibonacciWatchBar := bar_index
 
 rsiRecentLow = ta.lowest(rsiValue, 4)
 rsiRecentHigh = ta.highest(rsiValue, 4)
@@ -1045,6 +1090,45 @@ if strategy.position_size < 0 and reentryDirection == -1 and not na(reentryStop)
         strategy.exit("REENTRY SHORT TP3", from_entry = "REENTRY SHORT", stop = reentryStop, limit = reentryTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
     reentryPendingBar := na
 
+// Keep one clean Fibonacci map on the latest confirmed swing instead of
+// leaving historical ladders across the chart.
+var fibLines = array.new_line()
+var fibLevelLabels = array.new_label()
+var box fibGoldenBox = na
+
+if barstate.islast
+    while array.size(fibLines) > 0
+        line.delete(array.pop(fibLines))
+    while array.size(fibLevelLabels) > 0
+        label.delete(array.pop(fibLevelLabels))
+    if not na(fibGoldenBox)
+        box.delete(fibGoldenBox)
+        fibGoldenBox := na
+
+    if fibReady
+        fibStartBar = math.min(previousPivotHighBar, previousPivotLowBar)
+        fibEndBar = bar_index + fibonacciProjectionBars
+        fibLevels = array.from(0.0, 0.236, 0.382, 0.500, 0.618, 0.705, 0.786, 1.0)
+        fibNames = array.from("0% · SWING EXTREME", "23.6% · WEAK RETRACEMENT", "38.2% · TREND CONTINUATION", "50% · SMART MONEY REACTION", "61.8% · GOLDEN ENTRY", "70.5% · SNIPER ENTRY", "78.6% · DEEP RETRACEMENT", "100% · FULL RETRACEMENT")
+
+        for fibIndex = 0 to array.size(fibLevels) - 1
+            fibLevel = array.get(fibLevels, fibIndex)
+            fibPrice = getFibPrice(fibLevel)
+            fibIsGolden = fibLevel == 0.618 or fibLevel == 0.705
+            fibIsMiddle = fibLevel == 0.500
+            fibIsAnchor = fibLevel == 0.0 or fibLevel == 1.0
+            fibColor = fibIsGolden ? color.yellow : fibIsMiddle ? color.aqua : fibIsAnchor ? color.silver : color.new(color.purple, 22)
+            fibWidth = fibIsGolden ? 2 : fibIsMiddle ? 2 : 1
+            fibStyle = fibIsAnchor ? line.style_solid : line.style_dashed
+            fibLine = line.new(fibStartBar, fibPrice, fibEndBar, fibPrice, xloc = xloc.bar_index, extend = extend.none, color = fibColor, width = fibWidth, style = fibStyle)
+            array.push(fibLines, fibLine)
+            if showFibonacciLabels
+                fibLabelText = array.get(fibNames, fibIndex) + "\n" + str.tostring(fibPrice, format.mintick)
+                fibLabel = label.new(fibEndBar, fibPrice, fibLabelText, style = label.style_label_left, color = color.new(fibColor, 74), textcolor = color.white, size = size.tiny)
+                array.push(fibLevelLabels, fibLabel)
+
+        fibGoldenBox := box.new(fibStartBar, fibGoldenTop, fibEndBar, fibGoldenBottom, xloc = xloc.bar_index, border_color = color.new(color.yellow, 18), bgcolor = color.new(color.yellow, 88))
+
 plot(enableTrend ? fastEMA : na, "Fast EMA", color = color.aqua, linewidth = 2)
 plot(enableTrend ? slowEMA : na, "Slow EMA", color = color.orange, linewidth = 2)
 plot(confirmedHTFEMA, "Confirmed HTF EMA", color = color.new(color.purple, 35), linewidth = 2, style = plot.style_stepline)
@@ -1073,6 +1157,8 @@ plotshape(showPriorityMarks and reentryLongConfirmed and not (oneMinuteRecoveryA
 plotshape(showPriorityMarks and reentryShortConfirmed and not (oneMinuteRecoveryActive and reentryForcedDirection == -1), title = "P3 CONFIRMED RESET SELL", text = "SELL\nP3", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
 plotshape(showPriorityMarks and reentryLongConfirmed and oneMinuteRecoveryActive and reentryForcedDirection == 1, title = "1M CONFIRMED FAILURE FLIP BUY", text = "BUY\n1M FLIP", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
 plotshape(showPriorityMarks and reentryShortConfirmed and oneMinuteRecoveryActive and reentryForcedDirection == -1, title = "1M CONFIRMED FAILURE FLIP SELL", text = "SELL\n1M FLIP", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(showPriorityMarks and fibLongRejection, title = "FIBONACCI GOLDEN ZONE LONG WATCH", text = "FIB LONG\nWATCH", style = shape.labelup, location = location.belowbar, color = color.yellow, textcolor = color.black, size = size.tiny)
+plotshape(showPriorityMarks and fibShortRejection, title = "FIBONACCI GOLDEN ZONE SHORT WATCH", text = "FIB SHORT\nWATCH", style = shape.labeldown, location = location.abovebar, color = color.yellow, textcolor = color.black, size = size.tiny)
 plotshape(volatilityShock, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
 plotshape(not simpleChartMode and shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
 plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
@@ -1083,7 +1169,7 @@ bgcolor(shockPauseActive ? color.new(color.fuchsia, 92) : na, title = "Volatilit
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
 // setups remain locked until the current chart candle is confirmed.
-var table syncPanel = table.new(position.top_right, 2, 8, border_width = 1)
+var table syncPanel = table.new(position.top_right, 2, 9, border_width = 1)
 secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
 minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
@@ -1115,9 +1201,12 @@ simpleRiskText = shockPauseActive ? "HIGH · NO NEW TRADE" : oneMinuteFailureCon
 simpleRiskColor = shockPauseActive ? color.new(color.fuchsia, 48) : tp1FailureWarned ? color.new(color.orange, 48) : halfStopWarned ? color.new(color.red, 48) : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? color.new(color.orange, 62) : color.new(color.lime, 78)
 oneMinuteModeText = oneMinuteRecoveryActive ? "ON · AUTO SL/TP + FLIP" : oneMinuteChart ? "OFF IN SETTINGS" : "OFF · USE 1m CHART"
 oneMinuteModeColor = oneMinuteRecoveryActive ? color.new(color.lime, 72) : color.new(color.gray, 82)
+fibonacciStatusText = not showAutoFibonacci ? "OFF IN SETTINGS" : not fibReady ? "WAIT CONFIRMED SWINGS" : fibLongRejection ? "LONG REJECTION · WATCH" : fibShortRejection ? "SHORT REJECTION · WATCH" : fibTouchesGoldenZone ? "IN 61.8–70.5 ZONE" : fibBullishMove ? "BULL PULLBACK MAP" : "BEAR PULLBACK MAP"
+fibonacciStatusColor = fibLongRejection or fibShortRejection ? color.new(color.yellow, 48) : fibTouchesGoldenZone ? color.new(color.orange, 58) : fibReady ? color.new(color.purple, 70) : color.new(color.gray, 82)
+fibonacciTextColor = fibLongRejection or fibShortRejection ? color.black : color.white
 
 if barstate.islast
-    table.clear(syncPanel, 0, 0, 1, 7)
+    table.clear(syncPanel, 0, 0, 1, 8)
     if showTimeframeSync
         if simpleChartMode
             table.cell(syncPanel, 0, 0, "ACTION", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
@@ -1132,6 +1221,8 @@ if barstate.islast
             table.cell(syncPanel, 1, 4, simpleRiskText, bgcolor = simpleRiskColor, text_color = color.white, text_size = size.tiny)
             table.cell(syncPanel, 0, 5, "1M RECOVERY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 5, oneMinuteModeText, bgcolor = oneMinuteModeColor, text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 6, "FIBONACCI", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 6, fibonacciStatusText, bgcolor = fibonacciStatusColor, text_color = fibonacciTextColor, text_size = size.tiny)
         else
             table.cell(syncPanel, 0, 0, "CHART", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 0, timeframe.period, bgcolor = color.new(color.aqua, 82), text_color = color.white, text_size = size.tiny)
@@ -1149,6 +1240,8 @@ if barstate.islast
             table.cell(syncPanel, 1, 6, metalSyncText, bgcolor = metalSyncColor, text_color = metalSyncTextColor, text_size = size.tiny)
             table.cell(syncPanel, 0, 7, "TRADE HEALTH", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 7, tradeHealthText, bgcolor = tradeHealthColor, text_color = tradeHealthTextColor, text_size = size.tiny)
+            table.cell(syncPanel, 0, 8, "FIBONACCI", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 8, fibonacciStatusText, bgcolor = fibonacciStatusColor, text_color = fibonacciTextColor, text_size = size.tiny)
 
 // Strategies cannot create alert triggers with alertcondition(). In TradingView,
 // select "Order fills and alert() function calls" to receive signals and fills.
@@ -1179,7 +1272,9 @@ sendAurumAlert(volatilityShock, "VOLATILITY SHOCK: abnormal candle or gap; no ne
 sendAurumAlert(shockReset, "SHOCK RESET: resume scanning and wait for fresh confirmation")
 sendAurumAlert(metalSyncBullishChanged, "GOLD + SILVER SYNC: GOOD and BULLISH; long setups may pass")
 sendAurumAlert(metalSyncBearishChanged, "GOLD + SILVER SYNC: GOOD and BEARISH; short setups may pass")
-sendAurumAlert(metalSyncLost, "GOLD + SILVER SYNC: NOT SYNCED; wait and cancel unfilled entries")`;
+sendAurumAlert(metalSyncLost, "GOLD + SILVER SYNC: NOT SYNCED; wait and cancel unfilled entries")
+sendAurumAlert(fibLongRejection, "FIBONACCI WATCH: bullish rejection from 61.8-70.5 golden zone; wait for P1/P2/P3 confirmation")
+sendAurumAlert(fibShortRejection, "FIBONACCI WATCH: bearish rejection from 61.8-70.5 golden zone; wait for P1/P2/P3 confirmation")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -1310,6 +1405,7 @@ export default function Home() {
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
                   <Badge variant="outline" className="border-lime-300/25 text-lime-200">GOLD + SILVER SYNC</Badge>
                   <Badge variant="outline" className="border-red-300/25 text-red-200">SMART TRADE HEALTH</Badge>
+                  <Badge variant="outline" className="border-yellow-300/25 text-yellow-200">AUTO FIB GOLDEN ZONE</Badge>
                 </div>
                 <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and checks both metals</h2>
                 <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while 1-minute recovery mode can rebuild a smaller SL/TP plan after a confirmed failure or stop.</p>
@@ -1513,6 +1609,57 @@ export default function Home() {
                 <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] p-3 text-[10px] leading-4 text-muted-foreground">
                   <p><span className="font-semibold text-amber-200">Important:</span> HH/HL/LH/LL and liquidity levels use confirmed pivots, so they appear after the swing is confirmed. Blue circles disappear when you click empty chart space or press Esc.</p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section id="fibonacci-guide" className="mb-4" aria-labelledby="fibonacci-guide-heading">
+          <Card className="border-yellow-300/18 bg-[linear-gradient(145deg,rgba(250,204,21,.07),rgba(168,85,247,.045)_48%,rgba(18,22,27,.97))]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle id="fibonacci-guide-heading" className="flex items-center gap-2 text-lg"><Crosshair className="size-5 text-yellow-300" /> Automatic Fibonacci pullback map</CardTitle>
+              <CardDescription>Drawn from the latest confirmed swing. It updates when a new pivot high or low is confirmed.</CardDescription>
+              <CardAction><Badge className="border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">61.8%–70.5% GOLDEN ZONE</Badge></CardAction>
+            </CardHeader>
+            <CardContent className="grid gap-4 pt-4 xl:grid-cols-[1.05fr_.95fr]">
+              <div className="overflow-hidden rounded-xl border border-white/8 bg-black/15 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[.13em] text-muted-foreground">Automatic level ladder</p>
+                  <span className="text-[10px] text-muted-foreground">Price appears beside each line</span>
+                </div>
+                <div className="grid gap-1.5">
+                  {[
+                    ['0%', 'Swing extreme', 'border-zinc-300/20 text-zinc-200'],
+                    ['23.6%', 'Weak retracement', 'border-purple-300/20 text-purple-200'],
+                    ['38.2%', 'Trend continuation zone', 'border-purple-300/20 text-purple-200'],
+                    ['50%', 'Smart-money reaction area', 'border-cyan-300/25 text-cyan-200'],
+                    ['61.8%', 'Golden entry boundary', 'border-yellow-300/35 bg-yellow-300/[.07] text-yellow-200'],
+                    ['70.5%', 'Sniper entry boundary', 'border-yellow-300/35 bg-yellow-300/[.07] text-yellow-200'],
+                    ['78.6%', 'Deep retracement zone', 'border-purple-300/20 text-purple-200'],
+                    ['100%', 'Full retracement / swing origin', 'border-zinc-300/20 text-zinc-200'],
+                  ].map(([level, meaning, color]) => (
+                    <div key={level} className={`grid grid-cols-[54px_1fr] items-center gap-3 rounded-lg border px-3 py-2 ${color}`}>
+                      <span className="font-mono text-[11px] font-bold">{level}</span>
+                      <span className="text-[10px] text-muted-foreground">{meaning}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid content-start gap-3">
+                <div className="rounded-xl border border-emerald-300/18 bg-emerald-300/[.04] p-4">
+                  <p className="text-xs font-semibold text-emerald-100">Bullish markup · swing low → swing high</p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The script places 0% at the confirmed high and 100% at the confirmed low, then watches price retrace downward into the ladder. A bullish candle closing back above 61.8%, with the higher trend and Gold/Silver sync bullish, prints <span className="font-semibold text-yellow-200">FIB LONG WATCH</span>.</p>
+                </div>
+                <div className="rounded-xl border border-red-300/18 bg-red-300/[.04] p-4">
+                  <p className="text-xs font-semibold text-red-100">Bearish markup · swing high → swing low</p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The ladder mirrors upward from the confirmed low. A bearish candle closing back below 61.8%, with the higher trend and metals sync bearish, prints <span className="font-semibold text-yellow-200">FIB SHORT WATCH</span>.</p>
+                </div>
+                <div className="rounded-xl border border-yellow-300/22 bg-yellow-300/[.055] p-4">
+                  <p className="text-xs font-semibold text-yellow-100">What counts as the better setup?</p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">61.8%–70.5% plus candle rejection is confluence, not an entry by itself. Prioritize it only when the panel also shows the correct metals direction, no shock pause, and a completed <span className="font-semibold text-foreground">BUY/SELL P1, P2 or P3</span>. If ACTION still says WAIT, keep waiting.</p>
+                </div>
+                <p className="rounded-xl border border-orange-300/15 bg-orange-300/[.035] p-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-orange-200">Important:</span> the middle/golden zone is a possible reaction area—not proof that price cannot continue down or up. Confirmed pivots appear after the selected pivot length, so the newest swing map deliberately arrives with confirmation delay.</p>
               </div>
             </CardContent>
           </Card>
