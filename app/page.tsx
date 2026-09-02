@@ -93,6 +93,7 @@ showLiquidity = input.bool(true, "Show confirmed liquidity levels", group = "Aut
 showStructure = input.bool(true, "Show HH / HL / LH / LL", group = "Automatic chart map")
 showTradePlan = input.bool(true, "Show Entry / TP / SL zones", group = "Automatic chart map")
 showTimeframeSync = input.bool(true, "Show timeframe sync panel", group = "Automatic chart map")
+showPriorityMarks = input.bool(true, "Show P1 / P2 / Watch marks", group = "Automatic chart map")
 structureStopLookback = input.int(7, "Trend structural stop lookback", minval = 2, maxval = 50, group = "Automatic chart map")
 planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 200, group = "Automatic chart map")
 
@@ -315,6 +316,10 @@ if not na(pendingShortBar) and strategy.position_size == 0
         pendingShortStop := na
         pendingShortBar := na
 
+// A reversal becomes confirmed only after price actually crosses its yellow trigger.
+reversalLongConfirmed = strategy.position_size > 0 and strategy.position_size[1] <= 0 and not na(pendingLongStop)
+reversalShortConfirmed = strategy.position_size < 0 and strategy.position_size[1] >= 0 and not na(pendingShortStop)
+
 if strategy.position_size > 0 and not na(pendingLongStop)
     longRisk = strategy.position_avg_price - pendingLongStop
     if longRisk > syminfo.mintick
@@ -390,20 +395,24 @@ planTargetPlot = plot(planVisible ? plannedTarget : na, "Possible TP", color = c
 planStopPlot = plot(planVisible ? plannedStop : na, "Possible SL", color = color.red, linewidth = 3, style = plot.style_linebr)
 fill(planEntryPlot, planTargetPlot, color = color.new(color.lime, 88), title = "Reward zone")
 fill(planEntryPlot, planStopPlot, color = color.new(color.red, 88), title = "Risk zone")
-plotshape(trendLongSetup, title = "TREND LONG SETUP", text = "TREND LONG", style = shape.labelup, location = location.belowbar, color = color.aqua, textcolor = color.black, size = size.tiny)
-plotshape(trendShortSetup, title = "TREND SHORT SETUP", text = "TREND SHORT", style = shape.labeldown, location = location.abovebar, color = color.orange, textcolor = color.black, size = size.tiny)
-plotshape(longWatch, title = "POSSIBLE LONG REVERSAL", text = "REV LONG", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.tiny)
-plotshape(shortWatch, title = "POSSIBLE SHORT REVERSAL", text = "REV SHORT", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.tiny)
+plotshape(showPriorityMarks and trendLongSetup, title = "P1 CONFIRMED TREND BUY", text = "P1 CONFIRMED\nBUY", style = shape.labelup, location = location.belowbar, color = color.aqua, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and trendShortSetup, title = "P1 CONFIRMED TREND SELL", text = "P1 CONFIRMED\nSELL", style = shape.labeldown, location = location.abovebar, color = color.orange, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and longWatch, title = "WATCH ONLY LONG REVERSAL", text = "WATCH ONLY\nLONG", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 28), textcolor = color.black, size = size.tiny)
+plotshape(showPriorityMarks and shortWatch, title = "WATCH ONLY SHORT REVERSAL", text = "WATCH ONLY\nSHORT", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 24), textcolor = color.white, size = size.tiny)
+plotshape(showPriorityMarks and reversalLongConfirmed, title = "P2 CONFIRMED REVERSAL BUY", text = "P2 CONFIRMED\nBUY", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and reversalShortConfirmed, title = "P2 CONFIRMED REVERSAL SELL", text = "P2 CONFIRMED\nSELL", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
 bgcolor(enableReversal and not reversalTimeframeOK ? color.new(color.orange, 92) : na, title = "Reversal timeframe warning")
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
 // setups remain locked until the current chart candle is confirmed.
-var table syncPanel = table.new(position.top_right, 2, 3, border_width = 1)
+var table syncPanel = table.new(position.top_right, 2, 4, border_width = 1)
 secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
 minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
 countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
+priorityText = trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
+priorityColor = trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
 
 if barstate.islast
     if showTimeframeSync
@@ -413,13 +422,17 @@ if barstate.islast
         table.cell(syncPanel, 1, 1, confirmationTimeframe, bgcolor = color.new(color.purple, 78), text_color = color.white, text_size = size.tiny)
         table.cell(syncPanel, 0, 2, "NEXT CHECK", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
         table.cell(syncPanel, 1, 2, updateText, bgcolor = decisionBarReady ? color.new(color.lime, 76) : color.new(color.orange, 78), text_color = color.white, text_size = size.tiny)
+        table.cell(syncPanel, 0, 3, "PRIORITY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 3, priorityText, bgcolor = priorityColor, text_color = color.white, text_size = size.tiny)
     else
-        table.clear(syncPanel, 0, 0, 1, 2)
+        table.clear(syncPanel, 0, 0, 1, 3)
 
 alertcondition(trendLongSetup, title = "Aurum Guard trend long", message = "Confirmed Aurum Guard trend long setup")
 alertcondition(trendShortSetup, title = "Aurum Guard trend short", message = "Confirmed Aurum Guard trend short setup")
 alertcondition(longWatch, title = "Possible long reversal", message = "Aurum Guard possible long reversal; wait for trigger")
-alertcondition(shortWatch, title = "Possible short reversal", message = "Aurum Guard possible short reversal; wait for trigger")`;
+alertcondition(shortWatch, title = "Possible short reversal", message = "Aurum Guard possible short reversal; wait for trigger")
+alertcondition(reversalLongConfirmed, title = "Aurum Guard confirmed reversal long", message = "P2 confirmed reversal long trigger filled")
+alertcondition(reversalShortConfirmed, title = "Aurum Guard confirmed reversal short", message = "P2 confirmed reversal short trigger filled")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -536,8 +549,8 @@ export default function Home() {
                   <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">AUTO TP / SL</Badge>
                 </div>
-                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script now maps liquidity, market structure, entry, TP and SL</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Confirmed swing liquidity and HH/HL/LH/LL labels feed a projected trade plan: yellow entry, green target, red stop and a configurable 2.14 reward-to-risk ratio.</p>
+                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and maps entry, TP and SL</h2>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1 and P2 marks separate confirmed entries from watch-only conditions. Liquidity and HH/HL/LH/LL remain market context, while yellow, green and red map the candidate entry, target and stop.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -566,6 +579,7 @@ export default function Home() {
                   {[
                     ['bg-cyan-300', 'Smooth cyan', 'Fast EMA · short-term direction'],
                     ['bg-orange-300', 'Smooth orange', 'Slow EMA · broader trend'],
+                    ['bg-purple-400', 'Stepped purple', 'Confirmed higher-timeframe EMA · priority trend filter'],
                     ['bg-fuchsia-400', 'Stepped magenta', 'Buy-side liquidity · confirmed swing high'],
                     ['bg-cyan-500', 'Stepped teal', 'Sell-side liquidity · confirmed swing low'],
                     ['bg-yellow-300', 'Yellow', 'Candidate entry · wait for confirmation'],
@@ -582,6 +596,24 @@ export default function Home() {
               </div>
 
               <div className="grid content-start gap-4">
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Signal priority</p>
+                  <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                    {[
+                      ['P1 CONFIRMED', 'Highest priority', 'Trend setup confirmed at candle close and aligned with the higher-timeframe filter.', 'border-cyan-300/20 bg-cyan-300/[.055] text-cyan-200'],
+                      ['P2 CONFIRMED', 'Second priority', 'Reversal watch became valid only after price crossed its yellow trigger.', 'border-emerald-300/20 bg-emerald-300/[.055] text-emerald-200'],
+                      ['WATCH ONLY', 'No trade yet', 'A possible reversal exists, but it is unconfirmed until the trigger is crossed.', 'border-amber-300/20 bg-amber-300/[.055] text-amber-200'],
+                    ].map(([label, rank, description, color]) => (
+                      <div key={label} className={`rounded-xl border p-3 ${color}`}>
+                        <p className="text-[10px] font-bold tracking-[.08em]">{label}</p>
+                        <p className="mt-1 text-[11px] font-semibold text-foreground">{rank}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">If P1 appears, it takes priority and cancels an unfilled reversal order. Liquidity lines and HH/HL/LH/LL labels are context only—not BUY or SELL confirmation.</p>
+                </div>
+
                 <div>
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Market structure</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -605,7 +637,7 @@ export default function Home() {
                   <ol className="mt-2 space-y-2 text-[11px] leading-5 text-muted-foreground">
                     <li><span className="mr-2 text-primary">1.</span>Cyan above orange and both rising favors longs; cyan below orange and both falling favors shorts.</li>
                     <li><span className="mr-2 text-primary">2.</span>Confirm the structure sequence and note which liquidity line price is approaching or sweeping.</li>
-                    <li><span className="mr-2 text-primary">3.</span>Wait for yellow Entry plus green TP and red SL. If they are absent, there is no qualifying plan.</li>
+                    <li><span className="mr-2 text-primary">3.</span>Act only on P1 CONFIRMED or P2 CONFIRMED with yellow Entry, green TP and red SL. WATCH ONLY is not an entry.</li>
                   </ol>
                 </div>
 
@@ -782,7 +814,7 @@ export default function Home() {
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
                   ['Automatic plan', 'Yellow candidate entry, green possible TP, red possible SL and shaded reward/risk zones.'],
-                  ['R:R 2.14', 'The projected reward is 2.14 times the defined risk; change it from Shared filters.'],
+                  ['Priority marks', 'P1 confirmed trend, P2 confirmed reversal, and Watch Only for an untriggered possibility.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
                     <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : 'text-amber-200'}`}>{title}</p>
