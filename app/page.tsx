@@ -88,6 +88,11 @@ minimumWickBody = input.float(1.5, "Minimum wick / body", minval = 0.5, step = 0
 expiryBars = input.int(3, "Entry expiry bars", minval = 1, maxval = 10, group = "Reversal scout")
 tradeSession = input.session("0700-1700", "Active session in UTC", group = "Reversal scout")
 
+enableReentry = input.bool(true, "Enable one controlled re-entry after SL", group = "Controlled re-entry")
+reentryWaitBars = input.int(1, "Closed candles to wait after SL", minval = 1, maxval = 10, group = "Controlled re-entry")
+reentryExpiryBars = input.int(2, "Re-entry trigger expiry bars", minval = 1, maxval = 10, group = "Controlled re-entry")
+reentrySizeMultiplier = input.float(0.50, "Re-entry size multiplier", minval = 0.10, maxval = 1.00, step = 0.05, group = "Controlled re-entry")
+
 pivotLength = input.int(5, "Liquidity / structure swing length", minval = 2, maxval = 30, group = "Automatic chart map")
 showLiquidity = input.bool(true, "Show confirmed liquidity levels", group = "Automatic chart map")
 showStructure = input.bool(true, "Show HH / HL / LH / LL", group = "Automatic chart map")
@@ -140,12 +145,16 @@ confirmedHTFClose = request.security(syminfo.tickerid, confirmationTimeframe, cl
 confirmedHTFEMA = request.security(syminfo.tickerid, confirmationTimeframe, ta.ema(close, slowLength)[1], lookahead = barmerge.lookahead_on)
 higherTrendUp = confirmedHTFClose > confirmedHTFEMA
 higherTrendDown = confirmedHTFClose < confirmedHTFEMA
+closedTradeThisBar = ta.change(strategy.closedtrades) > 0
+lastClosedTradeNumber = strategy.closedtrades - 1
+lastExitComment = strategy.closedtrades > 0 ? strategy.closedtrades.exit_comment(lastClosedTradeNumber) : ""
+stopClosedThisBar = closedTradeThisBar and lastExitComment == "SL"
 
 // Confirmed trend engine.
 var int lastTrendBar = na
 trendCooldownOK = na(lastTrendBar) or bar_index - lastTrendBar > cooldownBars
-trendLongSetup = enableTrend and decisionBarReady and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp
-trendShortSetup = enableTrend and decisionBarReady and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown
+trendLongSetup = enableTrend and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp
+trendShortSetup = enableTrend and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown
 
 // Reversal scout engine. It automatically stays inactive when the chart timeframe
 // is not below the confirmation timeframe, while the trend engine keeps working.
@@ -187,8 +196,8 @@ rsiRecentHigh = ta.highest(rsiValue, 4)
 sweptLow = not na(priorSwingLow) and low < priorSwingLow and close > priorSwingLow
 sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSwingHigh
 
-longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
-shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
+longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
+shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
 
 var float trendStopPrice = na
 var float trendTargetPrice = na
@@ -202,6 +211,30 @@ var float plannedEntry = na
 var float plannedStop = na
 var float plannedTarget = na
 var int plannedUntilBar = na
+var bool reentryArmed = false
+var int reentryDirection = 0
+var int reentrySLBar = na
+var float reentryRecoveryPrice = na
+var float reentryQty = na
+var float reentryEntry = na
+var float reentryStop = na
+var float reentryTarget = na
+var int reentryPendingBar = na
+
+// Any fresh P1/P2 setup outranks and cancels a lower-priority re-entry idea.
+primarySetupStarted = trendLongSetup or trendShortSetup or longWatch or shortWatch
+if primarySetupStarted
+    strategy.cancel("REENTRY LONG")
+    strategy.cancel("REENTRY SHORT")
+    reentryArmed := false
+    reentryDirection := 0
+    reentrySLBar := na
+    reentryRecoveryPrice := na
+    reentryQty := na
+    reentryEntry := na
+    reentryStop := na
+    reentryTarget := na
+    reentryPendingBar := na
 
 // Confirmed trend entries take priority and cancel any unfilled reversal trigger.
 if trendLongSetup
@@ -328,7 +361,7 @@ if strategy.position_size > 0 and not na(pendingLongStop)
         plannedStop := pendingLongStop
         plannedTarget := revLongTarget
         plannedUntilBar := bar_index + planBars
-        strategy.exit("REV LONG exit", from_entry = "REV LONG", stop = pendingLongStop, limit = revLongTarget)
+        strategy.exit("REV LONG exit", from_entry = "REV LONG", stop = pendingLongStop, limit = revLongTarget, comment_profit = "TP", comment_loss = "SL")
     pendingLongEntry := na
     pendingLongBar := na
     pendingShortEntry := na
@@ -343,7 +376,7 @@ if strategy.position_size < 0 and not na(pendingShortStop)
         plannedStop := pendingShortStop
         plannedTarget := revShortTarget
         plannedUntilBar := bar_index + planBars
-        strategy.exit("REV SHORT exit", from_entry = "REV SHORT", stop = pendingShortStop, limit = revShortTarget)
+        strategy.exit("REV SHORT exit", from_entry = "REV SHORT", stop = pendingShortStop, limit = revShortTarget, comment_profit = "TP", comment_loss = "SL")
     pendingShortEntry := na
     pendingShortBar := na
     pendingLongEntry := na
@@ -358,7 +391,7 @@ if strategy.position_size > 0 and not na(trendStopPrice)
         plannedStop := trendStopPrice
         plannedTarget := trendTargetPrice
         plannedUntilBar := bar_index + planBars
-        strategy.exit("TREND LONG exit", from_entry = "TREND LONG", stop = trendStopPrice, limit = trendTargetPrice)
+        strategy.exit("TREND LONG exit", from_entry = "TREND LONG", stop = trendStopPrice, limit = trendTargetPrice, comment_profit = "TP", comment_loss = "SL")
 
 if strategy.position_size < 0 and not na(trendStopPrice)
     activeTrendShortRisk = trendStopPrice - strategy.position_avg_price
@@ -368,7 +401,7 @@ if strategy.position_size < 0 and not na(trendStopPrice)
         plannedStop := trendStopPrice
         plannedTarget := trendTargetPrice
         plannedUntilBar := bar_index + planBars
-        strategy.exit("TREND SHORT exit", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendTargetPrice)
+        strategy.exit("TREND SHORT exit", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendTargetPrice, comment_profit = "TP", comment_loss = "SL")
 
 positionJustClosed = strategy.position_size == 0 and strategy.position_size[1] != 0
 if positionJustClosed
@@ -380,6 +413,129 @@ if positionJustClosed
     pendingShortEntry := na
     pendingShortStop := na
     pendingShortBar := na
+    plannedEntry := na
+    plannedStop := na
+    plannedTarget := na
+    plannedUntilBar := na
+
+// Detect whether the broker emulator closed the latest trade at TP or SL.
+// Only a non-re-entry SL can arm one controlled re-entry cycle.
+if closedTradeThisBar
+    lastEntryId = strategy.closedtrades.entry_id(lastClosedTradeNumber)
+    lastExitPrice = strategy.closedtrades.exit_price(lastClosedTradeNumber)
+    lastTradeQty = math.abs(strategy.closedtrades.size(lastClosedTradeNumber))
+    closedWasReentry = str.contains(lastEntryId, "REENTRY")
+    closedWasLong = str.contains(lastEntryId, "LONG")
+    plannedEntry := na
+    plannedStop := na
+    plannedTarget := na
+    plannedUntilBar := na
+    if enableReentry and lastExitComment == "SL" and not closedWasReentry
+        strategy.cancel("REENTRY LONG")
+        strategy.cancel("REENTRY SHORT")
+        reentryArmed := true
+        reentryDirection := closedWasLong ? 1 : -1
+        reentrySLBar := bar_index
+        reentryRecoveryPrice := lastExitPrice
+        reentryQty := math.max(lastTradeQty * reentrySizeMultiplier, syminfo.mincontract)
+        reentryEntry := na
+        reentryStop := na
+        reentryTarget := na
+        reentryPendingBar := na
+        if showPriorityMarks
+            label.new(bar_index, lastExitPrice, "SL HIT\nP3 COOLDOWN", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.purple, 18), textcolor = color.white, size = size.tiny)
+    else
+        reentryArmed := false
+        reentryDirection := 0
+        reentrySLBar := na
+        reentryRecoveryPrice := na
+        reentryQty := na
+        reentryEntry := na
+        reentryStop := na
+        reentryTarget := na
+        reentryPendingBar := na
+        if showPriorityMarks and closedWasReentry and lastExitComment == "SL"
+            label.new(bar_index, lastExitPrice, "RE-ENTRY SL\nSTOP THIS SETUP", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.red, 12), textcolor = color.white, size = size.tiny)
+
+// Wait for the requested number of completed chart candles, then demand a
+// reclaim of the stopped price, EMA direction, RSI and HTF trend alignment.
+reentryWaitComplete = enableReentry and reentryArmed and decisionBarReady and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar >= reentryWaitBars
+reentryLongCandidate = reentryWaitComplete and reentryDirection == 1 and higherTrendUp and close > reentryRecoveryPrice and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 50 and close > open
+reentryShortCandidate = reentryWaitComplete and reentryDirection == -1 and higherTrendDown and close < reentryRecoveryPrice and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 50 and close < open
+
+if reentryLongCandidate
+    reentryArmed := false
+    reentryEntry := high + syminfo.mintick
+    reentryStop := math.min(low, recentStructureLow) - syminfo.mintick * 2
+    reentryTarget := reentryEntry + (reentryEntry - reentryStop) * rewardRisk
+    reentryPendingBar := bar_index
+    plannedEntry := reentryEntry
+    plannedStop := reentryStop
+    plannedTarget := reentryTarget
+    plannedUntilBar := bar_index + planBars
+    if showTradePlan
+        label.new(bar_index, reentryEntry, "P3 RE-ENTRY BUY\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x SIZE", style = label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        label.new(bar_index, reentryTarget, "RE-TP", style = label.style_label_down, color = color.new(color.lime, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+
+if reentryShortCandidate
+    reentryArmed := false
+    reentryEntry := low - syminfo.mintick
+    reentryStop := math.max(high, recentStructureHigh) + syminfo.mintick * 2
+    reentryTarget := reentryEntry - (reentryStop - reentryEntry) * rewardRisk
+    reentryPendingBar := bar_index
+    plannedEntry := reentryEntry
+    plannedStop := reentryStop
+    plannedTarget := reentryTarget
+    plannedUntilBar := bar_index + planBars
+    if showTradePlan
+        label.new(bar_index, reentryEntry, "P3 RE-ENTRY SELL\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x SIZE", style = label.style_label_down, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        label.new(bar_index, reentryTarget, "RE-TP", style = label.style_label_up, color = color.new(color.lime, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+
+if not na(reentryPendingBar) and strategy.position_size == 0
+    if bar_index - reentryPendingBar <= reentryExpiryBars and reentryQty > 0
+        if reentryDirection == 1
+            strategy.entry("REENTRY LONG", strategy.long, qty = reentryQty, stop = reentryEntry)
+        if reentryDirection == -1
+            strategy.entry("REENTRY SHORT", strategy.short, qty = reentryQty, stop = reentryEntry)
+    else
+        strategy.cancel("REENTRY LONG")
+        strategy.cancel("REENTRY SHORT")
+        reentryDirection := 0
+        reentryEntry := na
+        reentryStop := na
+        reentryTarget := na
+        reentryPendingBar := na
+        plannedEntry := na
+        plannedStop := na
+        plannedTarget := na
+        plannedUntilBar := na
+
+reentryLongConfirmed = strategy.position_size > 0 and strategy.position_size[1] <= 0 and reentryDirection == 1 and not na(reentryStop)
+reentryShortConfirmed = strategy.position_size < 0 and strategy.position_size[1] >= 0 and reentryDirection == -1 and not na(reentryStop)
+
+if strategy.position_size > 0 and reentryDirection == 1 and not na(reentryStop)
+    reentryLongRisk = strategy.position_avg_price - reentryStop
+    if reentryLongRisk > syminfo.mintick
+        reentryTarget := strategy.position_avg_price + reentryLongRisk * rewardRisk
+        plannedEntry := strategy.position_avg_price
+        plannedStop := reentryStop
+        plannedTarget := reentryTarget
+        plannedUntilBar := bar_index + planBars
+        strategy.exit("REENTRY LONG exit", from_entry = "REENTRY LONG", stop = reentryStop, limit = reentryTarget, comment_profit = "TP", comment_loss = "SL")
+    reentryPendingBar := na
+
+if strategy.position_size < 0 and reentryDirection == -1 and not na(reentryStop)
+    reentryShortRisk = reentryStop - strategy.position_avg_price
+    if reentryShortRisk > syminfo.mintick
+        reentryTarget := strategy.position_avg_price - reentryShortRisk * rewardRisk
+        plannedEntry := strategy.position_avg_price
+        plannedStop := reentryStop
+        plannedTarget := reentryTarget
+        plannedUntilBar := bar_index + planBars
+        strategy.exit("REENTRY SHORT exit", from_entry = "REENTRY SHORT", stop = reentryStop, limit = reentryTarget, comment_profit = "TP", comment_loss = "SL")
+    reentryPendingBar := na
 
 plot(enableTrend ? fastEMA : na, "Fast EMA", color = color.aqua, linewidth = 2)
 plot(enableTrend ? slowEMA : na, "Slow EMA", color = color.orange, linewidth = 2)
@@ -401,6 +557,10 @@ plotshape(showPriorityMarks and longWatch, title = "WATCH ONLY LONG REVERSAL", t
 plotshape(showPriorityMarks and shortWatch, title = "WATCH ONLY SHORT REVERSAL", text = "WATCH ONLY\nSHORT", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 24), textcolor = color.white, size = size.tiny)
 plotshape(showPriorityMarks and reversalLongConfirmed, title = "P2 CONFIRMED REVERSAL BUY", text = "P2 CONFIRMED\nBUY", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
 plotshape(showPriorityMarks and reversalShortConfirmed, title = "P2 CONFIRMED REVERSAL SELL", text = "P2 CONFIRMED\nSELL", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(showPriorityMarks and reentryLongCandidate, title = "P3 RE-ENTRY WATCH BUY", text = "P3 RE-ENTRY\nWAIT TRIGGER", style = shape.labelup, location = location.belowbar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
+plotshape(showPriorityMarks and reentryShortCandidate, title = "P3 RE-ENTRY WATCH SELL", text = "P3 RE-ENTRY\nWAIT TRIGGER", style = shape.labeldown, location = location.abovebar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
+plotshape(showPriorityMarks and reentryLongConfirmed, title = "P3 CONFIRMED RE-ENTRY BUY", text = "P3 CONFIRMED\nRE-BUY", style = shape.labelup, location = location.belowbar, color = color.purple, textcolor = color.white, size = size.small)
+plotshape(showPriorityMarks and reentryShortConfirmed, title = "P3 CONFIRMED RE-ENTRY SELL", text = "P3 CONFIRMED\nRE-SELL", style = shape.labeldown, location = location.abovebar, color = color.purple, textcolor = color.white, size = size.small)
 bgcolor(enableReversal and not reversalTimeframeOK ? color.new(color.orange, 92) : na, title = "Reversal timeframe warning")
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
@@ -411,8 +571,8 @@ minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
 countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
-priorityText = trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
-priorityColor = trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
+priorityText = trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? "P3 RE-BUY CONFIRMED" : reentryShortConfirmed ? "P3 RE-SELL CONFIRMED" : reentryLongCandidate ? "P3 RE-BUY WATCH" : reentryShortCandidate ? "P3 RE-SELL WATCH" : reentryArmed ? "P3 COOLDOWN" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
+priorityColor = trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
 
 if barstate.islast
     if showTimeframeSync
@@ -432,7 +592,11 @@ alertcondition(trendShortSetup, title = "Aurum Guard trend short", message = "Co
 alertcondition(longWatch, title = "Possible long reversal", message = "Aurum Guard possible long reversal; wait for trigger")
 alertcondition(shortWatch, title = "Possible short reversal", message = "Aurum Guard possible short reversal; wait for trigger")
 alertcondition(reversalLongConfirmed, title = "Aurum Guard confirmed reversal long", message = "P2 confirmed reversal long trigger filled")
-alertcondition(reversalShortConfirmed, title = "Aurum Guard confirmed reversal short", message = "P2 confirmed reversal short trigger filled")`;
+alertcondition(reversalShortConfirmed, title = "Aurum Guard confirmed reversal short", message = "P2 confirmed reversal short trigger filled")
+alertcondition(reentryLongCandidate, title = "Aurum Guard re-entry long watch", message = "P3 long re-entry candidate; wait for trigger")
+alertcondition(reentryShortCandidate, title = "Aurum Guard re-entry short watch", message = "P3 short re-entry candidate; wait for trigger")
+alertcondition(reentryLongConfirmed, title = "Aurum Guard confirmed re-entry long", message = "P3 confirmed re-entry long trigger filled")
+alertcondition(reentryShortConfirmed, title = "Aurum Guard confirmed re-entry short", message = "P3 confirmed re-entry short trigger filled")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -598,10 +762,11 @@ export default function Home() {
               <div className="grid content-start gap-4">
                 <div>
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Signal priority</p>
-                  <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                     {[
                       ['P1 CONFIRMED', 'Highest priority', 'Trend setup confirmed at candle close and aligned with the higher-timeframe filter.', 'border-cyan-300/20 bg-cyan-300/[.055] text-cyan-200'],
                       ['P2 CONFIRMED', 'Second priority', 'Reversal watch became valid only after price crossed its yellow trigger.', 'border-emerald-300/20 bg-emerald-300/[.055] text-emerald-200'],
+                      ['P3 RE-ENTRY', 'Third priority', 'After an SL, waits and reconfirms before offering one smaller re-entry with fresh TP and SL.', 'border-purple-300/20 bg-purple-300/[.055] text-purple-200'],
                       ['WATCH ONLY', 'No trade yet', 'A possible reversal exists, but it is unconfirmed until the trigger is crossed.', 'border-amber-300/20 bg-amber-300/[.055] text-amber-200'],
                     ].map(([label, rank, description, color]) => (
                       <div key={label} className={`rounded-xl border p-3 ${color}`}>
@@ -611,7 +776,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">If P1 appears, it takes priority and cancels an unfilled reversal order. Liquidity lines and HH/HL/LH/LL labels are context only—not BUY or SELL confirmation.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">P1 outranks P2, and either fresh P1/P2 setup cancels a P3 re-entry idea. Liquidity lines and HH/HL/LH/LL labels are context only—not BUY or SELL confirmation.</p>
                 </div>
 
                 <div>
@@ -637,7 +802,7 @@ export default function Home() {
                   <ol className="mt-2 space-y-2 text-[11px] leading-5 text-muted-foreground">
                     <li><span className="mr-2 text-primary">1.</span>Cyan above orange and both rising favors longs; cyan below orange and both falling favors shorts.</li>
                     <li><span className="mr-2 text-primary">2.</span>Confirm the structure sequence and note which liquidity line price is approaching or sweeping.</li>
-                    <li><span className="mr-2 text-primary">3.</span>Act only on P1 CONFIRMED or P2 CONFIRMED with yellow Entry, green TP and red SL. WATCH ONLY is not an entry.</li>
+                    <li><span className="mr-2 text-primary">3.</span>Act only on P1, P2 or P3 CONFIRMED with yellow Entry, green TP and red SL. WATCH ONLY and P3 COOLDOWN are not entries.</li>
                   </ol>
                 </div>
 
@@ -783,7 +948,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · timeframe-synced trend + reversal + liquidity + structure + automatic candidate Entry / TP / SL</CardDescription>
+              <CardDescription>One free-plan script slot · timeframe-synced trend + reversal + one controlled post-SL re-entry + automatic Entry / TP / SL</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -809,12 +974,30 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="mb-4 rounded-xl border border-purple-300/20 bg-purple-300/[.045] p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-semibold text-purple-100">Controlled P3 re-entry after an SL</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Default behavior: wait one completed chart candle, require price to reclaim the stopped level with EMA, RSI and higher-timeframe agreement, then place one 0.50×-size trigger, subject to the symbol’s minimum contract size. If triggered, the script draws a fresh yellow entry, green RE-TP and red RE-SL. If the trigger expires or the re-entry also stops, the cycle ends.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                    {['SL hit', 'Wait 1 close', 'Reconfirm', 'P3 trigger', 'Fresh TP / SL'].map((step, index) => (
+                      <div key={step} className="flex items-center gap-1.5">
+                        {index > 0 && <span className="text-purple-300/60">→</span>}
+                        <span className="rounded-md border border-purple-300/15 bg-black/15 px-2 py-1.5 text-purple-100">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-3 border-t border-purple-300/10 pt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-purple-200">Why the wait?</span> A wick through SL is not enough reason to jump straight back in. Reclaim plus a fresh candle close is required to reduce revenge entries. Change the wait, expiry and size under Settings → Controlled re-entry.</p>
+              </div>
+
               <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
                   ['Automatic plan', 'Yellow candidate entry, green possible TP, red possible SL and shaded reward/risk zones.'],
-                  ['Priority marks', 'P1 confirmed trend, P2 confirmed reversal, and Watch Only for an untriggered possibility.'],
+                  ['Priority marks', 'P1 trend, P2 reversal, P3 controlled re-entry, and Watch Only for an untriggered possibility.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
                     <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : 'text-amber-200'}`}>{title}</p>
@@ -846,14 +1029,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Change the chart interval normally; the script reloads automatically. Open settings → Automatic chart map to toggle the timeframe sync panel, liquidity, structure labels and Entry / TP / SL zones.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Change the chart interval normally; the script reloads automatically. Open Settings → Controlled re-entry to change its wait, expiry and 0.50× size, or disable it completely.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Live visuals recalculate on incoming TradingView price updates, but new BUY/SELL decisions wait for the selected candle to close to reduce intrabar repainting. Liquidity and HH/HL labels use confirmed pivots. Entry, TP and SL are conditional projections, not guaranteed outcomes.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Live visuals recalculate on incoming TradingView price updates, but new decisions wait for the selected candle to close. P3 allows only one reduced-size re-entry after an SL and never guarantees recovery; spread, slippage or a fast market can still produce a worse fill. Entry, TP and SL remain conditional projections.</p>
             </CardContent>
           </Card>
         </section>
