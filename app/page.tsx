@@ -97,6 +97,16 @@ showBadEntryGuard = input.bool(true, "Show bad-entry warnings", group = "Bad Ent
 chaseDistanceATR = input.float(1.35, "No-chase distance from fast EMA in ATR", minval = 0.50, maxval = 5.00, step = 0.05, group = "Bad Entry Guard")
 badEntryCooldownBars = input.int(4, "Bars between warning labels", minval = 1, maxval = 50, group = "Bad Entry Guard")
 
+enableShockGuard = input.bool(true, "Enable volatility shock pause", group = "Volatility Shock Guard")
+shockRangeATR = input.float(2.00, "Shock candle range in ATR", minval = 1.00, maxval = 10.00, step = 0.10, group = "Volatility Shock Guard")
+shockGapATR = input.float(0.75, "Shock opening gap in ATR", minval = 0.25, maxval = 5.00, step = 0.05, group = "Volatility Shock Guard")
+shockPauseBars = input.int(3, "Closed candles to pause after shock", minval = 1, maxval = 20, group = "Volatility Shock Guard")
+maxDailyLossPercent = input.float(2.00, "Strategy daily-loss lock (%)", minval = 0.10, maxval = 100.00, step = 0.10, group = "Volatility Shock Guard")
+
+// TradingView's strategy-wide circuit breaker cancels pending orders, closes an
+// open simulated position and blocks additional orders for the session at this loss.
+strategy.risk.max_intraday_loss(maxDailyLossPercent, strategy.percent_of_equity, "Aurum Guard daily-loss lock")
+
 pivotLength = input.int(5, "Liquidity / structure swing length", minval = 2, maxval = 30, group = "Automatic chart map")
 showLiquidity = input.bool(true, "Show confirmed liquidity levels", group = "Automatic chart map")
 showStructure = input.bool(true, "Show HH / HL / LH / LL", group = "Automatic chart map")
@@ -149,6 +159,18 @@ confirmedHTFClose = request.security(syminfo.tickerid, confirmationTimeframe, cl
 confirmedHTFEMA = request.security(syminfo.tickerid, confirmationTimeframe, ta.ema(close, slowLength)[1], lookahead = barmerge.lookahead_on)
 higherTrendUp = confirmedHTFClose > confirmedHTFEMA
 higherTrendDown = confirmedHTFClose < confirmedHTFEMA
+
+// Price-only shock detector. It reacts to abnormal range or opening gaps; it
+// cannot predict the first tick of a news spike, so its purpose is to stop follow-on entries.
+var int lastShockBar = na
+shockRangeDetected = high - low >= atrValue * shockRangeATR
+shockGapDetected = math.abs(open - close[1]) >= atrValue * shockGapATR
+volatilityShock = enableShockGuard and decisionBarReady and (shockRangeDetected or shockGapDetected)
+if volatilityShock
+    lastShockBar := bar_index
+shockPauseActive = enableShockGuard and not na(lastShockBar) and bar_index - lastShockBar <= shockPauseBars
+shockReset = enableShockGuard and decisionBarReady and not shockPauseActive and shockPauseActive[1]
+
 closedTradeThisBar = ta.change(strategy.closedtrades) > 0
 lastClosedTradeNumber = strategy.closedtrades - 1
 lastExitComment = strategy.closedtrades > 0 ? strategy.closedtrades.exit_comment(lastClosedTradeNumber) : ""
@@ -157,8 +179,8 @@ stopClosedThisBar = closedTradeThisBar and lastExitComment == "SL"
 // Confirmed trend engine.
 var int lastTrendBar = na
 trendCooldownOK = na(lastTrendBar) or bar_index - lastTrendBar > cooldownBars
-trendLongSetup = enableTrend and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp
-trendShortSetup = enableTrend and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown
+trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp
+trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown
 
 // Reversal scout engine. It automatically stays inactive when the chart timeframe
 // is not below the confirmation timeframe, while the trend engine keeps working.
@@ -200,8 +222,8 @@ rsiRecentHigh = ta.highest(rsiValue, 4)
 sweptLow = not na(priorSwingLow) and low < priorSwingLow and close > priorSwingLow
 sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSwingHigh
 
-longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
-shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
+longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
+shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
 
 // Bad Entry Guard. These are warnings, never entry signals. They highlight the
 // two common mistakes shown in the sample: fading a protected trend pullback
@@ -218,10 +240,10 @@ rawAvoidLong = buySideSweepTrap or bearishRallyTrap
 rawNoChaseLong = bullishGuardTrend and close > open and close - fastEMA > atrValue * chaseDistanceATR
 rawNoChaseShort = bearishGuardTrend and close < open and fastEMA - close > atrValue * chaseDistanceATR
 badEntryCooldownOK = na(lastBadEntryBar) or bar_index - lastBadEntryBar > badEntryCooldownBars
-avoidShort = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and rawAvoidShort
-avoidLong = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and rawAvoidLong
-noChaseLong = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and not avoidLong and rawNoChaseLong
-noChaseShort = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and not avoidLong and not noChaseLong and rawNoChaseShort
+avoidShort = showBadEntryGuard and decisionBarReady and not shockPauseActive and strategy.position_size == 0 and badEntryCooldownOK and rawAvoidShort
+avoidLong = showBadEntryGuard and decisionBarReady and not shockPauseActive and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and rawAvoidLong
+noChaseLong = showBadEntryGuard and decisionBarReady and not shockPauseActive and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and not avoidLong and rawNoChaseLong
+noChaseShort = showBadEntryGuard and decisionBarReady and not shockPauseActive and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and not avoidLong and not noChaseLong and rawNoChaseShort
 
 if avoidShort
     label.new(bar_index, high, "AVOID SHORT\n" + (sellSideSweepTrap ? "SELL-SIDE SWEEP" : "BULLISH PULLBACK"), style = label.style_label_down, color = color.new(color.orange, 6), textcolor = color.black, size = size.small)
@@ -260,6 +282,34 @@ var float reentryEntry = na
 var float reentryStop = na
 var float reentryTarget = na
 var int reentryPendingBar = na
+
+// A shock cancels unfilled entry ideas immediately. Existing positions keep their
+// protective TP/SL bracket; no new setup is allowed until the pause expires.
+if volatilityShock
+    strategy.cancel("REV LONG")
+    strategy.cancel("REV SHORT")
+    strategy.cancel("REENTRY LONG")
+    strategy.cancel("REENTRY SHORT")
+    if strategy.position_size == 0
+        pendingLongEntry := na
+        pendingLongStop := na
+        pendingLongBar := na
+        pendingShortEntry := na
+        pendingShortStop := na
+        pendingShortBar := na
+        reentryArmed := false
+        reentryDirection := 0
+        reentrySLBar := na
+        reentryRecoveryPrice := na
+        reentryQty := na
+        reentryEntry := na
+        reentryStop := na
+        reentryTarget := na
+        reentryPendingBar := na
+        plannedEntry := na
+        plannedStop := na
+        plannedTarget := na
+        plannedUntilBar := na
 
 // Any fresh P1/P2 setup outranks and cancels a lower-priority re-entry idea.
 primarySetupStarted = trendLongSetup or trendShortSetup or longWatch or shortWatch
@@ -470,7 +520,7 @@ if closedTradeThisBar
     plannedStop := na
     plannedTarget := na
     plannedUntilBar := na
-    if enableReentry and lastExitComment == "SL" and not closedWasReentry
+    if enableReentry and lastExitComment == "SL" and not closedWasReentry and not shockPauseActive
         strategy.cancel("REENTRY LONG")
         strategy.cancel("REENTRY SHORT")
         reentryArmed := true
@@ -499,7 +549,7 @@ if closedTradeThisBar
 
 // Wait for the requested number of completed chart candles, then demand a
 // reclaim of the stopped price, EMA direction, RSI and HTF trend alignment.
-reentryWaitComplete = enableReentry and reentryArmed and decisionBarReady and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar >= reentryWaitBars
+reentryWaitComplete = enableReentry and reentryArmed and decisionBarReady and not shockPauseActive and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar >= reentryWaitBars
 reentryLongCandidate = reentryWaitComplete and reentryDirection == 1 and higherTrendUp and close > reentryRecoveryPrice and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 50 and close > open
 reentryShortCandidate = reentryWaitComplete and reentryDirection == -1 and higherTrendDown and close < reentryRecoveryPrice and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 50 and close < open
 
@@ -601,21 +651,26 @@ plotshape(showPriorityMarks and reentryLongCandidate, title = "P3 RE-ENTRY WATCH
 plotshape(showPriorityMarks and reentryShortCandidate, title = "P3 RE-ENTRY WATCH SELL", text = "P3 RE-ENTRY\nWAIT TRIGGER", style = shape.labeldown, location = location.abovebar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
 plotshape(showPriorityMarks and reentryLongConfirmed, title = "P3 CONFIRMED RE-ENTRY BUY", text = "P3 CONFIRMED\nRE-BUY", style = shape.labelup, location = location.belowbar, color = color.purple, textcolor = color.white, size = size.small)
 plotshape(showPriorityMarks and reentryShortConfirmed, title = "P3 CONFIRMED RE-ENTRY SELL", text = "P3 CONFIRMED\nRE-SELL", style = shape.labeldown, location = location.abovebar, color = color.purple, textcolor = color.white, size = size.small)
+plotshape(volatilityShock, title = "VOLATILITY SHOCK", text = "VOLATILITY SHOCK\nNO NEW TRADES", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
+plotshape(shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
 bgcolor(enableReversal and not reversalTimeframeOK ? color.new(color.orange, 92) : na, title = "Reversal timeframe warning")
+bgcolor(shockPauseActive ? color.new(color.fuchsia, 92) : na, title = "Volatility shock pause")
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
 // setups remain locked until the current chart candle is confirmed.
-var table syncPanel = table.new(position.top_right, 2, 5, border_width = 1)
+var table syncPanel = table.new(position.top_right, 2, 6, border_width = 1)
 secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
 minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
 countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
-priorityText = trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? "P3 RE-BUY CONFIRMED" : reentryShortConfirmed ? "P3 RE-SELL CONFIRMED" : reentryLongCandidate ? "P3 RE-BUY WATCH" : reentryShortCandidate ? "P3 RE-SELL WATCH" : reentryArmed ? "P3 COOLDOWN" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
-priorityColor = trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
+priorityText = shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? "P3 RE-BUY CONFIRMED" : reentryShortConfirmed ? "P3 RE-SELL CONFIRMED" : reentryLongCandidate ? "P3 RE-BUY WATCH" : reentryShortCandidate ? "P3 RE-SELL WATCH" : reentryArmed ? "P3 COOLDOWN" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
+priorityColor = shockPauseActive ? color.new(color.fuchsia, 58) : trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
 entryGuardText = avoidShort ? "AVOID SHORT" : avoidLong ? "AVOID LONG" : noChaseLong ? "NO CHASE LONG" : noChaseShort ? "NO CHASE SHORT" : "CLEAR"
 entryGuardColor = avoidShort ? color.new(color.orange, 58) : avoidLong ? color.new(color.red, 58) : noChaseLong or noChaseShort ? color.new(color.yellow, 64) : color.new(color.lime, 82)
 entryGuardTextColor = noChaseLong or noChaseShort ? color.black : color.white
+shockStatusText = volatilityShock ? "SHOCK DETECTED" : shockPauseActive ? "PAUSE ACTIVE" : shockReset ? "RESET · WAIT SIGNAL" : "NORMAL"
+shockStatusColor = shockPauseActive ? color.new(color.fuchsia, 58) : shockReset ? color.new(color.teal, 62) : color.new(color.lime, 82)
 
 if barstate.islast
     if showTimeframeSync
@@ -629,8 +684,10 @@ if barstate.islast
         table.cell(syncPanel, 1, 3, priorityText, bgcolor = priorityColor, text_color = color.white, text_size = size.tiny)
         table.cell(syncPanel, 0, 4, "ENTRY GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
         table.cell(syncPanel, 1, 4, entryGuardText, bgcolor = entryGuardColor, text_color = entryGuardTextColor, text_size = size.tiny)
+        table.cell(syncPanel, 0, 5, "SHOCK GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 5, shockStatusText, bgcolor = shockStatusColor, text_color = color.white, text_size = size.tiny)
     else
-        table.clear(syncPanel, 0, 0, 1, 4)
+        table.clear(syncPanel, 0, 0, 1, 5)
 
 alertcondition(trendLongSetup, title = "Aurum Guard trend long", message = "Confirmed Aurum Guard trend long setup")
 alertcondition(trendShortSetup, title = "Aurum Guard trend short", message = "Confirmed Aurum Guard trend short setup")
@@ -645,7 +702,9 @@ alertcondition(reentryShortConfirmed, title = "Aurum Guard confirmed re-entry sh
 alertcondition(avoidShort, title = "Aurum Guard avoid short", message = "Bad Entry Guard: avoid short into a bullish pullback or sell-side liquidity sweep")
 alertcondition(avoidLong, title = "Aurum Guard avoid long", message = "Bad Entry Guard: avoid long into a bearish rally or buy-side liquidity sweep")
 alertcondition(noChaseLong, title = "Aurum Guard no-chase long", message = "Bad Entry Guard: long is ATR-extended; wait for a pullback")
-alertcondition(noChaseShort, title = "Aurum Guard no-chase short", message = "Bad Entry Guard: short is ATR-extended; wait for a rally")`;
+alertcondition(noChaseShort, title = "Aurum Guard no-chase short", message = "Bad Entry Guard: short is ATR-extended; wait for a rally")
+alertcondition(volatilityShock, title = "Aurum Guard volatility shock", message = "Volatility Shock Guard: abnormal candle or gap; no new trades")
+alertcondition(shockReset, title = "Aurum Guard shock pause reset", message = "Volatility Shock Guard reset; wait for a fresh P1, P2 or P3 confirmation")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -762,9 +821,10 @@ export default function Home() {
                   <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">AUTO TP / SL</Badge>
                   <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
+                  <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
                 </div>
                 <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and warns against bad entries</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. The Bad Entry Guard flags liquidity traps and overextended chases before yellow, green and red map a candidate entry, target and stop.</p>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Bad-entry warnings flag traps and chases, while the Shock Guard pauses fresh orders after abnormal volatility.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -845,6 +905,23 @@ export default function Home() {
                     ))}
                   </div>
                   <p className="mt-2 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-emerald-200">ENTRY GUARD · CLEAR</span> means no guard condition is active. It is not permission to enter; a P1, P2 or P3 confirmation is still required.</p>
+                </div>
+
+                <div className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[.045] p-4">
+                  <p className="text-xs font-semibold text-fuchsia-100">Volatility Shock Guard</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                    {[
+                      ['1 · Detect', 'A candle range above 2.00 ATR or an opening gap above 0.75 ATR triggers the guard.'],
+                      ['2 · Pause', 'Unfilled reversal and re-entry orders are cancelled; fresh setups pause for three closed candles.'],
+                      ['3 · Reset', 'SHOCK RESET means resume scanning only. Wait for a new P1, P2 or P3 confirmation.'],
+                    ].map(([title, description]) => (
+                      <div key={title} className="rounded-lg border border-white/8 bg-black/15 p-3">
+                        <p className="text-[10px] font-semibold text-fuchsia-200">{title}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-amber-200">Important:</span> this price-only guard reacts after a shock begins; it cannot predict the first spike or prevent an existing position from reaching its SL. The 2% strategy daily-loss lock stops further simulated orders for that session.</p>
                 </div>
 
                 <div>
@@ -1016,7 +1093,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · timeframe-synced trend + reversal + bad-entry warnings + controlled post-SL re-entry + automatic Entry / TP / SL</CardDescription>
+              <CardDescription>One free-plan script slot · timeframe-synced setups + bad-entry warnings + volatility circuit breaker + controlled post-SL re-entry</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -1060,16 +1137,38 @@ export default function Home() {
                 <p className="mt-3 border-t border-purple-300/10 pt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-purple-200">Why the wait?</span> A wick through SL is not enough reason to jump straight back in. Reclaim plus a fresh candle close is required to reduce revenge entries. Change the wait, expiry and size under Settings → Controlled re-entry.</p>
               </div>
 
-              <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="mb-4 rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[.045] p-4">
+                <div className="flex gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200">
+                    <TriangleAlert className="size-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-fuchsia-100">Volatility Shock Guard + daily-loss lock</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">A 2.00 ATR candle or 0.75 ATR opening gap marks VOLATILITY SHOCK, cancels unfilled triggers and pauses every new entry for three completed candles. SHOCK RESET only resumes scanning. Separately, TradingView’s strategy circuit breaker defaults to a 2% intraday loss limit.</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                  {['Shock detected', 'Cancel pending', 'Pause 3 closes', 'Shock reset', 'Fresh confirmation'].map((step, index) => (
+                    <div key={step} className="flex items-center gap-1.5">
+                      {index > 0 && <span className="text-fuchsia-300/60">→</span>}
+                      <span className="rounded-md border border-fuchsia-300/15 bg-black/15 px-2 py-1.5 text-fuchsia-100">{step}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 border-t border-fuchsia-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The guard reacts after unusual movement starts—it cannot predict the first spike. The daily lock governs TradingView’s simulated strategy and does not automatically control a separate broker account unless your execution connection enforces the strategy’s orders.</p>
+              </div>
+
+              <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {[
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
                   ['Automatic plan', 'Yellow candidate entry, green possible TP, red possible SL and shaded reward/risk zones.'],
                   ['Priority marks', 'P1 trend, P2 reversal, P3 controlled re-entry, and Watch Only for an untriggered possibility.'],
                   ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
+                  ['Shock circuit breaker', 'Cancels pending ideas, pauses new setups and enforces a configurable strategy daily-loss lock.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
-                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : index === 3 ? 'text-amber-200' : 'text-orange-200'}`}>{title}</p>
+                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : index === 3 ? 'text-amber-200' : index === 4 ? 'text-orange-200' : 'text-fuchsia-200'}`}>{title}</p>
                     <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
                   </div>
                 ))}
@@ -1098,14 +1197,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Under Settings → Bad Entry Guard, adjust the 1.35 ATR no-chase distance or warning cooldown. Controlled re-entry settings remain separately adjustable.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Settings → Volatility Shock Guard controls its ATR thresholds, three-candle pause and 2% simulated daily-loss lock. Bad-entry and re-entry settings remain separately adjustable.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Bad Entry Guard warnings are rule-based cautions, not proof that price must reverse or continue. New decisions still wait for candle close. P3 allows only one reduced-size re-entry after an SL; spread, slippage and fast markets can produce worse fills. Entry, TP and SL remain conditional projections.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Shock and bad-entry warnings are reactive rule-based cautions, not forecasts. They cannot prevent the first spike or guarantee fills at SL. New decisions wait for candle close; spread, slippage and fast markets can still produce worse results. Entry, TP and SL remain conditional projections.</p>
             </CardContent>
           </Card>
         </section>
