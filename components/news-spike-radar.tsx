@@ -143,13 +143,13 @@ export function NewsSpikeRadar() {
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[1.08fr_.92fr]">
-            <div className="overflow-hidden rounded-xl border border-white/8 bg-black/10">
-              <div className="flex flex-col gap-2 border-b border-white/7 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="overflow-hidden rounded-xl border border-zinc-300/20 bg-[#f4f6f8] shadow-[inset_0_0_0_1px_rgba(255,255,255,.04)]">
+              <div className="flex flex-col gap-2 border-b border-zinc-300/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="flex items-center gap-2 text-xs font-semibold"><CalendarClock className="size-4 text-primary" /> Incoming US events</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">High importance only · check the exact date, forecast and actual</p>
+                  <p className="flex items-center gap-2 text-xs font-semibold text-zinc-950"><CalendarClock className="size-4 text-amber-700" /> Incoming US events</p>
+                  <p className="mt-1 text-[10px] text-zinc-600">High importance only · check the exact date, forecast and actual</p>
                 </div>
-                <Badge variant="outline" className="border-primary/25 text-primary">US ONLY</Badge>
+                <Badge variant="outline" className="border-amber-700/30 bg-amber-100 text-amber-900">US ONLY</Badge>
               </div>
               <TradingViewEconomicCalendar refreshKey={refreshKey} />
             </div>

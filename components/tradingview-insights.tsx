@@ -114,8 +114,8 @@ export function TradingViewEconomicCalendar({
     <TradingViewWidget
       scriptUrl="https://s3.tradingview.com/external-embedding/embed-widget-events.js"
       config={{
-        colorTheme: 'dark',
-        isTransparent: true,
+        colorTheme: 'light',
+        isTransparent: false,
         locale: 'en',
         countryFilter: 'us',
         importanceFilter: '1',
@@ -124,7 +124,7 @@ export function TradingViewEconomicCalendar({
       }}
       refreshKey={refreshKey}
       label="Live United States high-impact economic calendar"
-      className="h-[660px] w-full sm:h-[720px]"
+      className="h-[660px] w-full bg-[#f4f6f8] text-[#111827] sm:h-[720px]"
     />
   );
 }
