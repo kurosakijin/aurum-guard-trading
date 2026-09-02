@@ -66,6 +66,7 @@ strategy("Aurum Guard Combined: Trend + Reversal", overlay = true, pyramiding = 
      commission_type = strategy.commission.percent,
      commission_value = 0.05,
      calc_on_every_tick = true,
+     calc_on_order_fills = true,
      process_orders_on_close = true,
      max_labels_count = 300)
 
@@ -93,6 +94,11 @@ reentryWaitBars = input.int(1, "Closed candles to wait after SL", minval = 1, ma
 reentryScanBars = input.int(12, "Post-SL direction scan bars", minval = 2, maxval = 50, group = "Controlled re-entry")
 reentryExpiryBars = input.int(2, "Re-entry trigger expiry bars", minval = 1, maxval = 10, group = "Controlled re-entry")
 reentrySizeMultiplier = input.float(0.50, "Re-entry size multiplier", minval = 0.10, maxval = 1.00, step = 0.05, group = "Controlled re-entry")
+
+showTradeHealth = input.bool(true, "Show active-trade health warnings", group = "Active Trade Health")
+tp1ApproachPercent = input.float(0.75, "TP1 approach threshold", minval = 0.50, maxval = 0.95, step = 0.05, group = "Active Trade Health")
+tp1GivebackPercent = input.float(0.35, "TP1 failure giveback level", minval = 0.10, maxval = 0.60, step = 0.05, group = "Active Trade Health")
+halfStopPercent = input.float(0.50, "Half-to-SL warning level", minval = 0.25, maxval = 0.75, step = 0.05, group = "Active Trade Health")
 
 showBadEntryGuard = input.bool(true, "Show bad-entry warnings", group = "Bad Entry Guard")
 chaseDistanceATR = input.float(1.35, "No-chase distance from fast EMA in ATR", minval = 0.50, maxval = 5.00, step = 0.05, group = "Bad Entry Guard")
@@ -305,6 +311,16 @@ var float plannedTarget1 = na
 var float plannedTarget2 = na
 var float plannedTarget = na
 var int plannedUntilBar = na
+var label planEntryLabel = na
+var label planTarget1Label = na
+var label planTarget2Label = na
+var label planTarget3Label = na
+var label planStopLabel = na
+var bool tp1ApproachArmed = false
+var bool tp1Reached = false
+var bool tp1FailureWarned = false
+var bool halfStopWarned = false
+var int trackedOpenTrades = 0
 var bool reentryArmed = false
 var int reentryDirection = 0
 var int reentrySLBar = na
@@ -314,6 +330,21 @@ var float reentryEntry = na
 var float reentryStop = na
 var float reentryTarget = na
 var int reentryPendingBar = na
+
+// Label handles make each projected plan self-cleaning. The old Entry / TP / SL
+// map is deleted before a replacement plan and immediately after a full exit.
+deletePlanLabels(entryLabel, target1Label, target2Label, target3Label, stopLabel) =>
+    if not na(entryLabel)
+        label.delete(entryLabel)
+    if not na(target1Label)
+        label.delete(target1Label)
+    if not na(target2Label)
+        label.delete(target2Label)
+    if not na(target3Label)
+        label.delete(target3Label)
+    if not na(stopLabel)
+        label.delete(stopLabel)
+    true
 
 // A shock cancels unfilled entry ideas immediately. Existing positions keep their
 // protective TP/SL bracket; no new setup is allowed until the pause expires.
@@ -344,6 +375,12 @@ if volatilityShock
         plannedTarget2 := na
         plannedTarget := na
         plannedUntilBar := na
+        deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+        planEntryLabel := na
+        planTarget1Label := na
+        planTarget2Label := na
+        planTarget3Label := na
+        planStopLabel := na
 
 // A pending trigger is withdrawn if the matching Gold/Silver direction breaks
 // before entry. An existing position keeps its original protective bracket.
@@ -372,6 +409,12 @@ if metalSyncInvalidatesPending
     plannedTarget2 := na
     plannedTarget := na
     plannedUntilBar := na
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
 
 // Any fresh P1/P2 setup outranks and cancels a lower-priority re-entry idea.
 primarySetupStarted = trendLongSetup or trendShortSetup or longWatch or shortWatch
@@ -409,12 +452,18 @@ if trendLongSetup
     plannedTarget2 := close + trendLongRisk * 1.50
     plannedTarget := trendTargetPrice
     plannedUntilBar := bar_index + planBars
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
     if showTradePlan
-        label.new(bar_index, plannedEntry, "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedStop, "SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
+        planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
+        planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
+        planStopLabel := label.new(bar_index, plannedStop, "SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
     strategy.entry("TREND LONG", strategy.long)
     lastTrendBar := bar_index
 
@@ -438,12 +487,18 @@ if trendShortSetup
     plannedTarget2 := close - trendShortRisk * 1.50
     plannedTarget := trendTargetPrice
     plannedUntilBar := bar_index + planBars
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
     if showTradePlan
-        label.new(bar_index, plannedEntry, "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedStop, "SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
+        planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
+        planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
+        planStopLabel := label.new(bar_index, plannedStop, "SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
     strategy.entry("TREND SHORT", strategy.short)
     lastTrendBar := bar_index
 
@@ -472,12 +527,18 @@ if longWatch and strategy.position_size == 0
     plannedTarget2 := pendingLongEntry + pendingLongRisk * 1.50
     plannedTarget := pendingLongEntry + (pendingLongEntry - pendingLongStop) * rewardRisk
     plannedUntilBar := bar_index + planBars
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
     if showTradePlan
-        label.new(bar_index, plannedEntry, "REV LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedStop, "SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, "REV LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
+        planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
+        planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
+        planStopLabel := label.new(bar_index, plannedStop, "SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if shortWatch and strategy.position_size == 0
     strategy.cancel("REV LONG")
@@ -494,12 +555,18 @@ if shortWatch and strategy.position_size == 0
     plannedTarget2 := pendingShortEntry - pendingShortRisk * 1.50
     plannedTarget := pendingShortEntry - (pendingShortStop - pendingShortEntry) * rewardRisk
     plannedUntilBar := bar_index + planBars
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
     if showTradePlan
-        label.new(bar_index, plannedEntry, "REV SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedStop, "SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, "REV SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
+        planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
+        planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
+        planStopLabel := label.new(bar_index, plannedStop, "SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if not na(pendingLongBar) and strategy.position_size == 0
     if bar_index - pendingLongBar <= expiryBars
@@ -509,6 +576,18 @@ if not na(pendingLongBar) and strategy.position_size == 0
         pendingLongEntry := na
         pendingLongStop := na
         pendingLongBar := na
+        plannedEntry := na
+        plannedStop := na
+        plannedTarget1 := na
+        plannedTarget2 := na
+        plannedTarget := na
+        plannedUntilBar := na
+        deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+        planEntryLabel := na
+        planTarget1Label := na
+        planTarget2Label := na
+        planTarget3Label := na
+        planStopLabel := na
 
 if not na(pendingShortBar) and strategy.position_size == 0
     if bar_index - pendingShortBar <= expiryBars
@@ -518,6 +597,18 @@ if not na(pendingShortBar) and strategy.position_size == 0
         pendingShortEntry := na
         pendingShortStop := na
         pendingShortBar := na
+        plannedEntry := na
+        plannedStop := na
+        plannedTarget1 := na
+        plannedTarget2 := na
+        plannedTarget := na
+        plannedUntilBar := na
+        deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+        planEntryLabel := na
+        planTarget1Label := na
+        planTarget2Label := na
+        planTarget3Label := na
+        planStopLabel := na
 
 // A reversal becomes confirmed only after price actually crosses its yellow trigger.
 reversalLongConfirmed = strategy.position_size > 0 and strategy.position_size[1] <= 0 and not na(pendingLongStop)
@@ -597,6 +688,56 @@ if strategy.position_size < 0 and not na(trendStopPrice)
         strategy.exit("TREND SHORT TP2", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendShortTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
         strategy.exit("TREND SHORT TP3", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendTargetPrice, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
 
+// Active Trade Health does not predict the next candle. It reacts only after a
+// completed candle proves that price approached TP1, gave back momentum, or
+// consumed half of the original Entry-to-SL distance.
+newTradeForHealth = strategy.opentrades > trackedOpenTrades
+if newTradeForHealth
+    tp1ApproachArmed := false
+    tp1Reached := false
+    tp1FailureWarned := false
+    halfStopWarned := false
+trackedOpenTrades := strategy.opentrades
+
+validActivePlan = showTradeHealth and strategy.position_size != 0 and not na(plannedEntry) and not na(plannedStop) and not na(plannedTarget1)
+activePlanRisk = validActivePlan ? math.abs(plannedEntry - plannedStop) : na
+longTP1Hit = validActivePlan and strategy.position_size > 0 and high >= plannedTarget1
+shortTP1Hit = validActivePlan and strategy.position_size < 0 and low <= plannedTarget1
+
+if longTP1Hit or shortTP1Hit
+    tp1ApproachArmed := false
+    tp1Reached := true
+    tp1FailureWarned := false
+    halfStopWarned := false
+
+longTP1Approached = validActivePlan and decisionBarReady and strategy.position_size > 0 and not tp1Reached and not longTP1Hit and high >= plannedEntry + activePlanRisk * tp1ApproachPercent
+shortTP1Approached = validActivePlan and decisionBarReady and strategy.position_size < 0 and not tp1Reached and not shortTP1Hit and low <= plannedEntry - activePlanRisk * tp1ApproachPercent
+if longTP1Approached or shortTP1Approached
+    tp1ApproachArmed := true
+
+longTP1FailureWarning = validActivePlan and decisionBarReady and strategy.position_size > 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not longTP1Hit and close <= plannedEntry + activePlanRisk * tp1GivebackPercent and close < open and close < close[1] and (close < fastEMA or rsiValue < 50)
+shortTP1FailureWarning = validActivePlan and decisionBarReady and strategy.position_size < 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not shortTP1Hit and close >= plannedEntry - activePlanRisk * tp1GivebackPercent and close > open and close > close[1] and (close > fastEMA or rsiValue > 50)
+tp1FailureWarning = longTP1FailureWarning or shortTP1FailureWarning
+
+if tp1FailureWarning
+    tp1FailureWarned := true
+    tp1ApproachArmed := false
+    label.new(bar_index, longTP1FailureWarning ? high : low, "TP1 FAILED · POSSIBLE REVERSE\nMOMENTUM BACK TOWARD SL", style = longTP1FailureWarning ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 4), textcolor = color.black, size = size.small)
+
+longHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size > 0 and not halfStopWarned and low <= plannedEntry - activePlanRisk * halfStopPercent and low > plannedStop
+shortHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size < 0 and not halfStopWarned and high >= plannedEntry + activePlanRisk * halfStopPercent and high < plannedStop
+halfToSLWarning = longHalfToSLWarning or shortHalfToSLWarning
+
+if halfToSLWarning
+    halfStopWarned := true
+    label.new(bar_index, longHalfToSLWarning ? low : high, "½ TO SL\nRISK DISTANCE CONSUMED", style = longHalfToSLWarning ? label.style_label_up : label.style_label_down, color = color.new(color.red, 4), textcolor = color.white, size = size.small)
+
+if not showTradeHealth
+    tp1ApproachArmed := false
+    tp1Reached := false
+    tp1FailureWarned := false
+    halfStopWarned := false
+
 positionJustClosed = strategy.position_size == 0 and strategy.position_size[1] != 0
 if positionJustClosed
     trendStopPrice := na
@@ -613,6 +754,16 @@ if positionJustClosed
     plannedTarget2 := na
     plannedTarget := na
     plannedUntilBar := na
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
+    tp1ApproachArmed := false
+    tp1Reached := false
+    tp1FailureWarned := false
+    halfStopWarned := false
 
 // Detect whether the broker emulator closed the latest trade at TP or SL.
 // A non-re-entry SL starts one direction-neutral reset scan. The script does
@@ -644,6 +795,16 @@ if closedTradeThisBar
         plannedTarget2 := na
         plannedTarget := na
         plannedUntilBar := na
+        deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+        planEntryLabel := na
+        planTarget1Label := na
+        planTarget2Label := na
+        planTarget3Label := na
+        planStopLabel := na
+        tp1ApproachArmed := false
+        tp1Reached := false
+        tp1FailureWarned := false
+        halfStopWarned := false
     if enableReentry and stopHitThisBar and strategy.position_size == 0 and not closedWasReentry and not shockPauseActive
         strategy.cancel("REENTRY LONG")
         strategy.cancel("REENTRY SHORT")
@@ -657,7 +818,7 @@ if closedTradeThisBar
         reentryTarget := na
         reentryPendingBar := na
         if showPriorityMarks
-            label.new(bar_index, lastExitPrice, "SL HIT\nP3 RESET SCAN", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.purple, 18), textcolor = color.white, size = size.tiny)
+            label.new(bar_index, lastExitPrice, "SL HIT · PLAN CLEARED\nWAIT NEXT CLOSE · P3 SCAN", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.purple, 18), textcolor = color.white, size = size.tiny)
     else
         reentryArmed := false
         reentryDirection := 0
@@ -702,12 +863,18 @@ if reentryLongCandidate
     plannedTarget2 := reentryEntry + reentryRisk * 1.50
     plannedTarget := reentryTarget
     plannedUntilBar := bar_index + planBars
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
     if showTradePlan
-        label.new(bar_index, reentryEntry, "P3 RESET BUY\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
-        label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, reentryEntry, "P3 RESET BUY\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
+        planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
+        planTarget3Label := label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
+        planStopLabel := label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if reentryShortCandidate
     reentryArmed := false
@@ -723,12 +890,18 @@ if reentryShortCandidate
     plannedTarget2 := reentryEntry - reentryRisk * 1.50
     plannedTarget := reentryTarget
     plannedUntilBar := bar_index + planBars
+    deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+    planEntryLabel := na
+    planTarget1Label := na
+    planTarget2Label := na
+    planTarget3Label := na
+    planStopLabel := na
     if showTradePlan
-        label.new(bar_index, reentryEntry, "P3 RESET SELL\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_down, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
-        label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, reentryEntry, "P3 RESET SELL\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_down, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
+        planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
+        planTarget3Label := label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
+        planStopLabel := label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if not na(reentryPendingBar) and strategy.position_size == 0
     if bar_index - reentryPendingBar <= reentryExpiryBars and reentryQty > 0
@@ -752,6 +925,12 @@ if not na(reentryPendingBar) and strategy.position_size == 0
         plannedTarget2 := na
         plannedTarget := na
         plannedUntilBar := na
+        deletePlanLabels(planEntryLabel, planTarget1Label, planTarget2Label, planTarget3Label, planStopLabel)
+        planEntryLabel := na
+        planTarget1Label := na
+        planTarget2Label := na
+        planTarget3Label := na
+        planStopLabel := na
         if showPriorityMarks and resumeResetScan
             label.new(bar_index, close, "P3 TRIGGER EXPIRED\nRESCAN NEXT CLOSE", style = label.style_label_left, color = color.new(color.purple, 32), textcolor = color.white, size = size.tiny)
 
@@ -828,7 +1007,7 @@ bgcolor(shockPauseActive ? color.new(color.fuchsia, 92) : na, title = "Volatilit
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
 // setups remain locked until the current chart candle is confirmed.
-var table syncPanel = table.new(position.top_right, 2, 7, border_width = 1)
+var table syncPanel = table.new(position.top_right, 2, 8, border_width = 1)
 secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
 minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
@@ -844,6 +1023,9 @@ shockStatusColor = shockPauseActive ? color.new(color.fuchsia, 58) : shockReset 
 metalSyncText = metalsBullishSync ? "GOOD · BULLISH" : metalsBearishSync ? "GOOD · BEARISH" : "NOT SYNCED · WAIT"
 metalSyncColor = metalsBullishSync ? color.new(color.lime, 64) : metalsBearishSync ? color.new(color.red, 58) : color.new(color.orange, 62)
 metalSyncTextColor = metalsBullishSync ? color.black : color.white
+tradeHealthText = strategy.position_size == 0 ? "NO ACTIVE TRADE" : tp1FailureWarned ? "TP1 FAILED · REVERSE RISK" : halfStopWarned ? "HALF TO SL" : tp1Reached ? "TP1 REACHED" : tp1ApproachArmed ? "TP1 APPROACHED" : "NORMAL"
+tradeHealthColor = strategy.position_size == 0 ? color.new(color.gray, 82) : tp1FailureWarned ? color.new(color.orange, 52) : halfStopWarned ? color.new(color.red, 54) : tp1Reached ? color.new(color.lime, 62) : tp1ApproachArmed ? color.new(color.yellow, 60) : color.new(color.aqua, 82)
+tradeHealthTextColor = tp1ApproachArmed and not tp1FailureWarned and not halfStopWarned ? color.black : color.white
 
 if barstate.islast
     if showTimeframeSync
@@ -861,8 +1043,10 @@ if barstate.islast
         table.cell(syncPanel, 1, 5, shockStatusText, bgcolor = shockStatusColor, text_color = color.white, text_size = size.tiny)
         table.cell(syncPanel, 0, 6, "GOLD + SILVER", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
         table.cell(syncPanel, 1, 6, metalSyncText, bgcolor = metalSyncColor, text_color = metalSyncTextColor, text_size = size.tiny)
+        table.cell(syncPanel, 0, 7, "TRADE HEALTH", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 7, tradeHealthText, bgcolor = tradeHealthColor, text_color = tradeHealthTextColor, text_size = size.tiny)
     else
-        table.clear(syncPanel, 0, 0, 1, 6)
+        table.clear(syncPanel, 0, 0, 1, 7)
 
 // Strategies cannot create alert triggers with alertcondition(). In TradingView,
 // select "Order fills and alert() function calls" to receive signals and fills.
@@ -881,6 +1065,8 @@ sendAurumAlert(reentryShortCandidate, "P3 RESET WATCH: fresh SELL direction qual
 sendAurumAlert(reentryLongConfirmed, "P3 RESET CONFIRMED: BUY trigger filled")
 sendAurumAlert(reentryShortConfirmed, "P3 RESET CONFIRMED: SELL trigger filled")
 sendAurumAlert(reentryScanExpired, "P3 RESET EXPIRED: no qualified post-SL entry")
+sendAurumAlert(tp1FailureWarning, "TRADE HEALTH: TP1 approached but failed; possible reversal and increased SL risk")
+sendAurumAlert(halfToSLWarning, "TRADE HEALTH: price consumed half of the Entry-to-SL risk distance")
 sendAurumAlert(avoidShort, "BAD ENTRY GUARD: avoid short into bullish pullback or sell-side sweep")
 sendAurumAlert(avoidLong, "BAD ENTRY GUARD: avoid long into bearish rally or buy-side sweep")
 sendAurumAlert(noChaseLong, "BAD ENTRY GUARD: no-chase long; wait for pullback")
@@ -1008,9 +1194,10 @@ export default function Home() {
                   <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
                   <Badge variant="outline" className="border-lime-300/25 text-lime-200">GOLD + SILVER SYNC</Badge>
+                  <Badge variant="outline" className="border-red-300/25 text-red-200">SMART TRADE HEALTH</Badge>
                 </div>
                 <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and checks both metals</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while the bad-entry and Shock Guards block weaker or unusually volatile conditions.</p>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while the entry, shock and active-trade guards monitor risk before and after entry.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -1093,6 +1280,27 @@ export default function Home() {
                   <p className="mt-2 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-emerald-200">ENTRY GUARD · CLEAR</span> means no guard condition is active. It is not permission to enter; a P1, P2 or P3 confirmation is still required.</p>
                 </div>
 
+                <div className="rounded-xl border border-orange-300/20 bg-orange-300/[.04] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-orange-100">Active Trade Health</p>
+                    <Badge className="border border-orange-300/20 bg-orange-300/10 text-orange-200">CANDLE-CLOSE CHECK</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {[
+                      ['TP1 APPROACHED', 'Price reached 75% of the Entry-to-TP1 distance but has not touched TP1 yet.', 'border-yellow-300/20 text-yellow-200'],
+                      ['TP1 FAILED · POSSIBLE REVERSE', 'After that approach, price gave back most of the move and adverse momentum confirmed at candle close.', 'border-orange-300/20 text-orange-200'],
+                      ['½ TO SL', 'The candle wick crossed halfway from Entry toward SL without actually touching the stop.', 'border-red-300/20 text-red-200'],
+                      ['SL HIT · PLAN CLEARED', 'The old yellow Entry, green TPs and red SL are deleted; P3 waits for the next completed candle.', 'border-purple-300/20 text-purple-200'],
+                    ].map(([label, description, color]) => (
+                      <div key={label} className={`rounded-lg border bg-black/15 p-3 ${color}`}>
+                        <p className="text-[10px] font-bold tracking-[.04em]">{label}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-orange-200">These are risk warnings, not reverse entries.</span> TP1 failure cannot know that SL will be hit; it only reports a confirmed loss of momentum. Wait for a new P1, P2 or P3 CONFIRMED before taking another direction.</p>
+                </div>
+
                 <div className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[.045] p-4">
                   <p className="text-xs font-semibold text-fuchsia-100">Volatility Shock Guard</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
@@ -1149,12 +1357,13 @@ export default function Home() {
                 </div>
 
                 <div className="rounded-xl border border-primary/15 bg-primary/[.035] p-4">
-                  <p className="text-xs font-semibold">Read every setup in four checks</p>
+                  <p className="text-xs font-semibold">Read every setup in five checks</p>
                   <ol className="mt-2 space-y-2 text-[11px] leading-5 text-muted-foreground">
                     <li><span className="mr-2 text-primary">1.</span>Check GOLD + SILVER: GOOD · BULLISH permits only long ideas; GOOD · BEARISH permits only short ideas; NOT SYNCED means wait.</li>
                     <li><span className="mr-2 text-primary">2.</span>Cyan above orange and both rising favors longs; cyan below orange and both falling favors shorts.</li>
                     <li><span className="mr-2 text-primary">3.</span>Confirm the structure sequence and note which liquidity line price is approaching or sweeping.</li>
                     <li><span className="mr-2 text-primary">4.</span>Act only on P1, P2 or P3 CONFIRMED with yellow Entry, green TP1–TP3 and red SL. WATCH ONLY and P3 RESET SCANNING are not entries.</li>
+                    <li><span className="mr-2 text-primary">5.</span>After entry, read TRADE HEALTH: TP1 failure and ½ TO SL mean risk increased, not that an opposite entry is confirmed.</li>
                   </ol>
                 </div>
 
@@ -1330,7 +1539,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
                     <p className="text-xs font-semibold text-purple-100">P3 post-SL direction reset</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">After an SL, the script waits one completed chart candle and rescans every candle close for up to 12 bars. It no longer assumes the old direction: a stopped SELL can become a fresh RESET BUY when price rises through the stopped level and trend, RSI, entry guard, higher timeframe, and Gold/Silver sync all agree. The first qualified side gets one smaller 0.50×-stopped-quantity trigger.</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">After an SL, the old Entry / TP / SL plan is removed immediately. The script then waits one completed chart candle and rescans every candle close for up to 12 bars. It no longer assumes the old direction: a stopped SELL can become a fresh RESET BUY when price rises through the stopped level and trend, RSI, entry guard, higher timeframe, and Gold/Silver sync all agree. The first qualified side gets one smaller 0.50×-stopped-quantity trigger.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
                     {['SL hit', 'Wait 1 close', 'Scan each close', 'Direction resets', 'P3 trigger', 'TP1 / TP2 / TP3 + SL'].map((step, index) => (
@@ -1365,6 +1574,21 @@ export default function Home() {
                 <p className="mt-3 border-t border-fuchsia-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The guard reacts after unusual movement starts—it cannot predict the first spike. The daily lock governs TradingView’s simulated strategy and does not automatically control a separate broker account unless your execution connection enforces the strategy’s orders.</p>
               </div>
 
+              <div className="mb-4 rounded-xl border border-orange-300/20 bg-orange-300/[.04] p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-semibold text-orange-100">Smart TP1 failure + halfway-to-stop warnings</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The strategy arms a TP1-failure check only after price travels 75% of the way to TP1 without touching it. A warning appears only if a completed candle gives the move back to 35% or less and confirms adverse price, EMA or RSI momentum. A separate ½ TO SL mark appears when the wick consumes 50% of the Entry-to-SL risk distance.</p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                    <span className="rounded-md border border-yellow-300/20 bg-black/15 px-2 py-1.5 text-yellow-200">TP1 approached</span>
+                    <span className="rounded-md border border-orange-300/20 bg-black/15 px-2 py-1.5 text-orange-200">Giveback confirmed</span>
+                    <span className="rounded-md border border-red-300/20 bg-black/15 px-2 py-1.5 text-red-200">Watch SL risk</span>
+                  </div>
+                </div>
+                <p className="mt-3 border-t border-orange-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">Both thresholds are adjustable under Settings → Active Trade Health. They react after a candle closes and do not move the protective order, guarantee a reversal, or predict a stop-out.</p>
+              </div>
+
               <div className="mb-4 rounded-xl border border-lime-300/20 bg-lime-300/[.04] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
@@ -1389,6 +1613,7 @@ export default function Home() {
                   ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
                   ['Shock circuit breaker', 'Cancels pending ideas, pauses new setups and enforces a configurable strategy daily-loss lock.'],
                   ['Gold / Silver Sync', 'Requires both metals to agree on bullish or bearish direction before that side can enter.'],
+                  ['Self-cleaning trade health', 'Removes a stopped plan, flags a failed TP1 approach and marks when half the SL distance is consumed.'],
                   ['Working strategy alerts', 'Uses alert() events supported by TradingView strategies instead of indicator-only alertcondition() calls.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
