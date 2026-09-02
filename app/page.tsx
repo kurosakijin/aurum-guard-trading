@@ -347,11 +347,21 @@ export default function Home() {
             <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-400" /> Engine online</span>
             <span className="flex items-center gap-2"><Clock3 className="size-3.5" /> Live charts · paper signals</span>
           </div>
-          <Button variant="outline" className="border-white/10 bg-white/[.03] text-xs" onClick={runScan} disabled={scanning}>
-            <RefreshCw className={scanning ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">{scanning ? 'Refreshing' : 'Refresh live data'}</span>
-            <span className="sm:hidden">{scanning ? 'Wait' : 'Refresh'}</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <a
+              href="#pine-script"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-medium text-primary transition hover:bg-primary/15"
+            >
+              <Code2 className="size-4" />
+              <span className="hidden sm:inline">One Pine Script</span>
+              <span className="sm:hidden">Script</span>
+            </a>
+            <Button variant="outline" className="border-white/10 bg-white/[.03] text-xs" onClick={runScan} disabled={scanning}>
+              <RefreshCw className={scanning ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">{scanning ? 'Refreshing' : 'Refresh live data'}</span>
+              <span className="sm:hidden">{scanning ? 'Wait' : 'Refresh'}</span>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -364,6 +374,30 @@ export default function Home() {
             <h1 className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Protect capital. Trade only the clearest setup.</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Live TradingView market context, a transparent rules-based strategy and strict manual risk sizing in one workspace.</p>
           </div>
+        </section>
+
+        <section className="mb-4" aria-labelledby="combined-script-heading">
+          <Card className="overflow-hidden border-fuchsia-300/25 bg-[linear-gradient(110deg,rgba(192,132,252,.12),rgba(225,177,78,.08)_52%,rgba(18,22,27,.96))] shadow-[0_20px_70px_rgba(0,0,0,.22)]">
+            <CardContent className="flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-4xl">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border border-fuchsia-300/25 bg-fuchsia-300/10 text-fuchsia-200">FREE PLAN READY</Badge>
+                  <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
+                </div>
+                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">Trend setups + Gold Reversal Scout are now one Pine v6 strategy</h2>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Copy one script into TradingView. Both engines run together, while the settings let you disable Trend or Reversal independently.</p>
+              </div>
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
+                  {scriptCopied ? <Check /> : <Clipboard />}
+                  {scriptCopied ? 'Combined script copied' : 'Copy combined script'}
+                </Button>
+                <a href="#pine-script" className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[.035] px-4 text-xs font-medium text-foreground transition hover:bg-white/[.07]">
+                  View full script <ArrowUpRight className="size-3.5" />
+                </a>
+              </div>
+            </CardContent>
+          </Card>
         </section>
 
         <section id="live-chart" className="mb-4">
