@@ -750,25 +750,31 @@ if barstate.islast
     else
         table.clear(syncPanel, 0, 0, 1, 6)
 
-alertcondition(trendLongSetup, title = "Aurum Guard trend long", message = "Confirmed Aurum Guard trend long setup")
-alertcondition(trendShortSetup, title = "Aurum Guard trend short", message = "Confirmed Aurum Guard trend short setup")
-alertcondition(longWatch, title = "Possible long reversal", message = "Aurum Guard possible long reversal; wait for trigger")
-alertcondition(shortWatch, title = "Possible short reversal", message = "Aurum Guard possible short reversal; wait for trigger")
-alertcondition(reversalLongConfirmed, title = "Aurum Guard confirmed reversal long", message = "P2 confirmed reversal long trigger filled")
-alertcondition(reversalShortConfirmed, title = "Aurum Guard confirmed reversal short", message = "P2 confirmed reversal short trigger filled")
-alertcondition(reentryLongCandidate, title = "Aurum Guard re-entry long watch", message = "P3 long re-entry candidate; wait for trigger")
-alertcondition(reentryShortCandidate, title = "Aurum Guard re-entry short watch", message = "P3 short re-entry candidate; wait for trigger")
-alertcondition(reentryLongConfirmed, title = "Aurum Guard confirmed re-entry long", message = "P3 confirmed re-entry long trigger filled")
-alertcondition(reentryShortConfirmed, title = "Aurum Guard confirmed re-entry short", message = "P3 confirmed re-entry short trigger filled")
-alertcondition(avoidShort, title = "Aurum Guard avoid short", message = "Bad Entry Guard: avoid short into a bullish pullback or sell-side liquidity sweep")
-alertcondition(avoidLong, title = "Aurum Guard avoid long", message = "Bad Entry Guard: avoid long into a bearish rally or buy-side liquidity sweep")
-alertcondition(noChaseLong, title = "Aurum Guard no-chase long", message = "Bad Entry Guard: long is ATR-extended; wait for a pullback")
-alertcondition(noChaseShort, title = "Aurum Guard no-chase short", message = "Bad Entry Guard: short is ATR-extended; wait for a rally")
-alertcondition(volatilityShock, title = "Aurum Guard volatility shock", message = "Volatility Shock Guard: abnormal candle or gap; no new trades")
-alertcondition(shockReset, title = "Aurum Guard shock pause reset", message = "Volatility Shock Guard reset; wait for a fresh P1, P2 or P3 confirmation")
-alertcondition(metalSyncBullishChanged, title = "Gold and Silver bullish sync", message = "Gold / Silver Sync Gate: GOOD and BULLISH; long setups may pass if all other rules confirm")
-alertcondition(metalSyncBearishChanged, title = "Gold and Silver bearish sync", message = "Gold / Silver Sync Gate: GOOD and BEARISH; short setups may pass if all other rules confirm")
-alertcondition(metalSyncLost, title = "Gold and Silver sync lost", message = "Gold / Silver Sync Gate: NOT SYNCED; wait and cancel unfilled entries")`;
+// Strategies cannot create alert triggers with alertcondition(). A single
+// TradingView alert using "Any alert() function call" receives these events.
+sendAurumAlert(condition, eventMessage) =>
+    if condition
+        alert(eventMessage + " | " + syminfo.tickerid + " | TF " + timeframe.period, alert.freq_once_per_bar)
+
+sendAurumAlert(trendLongSetup, "P1 CONFIRMED: trend long setup")
+sendAurumAlert(trendShortSetup, "P1 CONFIRMED: trend short setup")
+sendAurumAlert(longWatch, "WATCH ONLY: possible long reversal; wait for trigger")
+sendAurumAlert(shortWatch, "WATCH ONLY: possible short reversal; wait for trigger")
+sendAurumAlert(reversalLongConfirmed, "P2 CONFIRMED: reversal long trigger filled")
+sendAurumAlert(reversalShortConfirmed, "P2 CONFIRMED: reversal short trigger filled")
+sendAurumAlert(reentryLongCandidate, "P3 WATCH: long re-entry candidate; wait for trigger")
+sendAurumAlert(reentryShortCandidate, "P3 WATCH: short re-entry candidate; wait for trigger")
+sendAurumAlert(reentryLongConfirmed, "P3 CONFIRMED: long re-entry trigger filled")
+sendAurumAlert(reentryShortConfirmed, "P3 CONFIRMED: short re-entry trigger filled")
+sendAurumAlert(avoidShort, "BAD ENTRY GUARD: avoid short into bullish pullback or sell-side sweep")
+sendAurumAlert(avoidLong, "BAD ENTRY GUARD: avoid long into bearish rally or buy-side sweep")
+sendAurumAlert(noChaseLong, "BAD ENTRY GUARD: no-chase long; wait for pullback")
+sendAurumAlert(noChaseShort, "BAD ENTRY GUARD: no-chase short; wait for rally")
+sendAurumAlert(volatilityShock, "VOLATILITY SHOCK: abnormal candle or gap; no new trades")
+sendAurumAlert(shockReset, "SHOCK RESET: resume scanning and wait for fresh confirmation")
+sendAurumAlert(metalSyncBullishChanged, "GOLD + SILVER SYNC: GOOD and BULLISH; long setups may pass")
+sendAurumAlert(metalSyncBearishChanged, "GOLD + SILVER SYNC: GOOD and BEARISH; short setups may pass")
+sendAurumAlert(metalSyncLost, "GOLD + SILVER SYNC: NOT SYNCED; wait and cancel unfilled entries")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -1179,7 +1185,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · Gold/Silver direction sync + timeframe-synced setups + bad-entry warnings + volatility circuit breaker + controlled post-SL re-entry</CardDescription>
+              <CardDescription>One free-plan script slot · Gold/Silver direction sync + timeframe-synced setups + strategy-compatible alerts + controlled post-SL re-entry</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -1268,9 +1274,10 @@ export default function Home() {
                   ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
                   ['Shock circuit breaker', 'Cancels pending ideas, pauses new setups and enforces a configurable strategy daily-loss lock.'],
                   ['Gold / Silver Sync', 'Requires both metals to agree on bullish or bearish direction before that side can enter.'],
+                  ['Working strategy alerts', 'Uses alert() events supported by TradingView strategies instead of indicator-only alertcondition() calls.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
-                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : index === 3 ? 'text-amber-200' : index === 4 ? 'text-orange-200' : index === 5 ? 'text-fuchsia-200' : 'text-lime-200'}`}>{title}</p>
+                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : index === 3 ? 'text-amber-200' : index === 4 ? 'text-orange-200' : index === 5 ? 'text-fuchsia-200' : index === 6 ? 'text-lime-200' : 'text-cyan-200'}`}>{title}</p>
                     <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
                   </div>
                 ))}
@@ -1299,7 +1306,7 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Settings → Gold / Silver Sync controls both symbols, lookback and correlation threshold. Shock Guard, bad-entry and re-entry settings remain separately adjustable.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor and select “Add to chart.” To receive its messages, choose Create Alert → Aurum Guard → “Any alert() function call.” Settings → Gold / Silver Sync controls both symbols, lookback and correlation threshold.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
