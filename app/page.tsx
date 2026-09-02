@@ -392,14 +392,24 @@ export default function Home() {
                           <p className="font-mono text-[10px] text-muted-foreground">{market.short} · {market.symbol}</p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        aria-pressed={liveMarket === market.key}
-                        onClick={() => selectMetal(market.key)}
-                        className={`rounded-lg border px-3 py-1.5 text-[10px] font-medium transition ${liveMarket === market.key ? 'border-primary/30 bg-primary/10 text-primary' : 'border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground'}`}
-                      >
-                        {liveMarket === market.key ? 'Analysis focused' : 'Focus analysis'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(market.symbol)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground transition hover:border-white/20 hover:text-foreground"
+                        >
+                          Open <ExternalLink className="size-3" />
+                        </a>
+                        <button
+                          type="button"
+                          aria-pressed={liveMarket === market.key}
+                          onClick={() => selectMetal(market.key)}
+                          className={`rounded-lg border px-3 py-1.5 text-[10px] font-medium transition ${liveMarket === market.key ? 'border-primary/30 bg-primary/10 text-primary' : 'border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground'}`}
+                        >
+                          {liveMarket === market.key ? 'Analysis focused' : 'Focus analysis'}
+                        </button>
+                      </div>
                     </div>
                     <TradingViewChart
                       key={`${market.symbol}-${timeframe}-${widgetRefresh}`}

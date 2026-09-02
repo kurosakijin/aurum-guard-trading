@@ -37,7 +37,14 @@ function TradingViewWidget({
     return () => element.replaceChildren();
   }, [scriptUrl, configJson]);
 
-  return <div ref={container} aria-label={label} className={className} />;
+  return (
+    <div aria-label={label} className={`relative ${className}`}>
+      <div className="absolute inset-0 grid place-items-center px-6 text-center text-xs text-muted-foreground">
+        Loading live TradingView data…
+      </div>
+      <div ref={container} className="tradingview-widget-container relative h-full w-full" />
+    </div>
+  );
 }
 
 export function TradingViewSymbolInfo({ symbol }: { symbol: string }) {
@@ -52,7 +59,7 @@ export function TradingViewSymbolInfo({ symbol }: { symbol: string }) {
         isTransparent: true,
       }}
       label="Live TradingView quote"
-      className="tradingview-widget-container h-[180px] w-full"
+      className="h-[220px] w-full"
     />
   );
 }
@@ -91,7 +98,7 @@ export function TradingViewTechnicalAnalysis({
         colorTheme: 'dark',
       }}
       label="Live TradingView technical rating"
-      className="tradingview-widget-container h-[680px] w-full sm:h-[760px]"
+      className="h-[680px] w-full sm:h-[760px]"
     />
   );
 }

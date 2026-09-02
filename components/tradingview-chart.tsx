@@ -107,9 +107,16 @@ export function TradingViewChart({
 
   return (
     <div
-      ref={container}
       aria-label={`Interactive ${label} TradingView chart`}
-      className="tradingview-widget-container h-[620px] w-full sm:h-[950px] lg:h-[1200px] xl:h-[1600px]"
-    />
+      className="relative h-[620px] w-full sm:h-[950px] lg:h-[1200px] xl:h-[1600px]"
+    >
+      <div className="absolute inset-0 grid place-items-center px-6 text-center text-xs text-muted-foreground">
+        Loading the live {label.toLowerCase()} chart…
+      </div>
+      <div
+        ref={container}
+        className="tradingview-widget-container relative h-full w-full"
+      />
+    </div>
   );
 }
