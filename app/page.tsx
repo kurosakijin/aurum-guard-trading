@@ -64,7 +64,8 @@ strategy("Aurum Guard Combined: Trend + Reversal", overlay = true, pyramiding = 
      default_qty_value = 0.5,
      commission_type = strategy.commission.percent,
      commission_value = 0.05,
-     process_orders_on_close = true)
+     process_orders_on_close = true,
+     max_labels_count = 300)
 
 // One strategy slot, two independently switchable engines.
 enableTrend = input.bool(true, "Enable confirmed trend setups", group = "Engines")
@@ -72,7 +73,7 @@ enableReversal = input.bool(true, "Enable reversal scout", group = "Engines")
 confirmationTimeframe = input.timeframe("15", "Confirmed trend timeframe", group = "Shared filters")
 rsiLength = input.int(14, "RSI length", minval = 2, group = "Shared filters")
 atrLength = input.int(14, "ATR length", minval = 2, group = "Shared filters")
-rewardRisk = input.float(2.0, "Reward / risk", minval = 1.0, step = 0.25, group = "Shared filters")
+rewardRisk = input.float(2.14, "Reward / risk", minval = 1.0, maxval = 10.0, step = 0.01, group = "Shared filters")
 
 fastLength = input.int(20, "Fast EMA", minval = 2, group = "Confirmed trend engine")
 slowLength = input.int(50, "Slow EMA", minval = 3, group = "Confirmed trend engine")
@@ -80,10 +81,16 @@ trendAtrMultiple = input.float(1.5, "ATR stop multiple", minval = 0.5, step = 0.
 slopeBars = input.int(3, "EMA slope lookback", minval = 1, group = "Confirmed trend engine")
 cooldownBars = input.int(10, "Bars between trend setups", minval = 1, group = "Confirmed trend engine")
 
-pivotLength = input.int(5, "Prior swing length", minval = 2, group = "Reversal scout")
 minimumWickBody = input.float(1.5, "Minimum wick / body", minval = 0.5, step = 0.1, group = "Reversal scout")
 expiryBars = input.int(3, "Entry expiry bars", minval = 1, maxval = 10, group = "Reversal scout")
 tradeSession = input.session("0700-1700", "Active session in UTC", group = "Reversal scout")
+
+pivotLength = input.int(5, "Liquidity / structure swing length", minval = 2, maxval = 30, group = "Automatic chart map")
+showLiquidity = input.bool(true, "Show confirmed liquidity levels", group = "Automatic chart map")
+showStructure = input.bool(true, "Show HH / HL / LH / LL", group = "Automatic chart map")
+showTradePlan = input.bool(true, "Show Entry / TP / SL zones", group = "Automatic chart map")
+structureStopLookback = input.int(7, "Trend structural stop lookback", minval = 2, maxval = 50, group = "Automatic chart map")
+planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 200, group = "Automatic chart map")
 
 fastEMA = ta.ema(close, fastLength)
 slowEMA = ta.ema(close, slowLength)
@@ -122,6 +129,27 @@ pivotLow = ta.pivotlow(low, pivotLength, pivotLength)
 pivotHigh = ta.pivothigh(high, pivotLength, pivotLength)
 priorSwingLow = ta.valuewhen(not na(pivotLow), pivotLow, 0)
 priorSwingHigh = ta.valuewhen(not na(pivotHigh), pivotHigh, 0)
+recentStructureLow = ta.lowest(low, structureStopLookback)
+recentStructureHigh = ta.highest(high, structureStopLookback)
+
+// Confirmed market structure. Pivot labels appear only after pivotLength bars,
+// so they do not pretend the turning point was known in advance.
+var float previousPivotHigh = na
+var float previousPivotLow = na
+
+if not na(pivotHigh)
+    if showStructure and not na(previousPivotHigh)
+        highStructureText = pivotHigh > previousPivotHigh ? "HH" : "LH"
+        highStructureColor = pivotHigh > previousPivotHigh ? color.lime : color.orange
+        label.new(bar_index - pivotLength, pivotHigh, highStructureText, style = label.style_label_down, color = color.new(highStructureColor, 12), textcolor = color.black, size = size.tiny)
+    previousPivotHigh := pivotHigh
+
+if not na(pivotLow)
+    if showStructure and not na(previousPivotLow)
+        lowStructureText = pivotLow > previousPivotLow ? "HL" : "LL"
+        lowStructureColor = pivotLow > previousPivotLow ? color.aqua : color.red
+        label.new(bar_index - pivotLength, pivotLow, lowStructureText, style = label.style_label_up, color = color.new(lowStructureColor, 12), textcolor = color.black, size = size.tiny)
+    previousPivotLow := pivotLow
 
 rsiRecentLow = ta.lowest(rsiValue, 4)
 rsiRecentHigh = ta.highest(rsiValue, 4)
@@ -131,13 +159,18 @@ sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSw
 longWatch = enableReversal and reversalTimeframeOK and barstate.isconfirmed and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
 shortWatch = enableReversal and reversalTimeframeOK and barstate.isconfirmed and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
 
-var float trendSetupATR = na
+var float trendStopPrice = na
+var float trendTargetPrice = na
 var float pendingLongEntry = na
 var float pendingLongStop = na
 var int pendingLongBar = na
 var float pendingShortEntry = na
 var float pendingShortStop = na
 var int pendingShortBar = na
+var float plannedEntry = na
+var float plannedStop = na
+var float plannedTarget = na
+var int plannedUntilBar = na
 
 // Confirmed trend entries take priority and cancel any unfilled reversal trigger.
 if trendLongSetup
@@ -149,8 +182,20 @@ if trendLongSetup
     pendingShortEntry := na
     pendingShortStop := na
     pendingShortBar := na
+    trendLongStructureStop = recentStructureLow - syminfo.mintick * 2
+    trendLongAtrStop = close - atrValue * trendAtrMultiple
+    trendStopPrice := math.max(trendLongStructureStop, trendLongAtrStop)
+    trendLongRisk = close - trendStopPrice
+    trendTargetPrice := close + trendLongRisk * rewardRisk
+    plannedEntry := close
+    plannedStop := trendStopPrice
+    plannedTarget := trendTargetPrice
+    plannedUntilBar := bar_index + planBars
+    if showTradePlan
+        label.new(bar_index, plannedEntry, "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedTarget, "TP", style = label.style_label_down, color = color.new(color.lime, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedStop, "SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
     strategy.entry("TREND LONG", strategy.long)
-    trendSetupATR := atrValue
     lastTrendBar := bar_index
 
 if trendShortSetup
@@ -162,8 +207,20 @@ if trendShortSetup
     pendingShortEntry := na
     pendingShortStop := na
     pendingShortBar := na
+    trendShortStructureStop = recentStructureHigh + syminfo.mintick * 2
+    trendShortAtrStop = close + atrValue * trendAtrMultiple
+    trendStopPrice := math.min(trendShortStructureStop, trendShortAtrStop)
+    trendShortRisk = trendStopPrice - close
+    trendTargetPrice := close - trendShortRisk * rewardRisk
+    plannedEntry := close
+    plannedStop := trendStopPrice
+    plannedTarget := trendTargetPrice
+    plannedUntilBar := bar_index + planBars
+    if showTradePlan
+        label.new(bar_index, plannedEntry, "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedTarget, "TP", style = label.style_label_up, color = color.new(color.lime, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedStop, "SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
     strategy.entry("TREND SHORT", strategy.short)
-    trendSetupATR := atrValue
     lastTrendBar := bar_index
 
 if not enableReversal
@@ -184,6 +241,14 @@ if longWatch and strategy.position_size == 0
     pendingLongEntry := high + syminfo.mintick
     pendingLongStop := low - syminfo.mintick * 2
     pendingLongBar := bar_index
+    plannedEntry := pendingLongEntry
+    plannedStop := pendingLongStop
+    plannedTarget := pendingLongEntry + (pendingLongEntry - pendingLongStop) * rewardRisk
+    plannedUntilBar := bar_index + planBars
+    if showTradePlan
+        label.new(bar_index, plannedEntry, "REV LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedTarget, "TP", style = label.style_label_down, color = color.new(color.lime, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedStop, "SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if shortWatch and strategy.position_size == 0
     strategy.cancel("REV LONG")
@@ -193,6 +258,14 @@ if shortWatch and strategy.position_size == 0
     pendingShortEntry := low - syminfo.mintick
     pendingShortStop := high + syminfo.mintick * 2
     pendingShortBar := bar_index
+    plannedEntry := pendingShortEntry
+    plannedStop := pendingShortStop
+    plannedTarget := pendingShortEntry - (pendingShortStop - pendingShortEntry) * rewardRisk
+    plannedUntilBar := bar_index + planBars
+    if showTradePlan
+        label.new(bar_index, plannedEntry, "REV SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedTarget, "TP", style = label.style_label_up, color = color.new(color.lime, 5), textcolor = color.black, size = size.tiny)
+        label.new(bar_index, plannedStop, "SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if not na(pendingLongBar) and strategy.position_size == 0
     if bar_index - pendingLongBar <= expiryBars
@@ -215,7 +288,12 @@ if not na(pendingShortBar) and strategy.position_size == 0
 if strategy.position_size > 0 and not na(pendingLongStop)
     longRisk = strategy.position_avg_price - pendingLongStop
     if longRisk > syminfo.mintick
-        strategy.exit("REV LONG exit", from_entry = "REV LONG", stop = pendingLongStop, limit = strategy.position_avg_price + longRisk * rewardRisk)
+        revLongTarget = strategy.position_avg_price + longRisk * rewardRisk
+        plannedEntry := strategy.position_avg_price
+        plannedStop := pendingLongStop
+        plannedTarget := revLongTarget
+        plannedUntilBar := bar_index + planBars
+        strategy.exit("REV LONG exit", from_entry = "REV LONG", stop = pendingLongStop, limit = revLongTarget)
     pendingLongEntry := na
     pendingLongBar := na
     pendingShortEntry := na
@@ -225,26 +303,42 @@ if strategy.position_size > 0 and not na(pendingLongStop)
 if strategy.position_size < 0 and not na(pendingShortStop)
     shortRisk = pendingShortStop - strategy.position_avg_price
     if shortRisk > syminfo.mintick
-        strategy.exit("REV SHORT exit", from_entry = "REV SHORT", stop = pendingShortStop, limit = strategy.position_avg_price - shortRisk * rewardRisk)
+        revShortTarget = strategy.position_avg_price - shortRisk * rewardRisk
+        plannedEntry := strategy.position_avg_price
+        plannedStop := pendingShortStop
+        plannedTarget := revShortTarget
+        plannedUntilBar := bar_index + planBars
+        strategy.exit("REV SHORT exit", from_entry = "REV SHORT", stop = pendingShortStop, limit = revShortTarget)
     pendingShortEntry := na
     pendingShortBar := na
     pendingLongEntry := na
     pendingLongStop := na
     pendingLongBar := na
 
-if strategy.position_size > 0 and not na(trendSetupATR)
-    trendLongStop = strategy.position_avg_price - trendSetupATR * trendAtrMultiple
-    trendLongTarget = strategy.position_avg_price + trendSetupATR * trendAtrMultiple * rewardRisk
-    strategy.exit("TREND LONG exit", from_entry = "TREND LONG", stop = trendLongStop, limit = trendLongTarget)
+if strategy.position_size > 0 and not na(trendStopPrice)
+    activeTrendLongRisk = strategy.position_avg_price - trendStopPrice
+    if activeTrendLongRisk > syminfo.mintick
+        trendTargetPrice := strategy.position_avg_price + activeTrendLongRisk * rewardRisk
+        plannedEntry := strategy.position_avg_price
+        plannedStop := trendStopPrice
+        plannedTarget := trendTargetPrice
+        plannedUntilBar := bar_index + planBars
+        strategy.exit("TREND LONG exit", from_entry = "TREND LONG", stop = trendStopPrice, limit = trendTargetPrice)
 
-if strategy.position_size < 0 and not na(trendSetupATR)
-    trendShortStop = strategy.position_avg_price + trendSetupATR * trendAtrMultiple
-    trendShortTarget = strategy.position_avg_price - trendSetupATR * trendAtrMultiple * rewardRisk
-    strategy.exit("TREND SHORT exit", from_entry = "TREND SHORT", stop = trendShortStop, limit = trendShortTarget)
+if strategy.position_size < 0 and not na(trendStopPrice)
+    activeTrendShortRisk = trendStopPrice - strategy.position_avg_price
+    if activeTrendShortRisk > syminfo.mintick
+        trendTargetPrice := strategy.position_avg_price - activeTrendShortRisk * rewardRisk
+        plannedEntry := strategy.position_avg_price
+        plannedStop := trendStopPrice
+        plannedTarget := trendTargetPrice
+        plannedUntilBar := bar_index + planBars
+        strategy.exit("TREND SHORT exit", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendTargetPrice)
 
 positionJustClosed = strategy.position_size == 0 and strategy.position_size[1] != 0
 if positionJustClosed
-    trendSetupATR := na
+    trendStopPrice := na
+    trendTargetPrice := na
     pendingLongEntry := na
     pendingLongStop := na
     pendingLongBar := na
@@ -255,10 +349,17 @@ if positionJustClosed
 plot(enableTrend ? fastEMA : na, "Fast EMA", color = color.aqua, linewidth = 2)
 plot(enableTrend ? slowEMA : na, "Slow EMA", color = color.orange, linewidth = 2)
 plot(confirmedHTFEMA, "Confirmed HTF EMA", color = color.new(color.purple, 35), linewidth = 2, style = plot.style_stepline)
-plot(enableReversal ? priorSwingLow : na, "Prior swing low", color = color.new(color.lime, 72), style = plot.style_linebr)
-plot(enableReversal ? priorSwingHigh : na, "Prior swing high", color = color.new(color.red, 72), style = plot.style_linebr)
-plot(strategy.position_size == 0 ? pendingLongEntry : na, "Long trigger", color = color.lime, linewidth = 2, style = plot.style_linebr)
-plot(strategy.position_size == 0 ? pendingShortEntry : na, "Short trigger", color = color.red, linewidth = 2, style = plot.style_linebr)
+plot(showLiquidity ? priorSwingHigh : na, "Buy-side liquidity", color = color.new(color.fuchsia, 28), linewidth = 2, style = plot.style_linebr)
+plot(showLiquidity ? priorSwingLow : na, "Sell-side liquidity", color = color.new(color.aqua, 28), linewidth = 2, style = plot.style_linebr)
+plot(strategy.position_size == 0 ? pendingLongEntry : na, "Reversal long trigger", color = color.yellow, linewidth = 2, style = plot.style_linebr)
+plot(strategy.position_size == 0 ? pendingShortEntry : na, "Reversal short trigger", color = color.yellow, linewidth = 2, style = plot.style_linebr)
+
+planVisible = showTradePlan and not na(plannedUntilBar) and (bar_index <= plannedUntilBar or strategy.position_size != 0)
+planEntryPlot = plot(planVisible ? plannedEntry : na, "Candidate entry", color = color.yellow, linewidth = 2, style = plot.style_linebr)
+planTargetPlot = plot(planVisible ? plannedTarget : na, "Possible TP", color = color.lime, linewidth = 3, style = plot.style_linebr)
+planStopPlot = plot(planVisible ? plannedStop : na, "Possible SL", color = color.red, linewidth = 3, style = plot.style_linebr)
+fill(planEntryPlot, planTargetPlot, color = color.new(color.lime, 88), title = "Reward zone")
+fill(planEntryPlot, planStopPlot, color = color.new(color.red, 88), title = "Risk zone")
 plotshape(trendLongSetup, title = "TREND LONG SETUP", text = "TREND LONG", style = shape.labelup, location = location.belowbar, color = color.aqua, textcolor = color.black, size = size.tiny)
 plotshape(trendShortSetup, title = "TREND SHORT SETUP", text = "TREND SHORT", style = shape.labeldown, location = location.abovebar, color = color.orange, textcolor = color.black, size = size.tiny)
 plotshape(longWatch, title = "POSSIBLE LONG REVERSAL", text = "REV LONG", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.tiny)
@@ -383,9 +484,10 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="border border-fuchsia-300/25 bg-fuchsia-300/10 text-fuchsia-200">FREE PLAN READY</Badge>
                   <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
+                  <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">AUTO TP / SL</Badge>
                 </div>
-                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">Trend setups + Gold Reversal Scout are now one Pine v6 strategy</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Copy one script into TradingView. Both engines run together, while the settings let you disable Trend or Reversal independently.</p>
+                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script now maps liquidity, market structure, entry, TP and SL</h2>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Confirmed swing liquidity and HH/HL/LH/LL labels feed a projected trade plan: yellow entry, green target, red stop and a configurable 2.14 reward-to-risk ratio.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -534,7 +636,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · confirmed trend setups and Gold Reversal Scout in the same strategy</CardDescription>
+              <CardDescription>One free-plan script slot · trend + reversal + liquidity + structure + automatic candidate Entry / TP / SL</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -545,16 +647,28 @@ export default function Home() {
             <CardContent className="pt-4">
               <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                  ['Trend engine', 'EMA cross + slope + RSI + ATR + confirmed higher-timeframe direction.'],
-                  ['Reversal engine', 'Swing sweep + rejection wick + RSI recovery + expiring confirmation entry.'],
-                  ['One position', 'Trend entries take priority and automatically cancel unfilled reversal triggers.'],
-                  ['One script slot', 'Use both systems together, or disable either engine from the script settings.'],
+                  ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
+                  ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
+                  ['Automatic plan', 'Yellow candidate entry, green possible TP, red possible SL and shaded reward/risk zones.'],
+                  ['R:R 2.14', 'The projected reward is 2.14 times the defined risk; change it from Shared filters.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
                     <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : 'text-amber-200'}`}>{title}</p>
                     <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
                   </div>
                 ))}
+              </div>
+
+              <div className="mb-4 grid gap-3 rounded-xl border border-white/9 bg-black/15 p-4 sm:grid-cols-[auto_1fr] sm:items-center">
+                <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
+                  <span className="rounded-md border border-yellow-300/20 bg-yellow-300/10 px-2.5 py-1.5 text-yellow-200">YELLOW · ENTRY</span>
+                  <span className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1.5 text-emerald-200">GREEN · TP</span>
+                  <span className="rounded-md border border-red-300/20 bg-red-300/10 px-2.5 py-1.5 text-red-200">RED · SL</span>
+                </div>
+                <div className="sm:border-l sm:border-white/9 sm:pl-4">
+                  <p className="text-xs font-semibold">What does “2.14” mean?</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">It is the reward-to-risk ratio. A 2.14 target aims for about $2.14 of potential reward for every $1.00 risked before spread, slippage and fees. It is a projection—not a win probability.</p>
+                </div>
               </div>
 
               <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f12]">
@@ -568,14 +682,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Both engines use the previous completed 15m trend; reversal signals activate on chart timeframes below that confirmation timeframe.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Open settings → Automatic chart map to toggle liquidity, structure labels and projected Entry / TP / SL zones.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Use the “Engines” settings to turn Trend or Reversal on/off. TREND labels are filtered setups; REV labels are watch conditions followed by stop-entry confirmation. Neither predicts outcomes or guarantees profit.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Liquidity and HH/HL labels use confirmed pivots, so they appear after the swing is confirmed rather than at the exact turning point in real time. Entry, TP and SL are conditional projections. They do not predict outcomes or guarantee profit.</p>
             </CardContent>
           </Card>
         </section>
@@ -593,7 +707,7 @@ export default function Home() {
                   ['1 · Context', 'Use a 1m, 3m or 5m chart. The previous completed 15m close must remain on the correct side of its EMA 50.'],
                   ['2 · Reversal watch', 'Price sweeps a confirmed prior swing, closes back through it and prints a rejection wick with RSI recovery.'],
                   ['3 · Entry trigger', 'Long only one tick above the reversal candle high; short only one tick below its low. No trigger means no trade.'],
-                  ['4 · Risk and expiry', 'Stop beyond the sweep candle, target 2R, and cancel the pending entry if it does not trigger within three bars.'],
+                  ['4 · Risk and expiry', 'Stop beyond the sweep candle, default target 2.14R, and cancel the pending entry if it does not trigger within three bars.'],
                 ].map(([title, description]) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
                     <p className="text-xs font-semibold text-foreground">{title}</p>
@@ -604,7 +718,7 @@ export default function Home() {
 
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 <div className="rounded-xl border border-primary/20 bg-primary/[.055] p-4">
-                  <div className="flex items-center gap-2 text-primary"><Crosshair className="size-4" /><p className="text-xs font-semibold">Objective “best entry”</p></div>
+                  <div className="flex items-center gap-2 text-primary"><Crosshair className="size-4" /><p className="text-xs font-semibold">Automatic candidate entry</p></div>
                   <p className="mt-2 text-sm font-semibold">Reversal candle → confirmation break → immediate predefined risk</p>
                   <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The sweep candle is only a watch condition. Entry is allowed after price breaks its rejection extreme. This sacrifices the exact bottom or top to demand evidence that price is actually reversing.</p>
                 </div>
