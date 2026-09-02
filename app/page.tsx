@@ -85,6 +85,11 @@ trendAtrMultiple = input.float(1.5, "ATR stop multiple", minval = 0.5, step = 0.
 slopeBars = input.int(3, "EMA slope lookback", minval = 1, group = "Confirmed trend engine")
 cooldownBars = input.int(10, "Bars between trend setups", minval = 1, group = "Confirmed trend engine")
 
+enableOneHourPrecision = input.bool(true, "Use 1H pullback + rejection entries", group = "1H Precision Entry")
+precisionPullbackBufferATR = input.float(0.20, "20 EMA touch buffer in ATR", minval = 0.05, maxval = 1.00, step = 0.05, group = "1H Precision Entry")
+precisionMaxEntryDistanceATR = input.float(0.45, "Maximum close distance from 20 EMA in ATR", minval = 0.10, maxval = 1.50, step = 0.05, group = "1H Precision Entry")
+precisionStopBufferATR = input.float(0.10, "Stop buffer beyond rejection candle in ATR", minval = 0.02, maxval = 0.50, step = 0.01, group = "1H Precision Entry")
+
 minimumWickBody = input.float(1.5, "Minimum wick / body", minval = 0.5, step = 0.1, group = "Reversal scout")
 expiryBars = input.int(3, "Entry expiry bars", minval = 1, maxval = 10, group = "Reversal scout")
 tradeSession = input.session("0700-1700", "Active session in UTC", group = "Reversal scout")
@@ -216,8 +221,20 @@ stopClosedThisBar = closedTradeThisBar and lastExitComment == "SL"
 // Confirmed trend engine.
 var int lastTrendBar = na
 trendCooldownOK = na(lastTrendBar) or bar_index - lastTrendBar > cooldownBars
-trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp and metalSyncLongOK
-trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown and metalSyncShortOK
+oneHourChart = timeframe.in_seconds() == 3600
+oneHourPrecisionActive = enableOneHourPrecision and oneHourChart
+signalBody = math.max(math.abs(close - open), syminfo.mintick)
+signalLowerWick = math.min(open, close) - low
+signalUpperWick = high - math.max(open, close)
+signalRange = high - low
+oneHourLongBias = fastEMA > slowEMA and slowSlopeUp and higherTrendUp and trendVolatilityOK and metalSyncLongOK
+oneHourShortBias = fastEMA < slowEMA and slowSlopeDown and higherTrendDown and trendVolatilityOK and metalSyncShortOK
+oneHourLongRetest = oneHourLongBias and low <= fastEMA + atrValue * precisionPullbackBufferATR and close > fastEMA and close > slowEMA and close > open and signalLowerWick / signalBody >= 0.35 and close - fastEMA <= atrValue * precisionMaxEntryDistanceATR and rsiValue >= 52 and rsiValue <= 68 and signalRange <= atrValue * 1.50
+oneHourShortRetest = oneHourShortBias and high >= fastEMA - atrValue * precisionPullbackBufferATR and close < fastEMA and close < slowEMA and close < open and signalUpperWick / signalBody >= 0.35 and fastEMA - close <= atrValue * precisionMaxEntryDistanceATR and rsiValue <= 48 and rsiValue >= 32 and signalRange <= atrValue * 1.50
+standardTrendLongSignal = fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp and metalSyncLongOK
+standardTrendShortSignal = fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown and metalSyncShortOK
+trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourLongRetest : standardTrendLongSignal)
+trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourShortRetest : standardTrendShortSignal)
 
 // Reversal scout engine. It automatically stays inactive when the chart timeframe
 // is not below the confirmation timeframe, while the trend engine keeps working.
@@ -304,8 +321,8 @@ if noChaseShort
 
 // Optional early heads-up for the compact panel. FORMING is not a signal: P1
 // still requires the actual EMA cross and every filter at a completed candle.
-p1LongForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendLongSetup and slowSlopeUp and higherTrendUp and metalSyncLongOK and trendVolatilityOK and rsiValue > 50 and fastEMA <= slowEMA and slowEMA - fastEMA <= atrValue * 0.20 and not rawAvoidLong and not rawNoChaseLong
-p1ShortForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendShortSetup and slowSlopeDown and higherTrendDown and metalSyncShortOK and trendVolatilityOK and rsiValue < 50 and fastEMA >= slowEMA and fastEMA - slowEMA <= atrValue * 0.20 and not rawAvoidShort and not rawNoChaseShort
+p1LongForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendLongSetup and not rawAvoidLong and not rawNoChaseLong and (oneHourPrecisionActive ? oneHourLongBias and close > slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeUp and higherTrendUp and metalSyncLongOK and trendVolatilityOK and rsiValue > 50 and fastEMA <= slowEMA and slowEMA - fastEMA <= atrValue * 0.20)
+p1ShortForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendShortSetup and not rawAvoidShort and not rawNoChaseShort and (oneHourPrecisionActive ? oneHourShortBias and close < slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeDown and higherTrendDown and metalSyncShortOK and trendVolatilityOK and rsiValue < 50 and fastEMA >= slowEMA and fastEMA - slowEMA <= atrValue * 0.20)
 
 var float trendStopPrice = na
 var float trendTargetPrice = na
@@ -453,7 +470,7 @@ if trendLongSetup
     pendingShortBar := na
     trendLongStructureStop = recentStructureLow - syminfo.mintick * 2
     trendLongAtrStop = close - atrValue * trendAtrMultiple
-    trendStopPrice := math.max(trendLongStructureStop, trendLongAtrStop)
+    trendStopPrice := oneHourPrecisionActive ? low - atrValue * precisionStopBufferATR : math.max(trendLongStructureStop, trendLongAtrStop)
     trendLongRisk = close - trendStopPrice
     trendTargetPrice := close + trendLongRisk * rewardRisk
     plannedEntry := close
@@ -469,7 +486,7 @@ if trendLongSetup
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? "BUY ENTRY\nP1" : "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? (oneHourPrecisionActive ? "BUY ENTRY\nP1 · 1H RETEST" : "BUY ENTRY\nP1") : "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -488,7 +505,7 @@ if trendShortSetup
     pendingShortBar := na
     trendShortStructureStop = recentStructureHigh + syminfo.mintick * 2
     trendShortAtrStop = close + atrValue * trendAtrMultiple
-    trendStopPrice := math.min(trendShortStructureStop, trendShortAtrStop)
+    trendStopPrice := oneHourPrecisionActive ? high + atrValue * precisionStopBufferATR : math.min(trendShortStructureStop, trendShortAtrStop)
     trendShortRisk = trendStopPrice - close
     trendTargetPrice := close - trendShortRisk * rewardRisk
     plannedEntry := close
@@ -504,7 +521,7 @@ if trendShortSetup
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? "SELL ENTRY\nP1" : "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? (oneHourPrecisionActive ? "SELL ENTRY\nP1 · 1H RETEST" : "SELL ENTRY\nP1") : "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -1039,10 +1056,10 @@ tradeHealthTextColor = tp1ApproachArmed and not tp1FailureWarned and not halfSto
 buySignalNow = trendLongSetup or reversalLongConfirmed or reentryLongConfirmed
 sellSignalNow = trendShortSetup or reversalShortConfirmed or reentryShortConfirmed
 activeEntryId = strategy.opentrades > 0 ? strategy.opentrades.entry_id(0) : ""
-activeSignalText = str.contains(activeEntryId, "TREND") ? "P1 · TREND" : str.contains(activeEntryId, "REENTRY") ? "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
+activeSignalText = str.contains(activeEntryId, "TREND") ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : str.contains(activeEntryId, "REENTRY") ? "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
 simpleActionText = buySignalNow ? "BUY SIGNAL" : sellSignalNow ? "SELL SIGNAL" : strategy.position_size > 0 ? "LONG ACTIVE" : strategy.position_size < 0 ? "SHORT ACTIVE" : shockPauseActive ? "NO TRADE" : "WAIT"
 simpleActionColor = buySignalNow ? color.new(color.lime, 44) : sellSignalNow ? color.new(color.red, 42) : strategy.position_size != 0 ? color.new(color.aqua, 68) : shockPauseActive ? color.new(color.fuchsia, 48) : color.new(color.orange, 68)
-simpleSignalText = trendLongSetup or trendShortSetup ? "P1 · TREND" : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? "P1 BUY · FORMING" : p1ShortForming ? "P1 SELL · FORMING" : "NONE · KEEP WAITING"
+simpleSignalText = trendLongSetup or trendShortSetup ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · FORMING") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · FORMING") : "NONE · KEEP WAITING"
 simpleSignalColor = buySignalNow ? color.new(color.lime, 60) : sellSignalNow ? color.new(color.red, 56) : strategy.position_size != 0 ? color.new(color.aqua, 76) : not na(reentryPendingBar) or reentryArmed ? color.new(color.purple, 68) : not na(pendingLongBar) or not na(pendingShortBar) or p1LongForming or p1ShortForming ? color.new(color.yellow, 68) : color.new(color.gray, 82)
 simpleMetalText = metalsBullishSync ? "BULLISH" : metalsBearishSync ? "BEARISH" : "WAIT · NOT SYNCED"
 simpleRiskText = shockPauseActive ? "HIGH · NO NEW TRADE" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
@@ -1086,8 +1103,8 @@ sendAurumAlert(condition, eventMessage) =>
     if condition
         alert(eventMessage + " | " + syminfo.tickerid + " | TF " + timeframe.period, alert.freq_once_per_bar)
 
-sendAurumAlert(trendLongSetup, "P1 CONFIRMED: trend long setup")
-sendAurumAlert(trendShortSetup, "P1 CONFIRMED: trend short setup")
+sendAurumAlert(trendLongSetup, oneHourPrecisionActive ? "P1 CONFIRMED: 1H pullback-rejection BUY" : "P1 CONFIRMED: trend long setup")
+sendAurumAlert(trendShortSetup, oneHourPrecisionActive ? "P1 CONFIRMED: 1H pullback-rejection SELL" : "P1 CONFIRMED: trend short setup")
 sendAurumAlert(longWatch, "WATCH ONLY: possible long reversal; wait for trigger")
 sendAurumAlert(shortWatch, "WATCH ONLY: possible short reversal; wait for trigger")
 sendAurumAlert(reversalLongConfirmed, "P2 CONFIRMED: reversal long trigger filled")
@@ -1115,7 +1132,7 @@ export default function Home() {
   const [widgetRefresh, setWidgetRefresh] = useState(0);
   const [scriptCopied, setScriptCopied] = useState(false);
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
-  const [timeframe, setTimeframe] = useState('15');
+  const [timeframe, setTimeframe] = useState('60');
   const [equity, setEquity] = useState(25000);
   const [riskPct, setRiskPct] = useState(0.5);
   const [entry, setEntry] = useState(4805.2);
@@ -1223,6 +1240,7 @@ export default function Home() {
                   <Badge className="border border-fuchsia-300/25 bg-fuchsia-300/10 text-fuchsia-200">FREE PLAN READY</Badge>
                   <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
                   <Badge variant="outline" className="border-lime-300/25 text-lime-200">SIMPLE MODE DEFAULT</Badge>
+                  <Badge variant="outline" className="border-cyan-300/25 text-cyan-200">1H PRECISION ENTRY</Badge>
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">TP1 / TP2 / TP3 + SL</Badge>
                   <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
@@ -1267,7 +1285,7 @@ export default function Home() {
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-3">
                   {[
-                    ['P1 · TREND', 'FORMING means the EMAs and filters are getting close. BUY/SELL appears only after the EMA cross and all filters confirm at candle close.', 'border-cyan-300/20 text-cyan-200'],
+                    ['P1 · 1H RETEST', 'WAIT RETEST means the daily and 1H trends agree. BUY/SELL appears only after price pulls back near the 20 EMA and a 1H rejection candle confirms.', 'border-cyan-300/20 text-cyan-200'],
                     ['P2 · REVERSAL', 'ARMED means a liquidity-sweep reversal passed its first check. Keep waiting until price crosses the yellow trigger and BUY/SELL P2 appears.', 'border-emerald-300/20 text-emerald-200'],
                     ['P3 · RESET', 'SCANNING or ARMED means the post-stop reset is searching. It becomes actionable only when BUY/SELL P3 appears after its trigger.', 'border-purple-300/20 text-purple-200'],
                   ].map(([label, description, color]) => (
@@ -1307,7 +1325,7 @@ export default function Home() {
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Signal priority</p>
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                     {[
-                      ['BUY / SELL · P1', 'Highest priority', 'A trend entry confirmed at candle close after EMA cross, higher-timeframe direction, RSI, volatility, entry guard and metals sync all passed.', 'border-cyan-300/20 bg-cyan-300/[.055] text-cyan-200'],
+                      ['BUY / SELL · P1', 'Highest priority', 'On the 1H chart, a pullback and rejection entry confirmed after daily direction, 20/50 EMA trend, RSI, volatility and metals sync all passed.', 'border-cyan-300/20 bg-cyan-300/[.055] text-cyan-200'],
                       ['BUY / SELL · P2', 'Second priority', 'A reversal setup became valid only after price crossed its yellow trigger. P2 ARMED still means wait.', 'border-emerald-300/20 bg-emerald-300/[.055] text-emerald-200'],
                       ['BUY / SELL · P3', 'Third priority', 'After an SL and one closed candle, the smaller reset trade crossed its trigger with all direction filters aligned.', 'border-purple-300/20 bg-purple-300/[.055] text-purple-200'],
                       ['WAIT', 'No trade yet', 'FORMING, ARMED, SCANNING, NOT SYNCED or BLOCKED means the complete signal is not ready.', 'border-amber-300/20 bg-amber-300/[.055] text-amber-200'],
@@ -1585,14 +1603,32 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-cyan-100">Timeframe-synced updates</p>
-                    <p className="mt-1 max-w-2xl text-[10px] leading-4 text-muted-foreground">The selected TradingView chart controls the decision clock: 1m checks after each completed 1-minute candle, 3m after each completed 3-minute candle, and 15m after each completed 15-minute candle. The live panel counts down to the next confirmed check.</p>
+                    <p className="mt-1 max-w-2xl text-[10px] leading-4 text-muted-foreground">The selected TradingView chart controls the decision clock. On your 1H chart, a setup can confirm only after the hourly candle closes. The live panel counts down to that next confirmed check.</p>
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold">
-                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">1m → 1 min</span>
-                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">3m → 3 min</span>
-                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">15m → 15 min</span>
+                  <span className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-cyan-100">1H → hourly close</span>
+                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">Daily trend filter</span>
+                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">No intrabar entry</span>
                 </div>
+              </div>
+
+              <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.045] p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-semibold text-cyan-100">P1 · 1H precision pullback entry</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The old 1H crossover entry is replaced by a more selective retest. The completed daily candle sets direction; the 1H 20 EMA must stay on the correct side of the 50 EMA; price must pull back near the 20 EMA; then a rejection candle must close back with the trend while RSI is not stretched and Gold/Silver remain aligned.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                    {['Daily bias', '1H trend', '20 EMA retest', 'Rejection close', 'BUY / SELL P1'].map((step, index) => (
+                      <div key={step} className="flex items-center gap-1.5">
+                        {index > 0 && <span className="text-cyan-300/60">→</span>}
+                        <span className="rounded-md border border-cyan-300/15 bg-black/15 px-2 py-1.5 text-cyan-100">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-3 border-t border-cyan-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The stop is projected beyond the rejection candle with a 0.10 ATR buffer. This avoids placing it inside that signal candle, but it can make the stop distance—and therefore dollar risk—larger. Reduce position size accordingly and test it on paper first.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-purple-300/20 bg-purple-300/[.045] p-4">
@@ -1670,6 +1706,7 @@ export default function Home() {
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
                   ['Three-target plan', 'Yellow candidate entry, green TP1 at 1R, TP2 at 1.5R, TP3 at the final target, and one red SL.'],
                   ['Simple chart mode', 'Shows only confirmed BUY/SELL marks and serious safety warnings; detailed context labels stay hidden.'],
+                  ['1H precision entry', 'Waits for daily alignment, a 1H pullback to the 20 EMA and a confirmed rejection instead of chasing the crossover.'],
                   ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
                   ['Shock circuit breaker', 'Cancels pending ideas, pauses new setups and enforces a configurable strategy daily-loss lock.'],
                   ['Gold / Silver Sync', 'Requires both metals to agree on bullish or bearish direction before that side can enter.'],
@@ -1706,7 +1743,7 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor and select “Add to chart.” Keep Settings → Automatic chart map → Simple chart mode enabled. For signals plus TP/SL fills, choose Create Alert → Aurum Guard → “Order fills and alert() function calls.”</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor, select “Add to chart,” then use a 1-hour chart. Keep Settings → 1H Precision Entry enabled and Settings → Automatic chart map → Simple chart mode enabled. For signals plus TP/SL fills, choose Create Alert → Aurum Guard → “Order fills and alert() function calls.”</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
