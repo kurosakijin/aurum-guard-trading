@@ -37,6 +37,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { TradingViewChart } from '@/components/tradingview-chart';
+import { NewsSpikeRadar } from '@/components/news-spike-radar';
 import {
   TradingViewSymbolInfo,
   TradingViewTechnicalAnalysis,
@@ -1259,6 +1260,12 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2">
             <a
+              href="#news-radar"
+              className="hidden h-9 items-center gap-2 rounded-lg border border-red-300/25 bg-red-300/[.07] px-3 text-xs font-medium text-red-200 transition hover:bg-red-300/10 sm:inline-flex"
+            >
+              <Newspaper className="size-4" /> News radar
+            </a>
+            <a
               href="#pine-script"
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-medium text-primary transition hover:bg-primary/15"
             >
@@ -1285,6 +1292,8 @@ export default function Home() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Live TradingView market context, a transparent rules-based strategy and strict manual risk sizing in one workspace.</p>
           </div>
         </section>
+
+        <NewsSpikeRadar />
 
         <section className="mb-4" aria-labelledby="combined-script-heading">
           <Card className="overflow-hidden border-fuchsia-300/25 bg-[linear-gradient(110deg,rgba(192,132,252,.12),rgba(225,177,78,.08)_52%,rgba(18,22,27,.96))] shadow-[0_20px_70px_rgba(0,0,0,.22)]">

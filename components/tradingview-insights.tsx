@@ -7,11 +7,13 @@ function TradingViewWidget({
   config,
   label,
   className,
+  refreshKey = 0,
 }: {
   scriptUrl: string;
   config: Record<string, string | number | boolean>;
   label: string;
   className: string;
+  refreshKey?: number;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const configJson = JSON.stringify(config);
@@ -35,7 +37,7 @@ function TradingViewWidget({
     element.appendChild(script);
 
     return () => element.replaceChildren();
-  }, [scriptUrl, configJson]);
+  }, [scriptUrl, configJson, refreshKey]);
 
   return (
     <div aria-label={label} className={`relative ${className}`}>
@@ -99,6 +101,57 @@ export function TradingViewTechnicalAnalysis({
       }}
       label="Live TradingView technical rating"
       className="h-[680px] w-full sm:h-[760px]"
+    />
+  );
+}
+
+export function TradingViewEconomicCalendar({
+  refreshKey = 0,
+}: {
+  refreshKey?: number;
+}) {
+  return (
+    <TradingViewWidget
+      scriptUrl="https://s3.tradingview.com/external-embedding/embed-widget-events.js"
+      config={{
+        colorTheme: 'dark',
+        isTransparent: true,
+        locale: 'en',
+        countryFilter: 'us',
+        importanceFilter: '1',
+        width: '100%',
+        height: '100%',
+      }}
+      refreshKey={refreshKey}
+      label="Live United States high-impact economic calendar"
+      className="h-[660px] w-full sm:h-[720px]"
+    />
+  );
+}
+
+export function TradingViewMetalsNews({
+  symbol,
+  refreshKey = 0,
+}: {
+  symbol: string;
+  refreshKey?: number;
+}) {
+  return (
+    <TradingViewWidget
+      scriptUrl="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js"
+      config={{
+        feedMode: 'symbol',
+        symbol,
+        displayMode: 'regular',
+        colorTheme: 'dark',
+        isTransparent: true,
+        locale: 'en',
+        width: '100%',
+        height: '100%',
+      }}
+      refreshKey={refreshKey}
+      label="Live gold and silver market news"
+      className="h-[660px] w-full sm:h-[720px]"
     />
   );
 }
