@@ -93,6 +93,10 @@ reentryWaitBars = input.int(1, "Closed candles to wait after SL", minval = 1, ma
 reentryExpiryBars = input.int(2, "Re-entry trigger expiry bars", minval = 1, maxval = 10, group = "Controlled re-entry")
 reentrySizeMultiplier = input.float(0.50, "Re-entry size multiplier", minval = 0.10, maxval = 1.00, step = 0.05, group = "Controlled re-entry")
 
+showBadEntryGuard = input.bool(true, "Show bad-entry warnings", group = "Bad Entry Guard")
+chaseDistanceATR = input.float(1.35, "No-chase distance from fast EMA in ATR", minval = 0.50, maxval = 5.00, step = 0.05, group = "Bad Entry Guard")
+badEntryCooldownBars = input.int(4, "Bars between warning labels", minval = 1, maxval = 50, group = "Bad Entry Guard")
+
 pivotLength = input.int(5, "Liquidity / structure swing length", minval = 2, maxval = 30, group = "Automatic chart map")
 showLiquidity = input.bool(true, "Show confirmed liquidity levels", group = "Automatic chart map")
 showStructure = input.bool(true, "Show HH / HL / LH / LL", group = "Automatic chart map")
@@ -198,6 +202,42 @@ sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSw
 
 longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
 shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
+
+// Bad Entry Guard. These are warnings, never entry signals. They highlight the
+// two common mistakes shown in the sample: fading a protected trend pullback
+// after liquidity is swept, or chasing after price is already ATR-extended.
+var int lastBadEntryBar = na
+bullishGuardTrend = higherTrendUp and fastEMA > slowEMA and slowSlopeUp and close > slowEMA and rsiValue >= 50
+bearishGuardTrend = higherTrendDown and fastEMA < slowEMA and slowSlopeDown and close < slowEMA and rsiValue <= 50
+sellSideSweepTrap = bullishGuardTrend and sweptLow and close > priorSwingLow
+buySideSweepTrap = bearishGuardTrend and sweptHigh and close < priorSwingHigh
+bullishPullbackTrap = bullishGuardTrend and close < open and low <= fastEMA and close > slowEMA
+bearishRallyTrap = bearishGuardTrend and close > open and high >= fastEMA and close < slowEMA
+rawAvoidShort = sellSideSweepTrap or bullishPullbackTrap
+rawAvoidLong = buySideSweepTrap or bearishRallyTrap
+rawNoChaseLong = bullishGuardTrend and close > open and close - fastEMA > atrValue * chaseDistanceATR
+rawNoChaseShort = bearishGuardTrend and close < open and fastEMA - close > atrValue * chaseDistanceATR
+badEntryCooldownOK = na(lastBadEntryBar) or bar_index - lastBadEntryBar > badEntryCooldownBars
+avoidShort = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and rawAvoidShort
+avoidLong = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and rawAvoidLong
+noChaseLong = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and not avoidLong and rawNoChaseLong
+noChaseShort = showBadEntryGuard and decisionBarReady and strategy.position_size == 0 and badEntryCooldownOK and not avoidShort and not avoidLong and not noChaseLong and rawNoChaseShort
+
+if avoidShort
+    label.new(bar_index, high, "AVOID SHORT\n" + (sellSideSweepTrap ? "SELL-SIDE SWEEP" : "BULLISH PULLBACK"), style = label.style_label_down, color = color.new(color.orange, 6), textcolor = color.black, size = size.small)
+    lastBadEntryBar := bar_index
+
+if avoidLong
+    label.new(bar_index, low, "AVOID LONG\n" + (buySideSweepTrap ? "BUY-SIDE SWEEP" : "BEARISH RALLY"), style = label.style_label_up, color = color.new(color.red, 6), textcolor = color.white, size = size.small)
+    lastBadEntryBar := bar_index
+
+if noChaseLong
+    label.new(bar_index, high, "NO CHASE LONG\nWAIT PULLBACK", style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+    lastBadEntryBar := bar_index
+
+if noChaseShort
+    label.new(bar_index, low, "NO CHASE SHORT\nWAIT RALLY", style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+    lastBadEntryBar := bar_index
 
 var float trendStopPrice = na
 var float trendTargetPrice = na
@@ -565,7 +605,7 @@ bgcolor(enableReversal and not reversalTimeframeOK ? color.new(color.orange, 92)
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
 // setups remain locked until the current chart candle is confirmed.
-var table syncPanel = table.new(position.top_right, 2, 4, border_width = 1)
+var table syncPanel = table.new(position.top_right, 2, 5, border_width = 1)
 secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
 minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
@@ -573,6 +613,9 @@ countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainin
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
 priorityText = trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? "P3 RE-BUY CONFIRMED" : reentryShortConfirmed ? "P3 RE-SELL CONFIRMED" : reentryLongCandidate ? "P3 RE-BUY WATCH" : reentryShortCandidate ? "P3 RE-SELL WATCH" : reentryArmed ? "P3 COOLDOWN" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
 priorityColor = trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
+entryGuardText = avoidShort ? "AVOID SHORT" : avoidLong ? "AVOID LONG" : noChaseLong ? "NO CHASE LONG" : noChaseShort ? "NO CHASE SHORT" : "CLEAR"
+entryGuardColor = avoidShort ? color.new(color.orange, 58) : avoidLong ? color.new(color.red, 58) : noChaseLong or noChaseShort ? color.new(color.yellow, 64) : color.new(color.lime, 82)
+entryGuardTextColor = noChaseLong or noChaseShort ? color.black : color.white
 
 if barstate.islast
     if showTimeframeSync
@@ -584,8 +627,10 @@ if barstate.islast
         table.cell(syncPanel, 1, 2, updateText, bgcolor = decisionBarReady ? color.new(color.lime, 76) : color.new(color.orange, 78), text_color = color.white, text_size = size.tiny)
         table.cell(syncPanel, 0, 3, "PRIORITY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
         table.cell(syncPanel, 1, 3, priorityText, bgcolor = priorityColor, text_color = color.white, text_size = size.tiny)
+        table.cell(syncPanel, 0, 4, "ENTRY GUARD", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 4, entryGuardText, bgcolor = entryGuardColor, text_color = entryGuardTextColor, text_size = size.tiny)
     else
-        table.clear(syncPanel, 0, 0, 1, 3)
+        table.clear(syncPanel, 0, 0, 1, 4)
 
 alertcondition(trendLongSetup, title = "Aurum Guard trend long", message = "Confirmed Aurum Guard trend long setup")
 alertcondition(trendShortSetup, title = "Aurum Guard trend short", message = "Confirmed Aurum Guard trend short setup")
@@ -596,7 +641,11 @@ alertcondition(reversalShortConfirmed, title = "Aurum Guard confirmed reversal s
 alertcondition(reentryLongCandidate, title = "Aurum Guard re-entry long watch", message = "P3 long re-entry candidate; wait for trigger")
 alertcondition(reentryShortCandidate, title = "Aurum Guard re-entry short watch", message = "P3 short re-entry candidate; wait for trigger")
 alertcondition(reentryLongConfirmed, title = "Aurum Guard confirmed re-entry long", message = "P3 confirmed re-entry long trigger filled")
-alertcondition(reentryShortConfirmed, title = "Aurum Guard confirmed re-entry short", message = "P3 confirmed re-entry short trigger filled")`;
+alertcondition(reentryShortConfirmed, title = "Aurum Guard confirmed re-entry short", message = "P3 confirmed re-entry short trigger filled")
+alertcondition(avoidShort, title = "Aurum Guard avoid short", message = "Bad Entry Guard: avoid short into a bullish pullback or sell-side liquidity sweep")
+alertcondition(avoidLong, title = "Aurum Guard avoid long", message = "Bad Entry Guard: avoid long into a bearish rally or buy-side liquidity sweep")
+alertcondition(noChaseLong, title = "Aurum Guard no-chase long", message = "Bad Entry Guard: long is ATR-extended; wait for a pullback")
+alertcondition(noChaseShort, title = "Aurum Guard no-chase short", message = "Bad Entry Guard: short is ATR-extended; wait for a rally")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -712,9 +761,10 @@ export default function Home() {
                   <Badge className="border border-fuchsia-300/25 bg-fuchsia-300/10 text-fuchsia-200">FREE PLAN READY</Badge>
                   <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">AUTO TP / SL</Badge>
+                  <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
                 </div>
-                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and maps entry, TP and SL</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1 and P2 marks separate confirmed entries from watch-only conditions. Liquidity and HH/HL/LH/LL remain market context, while yellow, green and red map the candidate entry, target and stop.</p>
+                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and warns against bad entries</h2>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. The Bad Entry Guard flags liquidity traps and overextended chases before yellow, green and red map a candidate entry, target and stop.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -777,6 +827,24 @@ export default function Home() {
                     ))}
                   </div>
                   <p className="mt-2 text-[10px] leading-4 text-muted-foreground">P1 outranks P2, and either fresh P1/P2 setup cancels a P3 re-entry idea. Liquidity lines and HH/HL/LH/LL labels are context only—not BUY or SELL confirmation.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Bad Entry Guard</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {[
+                      ['AVOID SHORT', 'Bullish pullback or sell-side sweep; shorting can make you the liquidity.', 'border-orange-300/20 bg-orange-300/[.05] text-orange-200'],
+                      ['AVOID LONG', 'Bearish rally or buy-side sweep; buying can be the trapped side.', 'border-red-300/20 bg-red-300/[.05] text-red-200'],
+                      ['NO CHASE LONG', 'Price is already too far above the fast EMA; wait for a pullback.', 'border-yellow-300/20 bg-yellow-300/[.05] text-yellow-200'],
+                      ['NO CHASE SHORT', 'Price is already too far below the fast EMA; wait for a rally.', 'border-yellow-300/20 bg-yellow-300/[.05] text-yellow-200'],
+                    ].map(([label, description, color]) => (
+                      <div key={label} className={`rounded-xl border p-3 ${color}`}>
+                        <p className="text-[10px] font-bold tracking-[.06em]">{label}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-emerald-200">ENTRY GUARD · CLEAR</span> means no guard condition is active. It is not permission to enter; a P1, P2 or P3 confirmation is still required.</p>
                 </div>
 
                 <div>
@@ -948,7 +1016,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · timeframe-synced trend + reversal + one controlled post-SL re-entry + automatic Entry / TP / SL</CardDescription>
+              <CardDescription>One free-plan script slot · timeframe-synced trend + reversal + bad-entry warnings + controlled post-SL re-entry + automatic Entry / TP / SL</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -992,15 +1060,16 @@ export default function Home() {
                 <p className="mt-3 border-t border-purple-300/10 pt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-purple-200">Why the wait?</span> A wick through SL is not enough reason to jump straight back in. Reclaim plus a fresh candle close is required to reduce revenge entries. Change the wait, expiry and size under Settings → Controlled re-entry.</p>
               </div>
 
-              <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                 {[
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
                   ['Automatic plan', 'Yellow candidate entry, green possible TP, red possible SL and shaded reward/risk zones.'],
                   ['Priority marks', 'P1 trend, P2 reversal, P3 controlled re-entry, and Watch Only for an untriggered possibility.'],
+                  ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
                 ].map(([title, description], index) => (
                   <div key={title} className="rounded-xl border border-white/8 bg-white/[.025] p-3">
-                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : 'text-amber-200'}`}>{title}</p>
+                    <p className={`text-xs font-semibold ${index === 0 ? 'text-primary' : index === 1 ? 'text-fuchsia-300' : index === 2 ? 'text-emerald-300' : index === 3 ? 'text-amber-200' : 'text-orange-200'}`}>{title}</p>
                     <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
                   </div>
                 ))}
@@ -1029,14 +1098,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Change the chart interval normally; the script reloads automatically. Open Settings → Controlled re-entry to change its wait, expiry and 0.50× size, or disable it completely.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Under Settings → Bad Entry Guard, adjust the 1.35 ATR no-chase distance or warning cooldown. Controlled re-entry settings remain separately adjustable.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Live visuals recalculate on incoming TradingView price updates, but new decisions wait for the selected candle to close. P3 allows only one reduced-size re-entry after an SL and never guarantees recovery; spread, slippage or a fast market can still produce a worse fill. Entry, TP and SL remain conditional projections.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Bad Entry Guard warnings are rule-based cautions, not proof that price must reverse or continue. New decisions still wait for candle close. P3 allows only one reduced-size re-entry after an SL; spread, slippage and fast markets can produce worse fills. Entry, TP and SL remain conditional projections.</p>
             </CardContent>
           </Card>
         </section>
