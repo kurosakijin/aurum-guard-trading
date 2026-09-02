@@ -150,6 +150,14 @@ showFibonacciRejections = input.bool(true, "Mark confirmed golden-zone rejection
 fibonacciProjectionBars = input.int(35, "Project levels for bars", minval = 10, maxval = 200, group = "Automatic Fibonacci")
 fibonacciSignalCooldown = input.int(5, "Bars between rejection watches", minval = 1, maxval = 50, group = "Automatic Fibonacci")
 
+enable15mManipulation = input.bool(true, "Enable 15m manipulation detector", group = "15m Manipulation + Blow-off")
+manipulationMinimumWick = input.float(0.45, "Manipulation wick share", minval = 0.25, maxval = 0.80, step = 0.05, group = "15m Manipulation + Blow-off")
+blowOffRangeATR = input.float(2.20, "Blow-off candle range in ATR", minval = 1.50, maxval = 5.00, step = 0.10, group = "15m Manipulation + Blow-off")
+blowOffDistanceATR = input.float(2.00, "Minimum extension from EMA in ATR", minval = 0.50, maxval = 6.00, step = 0.10, group = "15m Manipulation + Blow-off")
+blowOffVolumeMultiple = input.float(1.80, "Tick-volume multiple", minval = 1.00, maxval = 5.00, step = 0.10, group = "15m Manipulation + Blow-off")
+requireBlowOffVolume = input.bool(true, "Require tick-volume spike", group = "15m Manipulation + Blow-off")
+manipulationCooldownBars = input.int(6, "Bars between warnings", minval = 1, maxval = 30, group = "15m Manipulation + Blow-off")
+
 fastEMA = ta.ema(close, fastLength)
 slowEMA = ta.ema(close, slowLength)
 rsiValue = ta.rsi(close, rsiLength)
@@ -329,8 +337,39 @@ rsiRecentHigh = ta.highest(rsiValue, 4)
 sweptLow = not na(priorSwingLow) and low < priorSwingLow and close > priorSwingLow
 sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSwingHigh
 
-longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1] and metalSyncLongOK
-shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1] and metalSyncShortOK
+// 15-minute manipulation and blow-off detector. These marks wait for the
+// candle to close and block a same-bar setup, but never create a reverse trade.
+fifteenMinuteChart = timeframe.in_seconds() == 900
+manipulationRange = math.max(high - low, syminfo.mintick)
+manipulationUpperWickShare = upperWick / manipulationRange
+manipulationLowerWickShare = lowerWick / manipulationRange
+manipulationCloseLocation = (close - low) / manipulationRange
+manipulationVolumeAverage = ta.sma(volume, 20)
+manipulationVolumeSpike = not na(manipulationVolumeAverage) and manipulationVolumeAverage > 0 and volume >= manipulationVolumeAverage * blowOffVolumeMultiple
+blowOffVolumeOK = not requireBlowOffVolume or manipulationVolumeSpike
+
+rawBuySideManipulation = sweptHigh and manipulationUpperWickShare >= manipulationMinimumWick and manipulationCloseLocation <= 0.45
+rawSellSideManipulation = sweptLow and manipulationLowerWickShare >= manipulationMinimumWick and manipulationCloseLocation >= 0.55
+rawBlowOffTop = high - fastEMA >= atrValue * blowOffDistanceATR and manipulationRange >= atrValue * blowOffRangeATR and manipulationUpperWickShare >= 0.30 and manipulationCloseLocation <= 0.55 and fastEMA > slowEMA and blowOffVolumeOK
+rawBlowOffBottom = fastEMA - low >= atrValue * blowOffDistanceATR and manipulationRange >= atrValue * blowOffRangeATR and manipulationLowerWickShare >= 0.30 and manipulationCloseLocation >= 0.45 and fastEMA < slowEMA and blowOffVolumeOK
+
+var int lastManipulationWarningBar = na
+manipulationCooldownOK = na(lastManipulationWarningBar) or bar_index - lastManipulationWarningBar > manipulationCooldownBars
+blowOffTop = enable15mManipulation and fifteenMinuteChart and decisionBarReady and manipulationCooldownOK and rawBlowOffTop
+blowOffBottom = enable15mManipulation and fifteenMinuteChart and decisionBarReady and manipulationCooldownOK and not blowOffTop and rawBlowOffBottom
+buySideManipulation = enable15mManipulation and fifteenMinuteChart and decisionBarReady and manipulationCooldownOK and not blowOffTop and not blowOffBottom and rawBuySideManipulation
+sellSideManipulation = enable15mManipulation and fifteenMinuteChart and decisionBarReady and manipulationCooldownOK and not blowOffTop and not blowOffBottom and not buySideManipulation and rawSellSideManipulation
+fifteenMinuteRiskDetected = blowOffTop or blowOffBottom or buySideManipulation or sellSideManipulation
+
+if fifteenMinuteRiskDetected
+    lastManipulationWarningBar := bar_index
+
+// A detected exhaustion/manipulation bar is a no-new-entry candle.
+trendLongSetup := trendLongSetup and not fifteenMinuteRiskDetected
+trendShortSetup := trendShortSetup and not fifteenMinuteRiskDetected
+
+longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not fifteenMinuteRiskDetected and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1] and metalSyncLongOK
+shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not fifteenMinuteRiskDetected and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1] and metalSyncShortOK
 
 // Bad Entry Guard. These are warnings, never entry signals. They highlight the
 // two common mistakes shown in the sample: fading a protected trend pullback
@@ -374,8 +413,8 @@ if noChaseShort
 
 // Optional early heads-up for the compact panel. FORMING is not a signal: P1
 // still requires the actual EMA cross and every filter at a completed candle.
-p1LongForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendLongSetup and not rawAvoidLong and not rawNoChaseLong and (oneHourPrecisionActive ? oneHourLongBias and close > slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeUp and higherTrendUp and metalSyncLongOK and trendVolatilityOK and rsiValue > 50 and fastEMA <= slowEMA and slowEMA - fastEMA <= atrValue * 0.20)
-p1ShortForming = enableTrend and not shockPauseActive and strategy.position_size == 0 and not trendShortSetup and not rawAvoidShort and not rawNoChaseShort and (oneHourPrecisionActive ? oneHourShortBias and close < slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeDown and higherTrendDown and metalSyncShortOK and trendVolatilityOK and rsiValue < 50 and fastEMA >= slowEMA and fastEMA - slowEMA <= atrValue * 0.20)
+p1LongForming = enableTrend and not fifteenMinuteRiskDetected and not shockPauseActive and strategy.position_size == 0 and not trendLongSetup and not rawAvoidLong and not rawNoChaseLong and (oneHourPrecisionActive ? oneHourLongBias and close > slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeUp and higherTrendUp and metalSyncLongOK and trendVolatilityOK and rsiValue > 50 and fastEMA <= slowEMA and slowEMA - fastEMA <= atrValue * 0.20)
+p1ShortForming = enableTrend and not fifteenMinuteRiskDetected and not shockPauseActive and strategy.position_size == 0 and not trendShortSetup and not rawAvoidShort and not rawNoChaseShort and (oneHourPrecisionActive ? oneHourShortBias and close < slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeDown and higherTrendDown and metalSyncShortOK and trendVolatilityOK and rsiValue < 50 and fastEMA >= slowEMA and fastEMA - slowEMA <= atrValue * 0.20)
 
 var float trendStopPrice = na
 var float trendTargetPrice = na
@@ -411,6 +450,24 @@ var float reentryStop = na
 var float reentryTarget = na
 var int reentryPendingBar = na
 var int reentryForcedDirection = 0
+
+// A fresh 15m warning invalidates any unfilled trigger. Existing trades retain
+// their protective bracket; the warning never moves or removes an active SL.
+if fifteenMinuteRiskDetected and strategy.position_size == 0
+    strategy.cancel("REV LONG")
+    strategy.cancel("REV SHORT")
+    strategy.cancel("REENTRY LONG")
+    strategy.cancel("REENTRY SHORT")
+    pendingLongEntry := na
+    pendingLongStop := na
+    pendingLongBar := na
+    pendingShortEntry := na
+    pendingShortStop := na
+    pendingShortBar := na
+    reentryEntry := na
+    reentryStop := na
+    reentryTarget := na
+    reentryPendingBar := na
 
 // Label handles make each projected plan self-cleaning. The old Entry / TP / SL
 // map is deleted before a replacement plan and immediately after a full exit.
@@ -952,8 +1009,8 @@ if closedTradeThisBar
 // window. The first fully aligned direction may be opposite the stopped trade.
 reentryScanActive = recoveryEngineEnabled and reentryArmed and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar <= reentryScanBars
 reentryWaitComplete = reentryScanActive and decisionBarReady and not shockPauseActive and bar_index - reentrySLBar >= reentryWaitBars
-reentryLongCandidate = reentryWaitComplete and (reentryForcedDirection == 0 or reentryForcedDirection == 1) and higherTrendUp and close > reentryRecoveryPrice and close > close[1] and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 52 and close > open and metalSyncLongOK and not rawAvoidLong and not rawNoChaseLong
-reentryShortCandidate = reentryWaitComplete and not reentryLongCandidate and (reentryForcedDirection == 0 or reentryForcedDirection == -1) and higherTrendDown and close < reentryRecoveryPrice and close < close[1] and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 48 and close < open and metalSyncShortOK and not rawAvoidShort and not rawNoChaseShort
+reentryLongCandidate = reentryWaitComplete and not fifteenMinuteRiskDetected and (reentryForcedDirection == 0 or reentryForcedDirection == 1) and higherTrendUp and close > reentryRecoveryPrice and close > close[1] and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 52 and close > open and metalSyncLongOK and not rawAvoidLong and not rawNoChaseLong
+reentryShortCandidate = reentryWaitComplete and not fifteenMinuteRiskDetected and not reentryLongCandidate and (reentryForcedDirection == 0 or reentryForcedDirection == -1) and higherTrendDown and close < reentryRecoveryPrice and close < close[1] and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 48 and close < open and metalSyncShortOK and not rawAvoidShort and not rawNoChaseShort
 reentryScanExpired = recoveryEngineEnabled and reentryArmed and decisionBarReady and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar > reentryScanBars
 
 if reentryScanExpired
@@ -1157,9 +1214,13 @@ plotshape(showPriorityMarks and reentryLongConfirmed and not (oneMinuteRecoveryA
 plotshape(showPriorityMarks and reentryShortConfirmed and not (oneMinuteRecoveryActive and reentryForcedDirection == -1), title = "P3 CONFIRMED RESET SELL", text = "SELL\nP3", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
 plotshape(showPriorityMarks and reentryLongConfirmed and oneMinuteRecoveryActive and reentryForcedDirection == 1, title = "1M CONFIRMED FAILURE FLIP BUY", text = "BUY\n1M FLIP", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
 plotshape(showPriorityMarks and reentryShortConfirmed and oneMinuteRecoveryActive and reentryForcedDirection == -1, title = "1M CONFIRMED FAILURE FLIP SELL", text = "SELL\n1M FLIP", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(buySideManipulation, title = "15M BUY-SIDE MANIPULATION", text = "MANIPULATION\nAVOID LONG", style = shape.labeldown, location = location.abovebar, color = color.orange, textcolor = color.black, size = size.small)
+plotshape(sellSideManipulation, title = "15M SELL-SIDE MANIPULATION", text = "MANIPULATION\nAVOID SHORT", style = shape.labelup, location = location.belowbar, color = color.orange, textcolor = color.black, size = size.small)
+plotshape(blowOffTop, title = "15M BLOW-OFF TOP", text = "BLOW-OFF TOP\nWAIT", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
+plotshape(blowOffBottom, title = "15M BLOW-OFF BOTTOM", text = "BLOW-OFF BOTTOM\nWAIT", style = shape.labelup, location = location.belowbar, color = color.aqua, textcolor = color.black, size = size.small)
 plotshape(showPriorityMarks and fibLongRejection, title = "FIBONACCI GOLDEN ZONE LONG WATCH", text = "FIB LONG\nWATCH", style = shape.labelup, location = location.belowbar, color = color.yellow, textcolor = color.black, size = size.tiny)
 plotshape(showPriorityMarks and fibShortRejection, title = "FIBONACCI GOLDEN ZONE SHORT WATCH", text = "FIB SHORT\nWATCH", style = shape.labeldown, location = location.abovebar, color = color.yellow, textcolor = color.black, size = size.tiny)
-plotshape(volatilityShock, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
+plotshape(volatilityShock and not blowOffTop and not blowOffBottom, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
 plotshape(not simpleChartMode and shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
 plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
 plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBearishChanged, title = "GOLD SILVER SYNC BEARISH", text = "SYNC GOOD\nBEARISH", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 8), textcolor = color.white, size = size.tiny)
@@ -1169,14 +1230,14 @@ bgcolor(shockPauseActive ? color.new(color.fuchsia, 92) : na, title = "Volatilit
 
 // Live status panel. Calculations refresh on incoming ticks, while actionable
 // setups remain locked until the current chart candle is confirmed.
-var table syncPanel = table.new(position.top_right, 2, 9, border_width = 1)
+var table syncPanel = table.new(position.top_right, 2, 10, border_width = 1)
 secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
 minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
 countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
-priorityText = shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED" : "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED" : "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED" : "P3 RESET BUY WATCH" : reentryShortCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED" : "P3 RESET SELL WATCH" : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY SCANNING" : oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL SCANNING" : "P3 RESET SCANNING" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
-priorityColor = shockPauseActive ? color.new(color.fuchsia, 58) : trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
+priorityText = blowOffTop ? "15M BLOW-OFF TOP" : blowOffBottom ? "15M BLOW-OFF BOTTOM" : buySideManipulation ? "15M AVOID LONG" : sellSideManipulation ? "15M AVOID SHORT" : shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED" : "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED" : "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED" : "P3 RESET BUY WATCH" : reentryShortCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED" : "P3 RESET SELL WATCH" : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY SCANNING" : oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL SCANNING" : "P3 RESET SCANNING" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
+priorityColor = blowOffTop or blowOffBottom ? color.new(color.fuchsia, 48) : buySideManipulation or sellSideManipulation ? color.new(color.orange, 52) : shockPauseActive ? color.new(color.fuchsia, 58) : trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
 entryGuardText = avoidShort ? "AVOID SHORT" : avoidLong ? "AVOID LONG" : noChaseLong ? "NO CHASE LONG" : noChaseShort ? "NO CHASE SHORT" : "CLEAR"
 entryGuardColor = avoidShort ? color.new(color.orange, 58) : avoidLong ? color.new(color.red, 58) : noChaseLong or noChaseShort ? color.new(color.yellow, 64) : color.new(color.lime, 82)
 entryGuardTextColor = noChaseLong or noChaseShort ? color.black : color.white
@@ -1188,25 +1249,28 @@ metalSyncTextColor = metalsBullishSync ? color.black : color.white
 tradeHealthText = strategy.position_size == 0 ? "NO ACTIVE TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED · REVERSE RISK" : halfStopWarned ? "HALF TO SL" : tp1Reached ? "TP1 REACHED" : tp1ApproachArmed ? "TP1 APPROACHED" : "NORMAL"
 tradeHealthColor = strategy.position_size == 0 ? color.new(color.gray, 82) : tp1FailureWarned ? color.new(color.orange, 52) : halfStopWarned ? color.new(color.red, 54) : tp1Reached ? color.new(color.lime, 62) : tp1ApproachArmed ? color.new(color.yellow, 60) : color.new(color.aqua, 82)
 tradeHealthTextColor = tp1ApproachArmed and not tp1FailureWarned and not halfStopWarned ? color.black : color.white
-buySignalNow = trendLongSetup or reversalLongConfirmed or reentryLongConfirmed
-sellSignalNow = trendShortSetup or reversalShortConfirmed or reentryShortConfirmed
+buySignalNow = not fifteenMinuteRiskDetected and (trendLongSetup or reversalLongConfirmed or reentryLongConfirmed)
+sellSignalNow = not fifteenMinuteRiskDetected and (trendShortSetup or reversalShortConfirmed or reentryShortConfirmed)
 activeEntryId = strategy.opentrades > 0 ? strategy.opentrades.entry_id(0) : ""
 activeSignalText = str.contains(activeEntryId, "TREND") ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : str.contains(activeEntryId, "REENTRY") ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? "1M AUTO FLIP" : "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
-simpleActionText = buySignalNow ? "BUY SIGNAL" : sellSignalNow ? "SELL SIGNAL" : strategy.position_size > 0 ? "LONG ACTIVE" : strategy.position_size < 0 ? "SHORT ACTIVE" : shockPauseActive ? "NO TRADE" : "WAIT"
-simpleActionColor = buySignalNow ? color.new(color.lime, 44) : sellSignalNow ? color.new(color.red, 42) : strategy.position_size != 0 ? color.new(color.aqua, 68) : shockPauseActive ? color.new(color.fuchsia, 48) : color.new(color.orange, 68)
+simpleActionText = buySignalNow ? "BUY SIGNAL" : sellSignalNow ? "SELL SIGNAL" : strategy.position_size > 0 ? "LONG ACTIVE" : strategy.position_size < 0 ? "SHORT ACTIVE" : shockPauseActive or fifteenMinuteRiskDetected ? "NO TRADE" : "WAIT"
+simpleActionColor = buySignalNow ? color.new(color.lime, 44) : sellSignalNow ? color.new(color.red, 42) : strategy.position_size != 0 ? color.new(color.aqua, 68) : shockPauseActive or fifteenMinuteRiskDetected ? color.new(color.fuchsia, 48) : color.new(color.orange, 68)
 simpleSignalText = trendLongSetup or trendShortSetup ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY" : "1M FLIP SELL") : "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY · ARMED" : "1M FLIP SELL · ARMED") : (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryForcedDirection == 1 ? "1M FLIP BUY · SCAN" : "1M FLIP SELL · SCAN") : "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · FORMING") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · FORMING") : "NONE · KEEP WAITING"
 simpleSignalColor = buySignalNow ? color.new(color.lime, 60) : sellSignalNow ? color.new(color.red, 56) : strategy.position_size != 0 ? color.new(color.aqua, 76) : not na(reentryPendingBar) or reentryArmed ? color.new(color.purple, 68) : not na(pendingLongBar) or not na(pendingShortBar) or p1LongForming or p1ShortForming ? color.new(color.yellow, 68) : color.new(color.gray, 82)
 simpleMetalText = metalsBullishSync ? "BULLISH" : metalsBearishSync ? "BEARISH" : "WAIT · NOT SYNCED"
-simpleRiskText = shockPauseActive ? "HIGH · NO NEW TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
-simpleRiskColor = shockPauseActive ? color.new(color.fuchsia, 48) : tp1FailureWarned ? color.new(color.orange, 48) : halfStopWarned ? color.new(color.red, 48) : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? color.new(color.orange, 62) : color.new(color.lime, 78)
+simpleRiskText = blowOffTop ? "BLOW-OFF TOP" : blowOffBottom ? "BLOW-OFF BOTTOM" : buySideManipulation ? "MANIPULATION · AVOID LONG" : sellSideManipulation ? "MANIPULATION · AVOID SHORT" : shockPauseActive ? "HIGH · NO NEW TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
+simpleRiskColor = blowOffTop or blowOffBottom or shockPauseActive ? color.new(color.fuchsia, 48) : buySideManipulation or sellSideManipulation ? color.new(color.orange, 52) : tp1FailureWarned ? color.new(color.orange, 48) : halfStopWarned ? color.new(color.red, 48) : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? color.new(color.orange, 62) : color.new(color.lime, 78)
 oneMinuteModeText = oneMinuteRecoveryActive ? "ON · AUTO SL/TP + FLIP" : oneMinuteChart ? "OFF IN SETTINGS" : "OFF · USE 1m CHART"
 oneMinuteModeColor = oneMinuteRecoveryActive ? color.new(color.lime, 72) : color.new(color.gray, 82)
 fibonacciStatusText = not showAutoFibonacci ? "OFF IN SETTINGS" : not fibReady ? "WAIT CONFIRMED SWINGS" : fibLongRejection ? "LONG REJECTION · WATCH" : fibShortRejection ? "SHORT REJECTION · WATCH" : fibTouchesGoldenZone ? "IN 61.8–70.5 ZONE" : fibBullishMove ? "BULL PULLBACK MAP" : "BEAR PULLBACK MAP"
 fibonacciStatusColor = fibLongRejection or fibShortRejection ? color.new(color.yellow, 48) : fibTouchesGoldenZone ? color.new(color.orange, 58) : fibReady ? color.new(color.purple, 70) : color.new(color.gray, 82)
 fibonacciTextColor = fibLongRejection or fibShortRejection ? color.black : color.white
+manipulationStatusText = not enable15mManipulation ? "OFF IN SETTINGS" : not fifteenMinuteChart ? "USE 15m CHART" : blowOffTop ? "BLOW-OFF TOP · WAIT" : blowOffBottom ? "BLOW-OFF BOTTOM · WAIT" : buySideManipulation ? "BUY-SIDE SWEEP · AVOID LONG" : sellSideManipulation ? "SELL-SIDE SWEEP · AVOID SHORT" : "SCANNING · CLEAR"
+manipulationStatusColor = blowOffTop or blowOffBottom ? color.new(color.fuchsia, 48) : buySideManipulation or sellSideManipulation ? color.new(color.orange, 52) : fifteenMinuteChart ? color.new(color.lime, 80) : color.new(color.gray, 82)
+manipulationTextColor = buySideManipulation or sellSideManipulation ? color.black : color.white
 
 if barstate.islast
-    table.clear(syncPanel, 0, 0, 1, 8)
+    table.clear(syncPanel, 0, 0, 1, 9)
     if showTimeframeSync
         if simpleChartMode
             table.cell(syncPanel, 0, 0, "ACTION", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
@@ -1223,6 +1287,8 @@ if barstate.islast
             table.cell(syncPanel, 1, 5, oneMinuteModeText, bgcolor = oneMinuteModeColor, text_color = color.white, text_size = size.tiny)
             table.cell(syncPanel, 0, 6, "FIBONACCI", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 6, fibonacciStatusText, bgcolor = fibonacciStatusColor, text_color = fibonacciTextColor, text_size = size.tiny)
+            table.cell(syncPanel, 0, 7, "15M SAFETY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 7, manipulationStatusText, bgcolor = manipulationStatusColor, text_color = manipulationTextColor, text_size = size.tiny)
         else
             table.cell(syncPanel, 0, 0, "CHART", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 0, timeframe.period, bgcolor = color.new(color.aqua, 82), text_color = color.white, text_size = size.tiny)
@@ -1242,6 +1308,8 @@ if barstate.islast
             table.cell(syncPanel, 1, 7, tradeHealthText, bgcolor = tradeHealthColor, text_color = tradeHealthTextColor, text_size = size.tiny)
             table.cell(syncPanel, 0, 8, "FIBONACCI", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 8, fibonacciStatusText, bgcolor = fibonacciStatusColor, text_color = fibonacciTextColor, text_size = size.tiny)
+            table.cell(syncPanel, 0, 9, "15M SAFETY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 9, manipulationStatusText, bgcolor = manipulationStatusColor, text_color = manipulationTextColor, text_size = size.tiny)
 
 // Strategies cannot create alert triggers with alertcondition(). In TradingView,
 // select "Order fills and alert() function calls" to receive signals and fills.
@@ -1268,13 +1336,17 @@ sendAurumAlert(avoidShort, "BAD ENTRY GUARD: avoid short into bullish pullback o
 sendAurumAlert(avoidLong, "BAD ENTRY GUARD: avoid long into bearish rally or buy-side sweep")
 sendAurumAlert(noChaseLong, "BAD ENTRY GUARD: no-chase long; wait for pullback")
 sendAurumAlert(noChaseShort, "BAD ENTRY GUARD: no-chase short; wait for rally")
-sendAurumAlert(volatilityShock, "VOLATILITY SHOCK: abnormal candle or gap; no new trades")
+sendAurumAlert(volatilityShock and not blowOffTop and not blowOffBottom, "VOLATILITY SHOCK: abnormal candle or gap; no new trades")
 sendAurumAlert(shockReset, "SHOCK RESET: resume scanning and wait for fresh confirmation")
 sendAurumAlert(metalSyncBullishChanged, "GOLD + SILVER SYNC: GOOD and BULLISH; long setups may pass")
 sendAurumAlert(metalSyncBearishChanged, "GOLD + SILVER SYNC: GOOD and BEARISH; short setups may pass")
 sendAurumAlert(metalSyncLost, "GOLD + SILVER SYNC: NOT SYNCED; wait and cancel unfilled entries")
 sendAurumAlert(fibLongRejection, "FIBONACCI WATCH: bullish rejection from 61.8-70.5 golden zone; wait for P1/P2/P3 confirmation")
-sendAurumAlert(fibShortRejection, "FIBONACCI WATCH: bearish rejection from 61.8-70.5 golden zone; wait for P1/P2/P3 confirmation")`;
+sendAurumAlert(fibShortRejection, "FIBONACCI WATCH: bearish rejection from 61.8-70.5 golden zone; wait for P1/P2/P3 confirmation")
+sendAurumAlert(buySideManipulation, "15M MANIPULATION: buy-side liquidity swept; avoid new longs and wait for fresh confirmation")
+sendAurumAlert(sellSideManipulation, "15M MANIPULATION: sell-side liquidity swept; avoid new shorts and wait for fresh confirmation")
+sendAurumAlert(blowOffTop, "15M BLOW-OFF TOP: extended exhaustion candle confirmed; wait, this is not an automatic short")
+sendAurumAlert(blowOffBottom, "15M BLOW-OFF BOTTOM: extended exhaustion candle confirmed; wait, this is not an automatic long")`;
 
 export default function Home() {
   const [scanning, setScanning] = useState(false);
@@ -1406,6 +1478,7 @@ export default function Home() {
                   <Badge variant="outline" className="border-lime-300/25 text-lime-200">GOLD + SILVER SYNC</Badge>
                   <Badge variant="outline" className="border-red-300/25 text-red-200">SMART TRADE HEALTH</Badge>
                   <Badge variant="outline" className="border-yellow-300/25 text-yellow-200">AUTO FIB GOLDEN ZONE</Badge>
+                  <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">15M MANIPULATION + BLOW-OFF</Badge>
                 </div>
                 <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and checks both metals</h2>
                 <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while 1-minute recovery mode can rebuild a smaller SL/TP plan after a confirmed failure or stop.</p>
@@ -1541,6 +1614,28 @@ export default function Home() {
                 </div>
 
                 <div className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[.045] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="flex items-center gap-2 text-xs font-semibold text-fuchsia-100"><TriangleAlert className="size-3.5" /> 15-minute Manipulation + Blow-off Safety</p>
+                    <Badge className="border border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200">15M ONLY</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {[
+                      ['MANIPULATION · AVOID LONG', 'Price swept a confirmed swing high, left a large upper wick and closed back inside. Do not chase the high.', 'border-orange-300/20 text-orange-200'],
+                      ['MANIPULATION · AVOID SHORT', 'Price swept a confirmed swing low, left a large lower wick and closed back inside. Do not chase the low.', 'border-orange-300/20 text-orange-200'],
+                      ['BLOW-OFF TOP · WAIT', 'An abnormally large, extended bullish move showed upper-wick exhaustion with a tick-volume spike.', 'border-fuchsia-300/20 text-fuchsia-200'],
+                      ['BLOW-OFF BOTTOM · WAIT', 'An abnormally large, extended bearish move showed lower-wick exhaustion with a tick-volume spike.', 'border-cyan-300/20 text-cyan-200'],
+                    ].map(([label, description, color]) => (
+                      <div key={label} className={`rounded-lg border bg-black/15 p-3 ${color}`}>
+                        <p className="text-[10px] font-bold tracking-[.04em]">{label}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-fuchsia-200">How it behaves:</span> it works only on the 15-minute chart and confirms at candle close. A warning cancels unfilled triggers and blocks a same-candle entry. It does not open the opposite trade—wait for a fresh P1, P2 or P3 BUY/SELL confirmation.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Default blow-off test: candle range ≥ 2.2 ATR, extension ≥ 2 ATR from the fast EMA, exhaustion wick and tick volume ≥ 1.8× its 20-bar average. Spot/CFD volume is broker tick volume, so treat every mark as a risk heuristic—not proof of manipulation.</p>
+                </div>
+
+                <div className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[.045] p-4">
                   <p className="text-xs font-semibold text-fuchsia-100">Volatility Shock Guard</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
                     {[
@@ -1601,8 +1696,9 @@ export default function Home() {
                     <li><span className="mr-2 text-primary">1.</span>Check GOLD + SILVER: GOOD · BULLISH permits only long ideas; GOOD · BEARISH permits only short ideas; NOT SYNCED means wait.</li>
                     <li><span className="mr-2 text-primary">2.</span>Cyan above orange and both rising favors longs; cyan below orange and both falling favors shorts.</li>
                     <li><span className="mr-2 text-primary">3.</span>Confirm the structure sequence and note which liquidity line price is approaching or sweeping.</li>
-                    <li><span className="mr-2 text-primary">4.</span>Act only on P1, P2 or P3 CONFIRMED with yellow Entry, green TP1–TP3 and red SL. WATCH ONLY and P3 RESET SCANNING are not entries.</li>
-                    <li><span className="mr-2 text-primary">5.</span>After entry, read TRADE HEALTH: TP1 failure and ½ TO SL mean risk increased, not that an opposite entry is confirmed.</li>
+                    <li><span className="mr-2 text-primary">4.</span>On 15m, any MANIPULATION or BLOW-OFF label means wait; do not convert the warning into an instant reversal trade.</li>
+                    <li><span className="mr-2 text-primary">5.</span>Act only on P1, P2 or P3 CONFIRMED with yellow Entry, green TP1–TP3 and red SL. WATCH ONLY and P3 RESET SCANNING are not entries.</li>
+                    <li><span className="mr-2 text-primary">6.</span>After entry, read TRADE HEALTH: TP1 failure and ½ TO SL mean risk increased, not that an opposite entry is confirmed.</li>
                   </ol>
                 </div>
 
@@ -1799,7 +1895,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · Gold/Silver direction sync + three take-profit levels + post-SL direction reset + strategy-compatible alerts</CardDescription>
+              <CardDescription>One free-plan script slot · Gold/Silver direction sync + 15m manipulation/blow-off safety + three take-profit levels + strategy-compatible alerts</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -1821,6 +1917,7 @@ export default function Home() {
                 <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold">
                   <span className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-cyan-100">1H → hourly close</span>
                   <span className="rounded-md border border-purple-300/20 bg-purple-300/10 px-2 py-1 text-purple-100">1m → recovery close</span>
+                  <span className="rounded-md border border-fuchsia-300/20 bg-fuchsia-300/10 px-2 py-1 text-fuchsia-100">15m → manipulation safety</span>
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">Daily trend filter</span>
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">No intrabar entry</span>
                 </div>
