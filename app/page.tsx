@@ -65,13 +65,15 @@ strategy("Aurum Guard Combined: Trend + Reversal", overlay = true, pyramiding = 
      default_qty_value = 0.5,
      commission_type = strategy.commission.percent,
      commission_value = 0.05,
+     calc_on_every_tick = true,
      process_orders_on_close = true,
      max_labels_count = 300)
 
 // One strategy slot, two independently switchable engines.
 enableTrend = input.bool(true, "Enable confirmed trend setups", group = "Engines")
 enableReversal = input.bool(true, "Enable reversal scout", group = "Engines")
-confirmationTimeframe = input.timeframe("15", "Confirmed trend timeframe", group = "Shared filters")
+autoConfirmationTimeframe = input.bool(true, "Auto confirmation timeframe", group = "Shared filters")
+manualConfirmationTimeframe = input.timeframe("15", "Manual confirmation timeframe", group = "Shared filters")
 rsiLength = input.int(14, "RSI length", minval = 2, group = "Shared filters")
 atrLength = input.int(14, "ATR length", minval = 2, group = "Shared filters")
 rewardRisk = input.float(2.14, "Reward / risk", minval = 1.0, maxval = 10.0, step = 0.01, group = "Shared filters")
@@ -90,6 +92,7 @@ pivotLength = input.int(5, "Liquidity / structure swing length", minval = 2, max
 showLiquidity = input.bool(true, "Show confirmed liquidity levels", group = "Automatic chart map")
 showStructure = input.bool(true, "Show HH / HL / LH / LL", group = "Automatic chart map")
 showTradePlan = input.bool(true, "Show Entry / TP / SL zones", group = "Automatic chart map")
+showTimeframeSync = input.bool(true, "Show timeframe sync panel", group = "Automatic chart map")
 structureStopLookback = input.int(7, "Trend structural stop lookback", minval = 2, maxval = 50, group = "Automatic chart map")
 planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 200, group = "Automatic chart map")
 
@@ -105,7 +108,33 @@ fastCrossDown = ta.crossunder(fastEMA, slowEMA)
 slowSlopeUp = slowEMA > slowEMA[slopeBars]
 slowSlopeDown = slowEMA < slowEMA[slopeBars]
 
-// Previous completed higher-timeframe values avoid using the still-forming 15m candle.
+// The chart timeframe is the decision clock. For example, a 1m chart confirms
+// a new decision once every completed 1-minute candle; 3m confirms every 3 minutes.
+decisionBarReady = barstate.isconfirmed
+
+// Automatically scale the non-repainting trend filter with the chart timeframe.
+getAutoConfirmationTimeframe() =>
+    chartSeconds = timeframe.in_seconds()
+    if chartSeconds <= 60
+        "15"
+    else if chartSeconds <= 180
+        "30"
+    else if chartSeconds <= 300
+        "60"
+    else if chartSeconds <= 900
+        "240"
+    else if chartSeconds <= 3600
+        "D"
+    else if chartSeconds <= 14400
+        "W"
+    else if chartSeconds <= 86400
+        "W"
+    else
+        "M"
+
+confirmationTimeframe = autoConfirmationTimeframe ? getAutoConfirmationTimeframe() : manualConfirmationTimeframe
+
+// Previous completed higher-timeframe values avoid using its still-forming candle.
 confirmedHTFClose = request.security(syminfo.tickerid, confirmationTimeframe, close[1], lookahead = barmerge.lookahead_on)
 confirmedHTFEMA = request.security(syminfo.tickerid, confirmationTimeframe, ta.ema(close, slowLength)[1], lookahead = barmerge.lookahead_on)
 higherTrendUp = confirmedHTFClose > confirmedHTFEMA
@@ -114,8 +143,8 @@ higherTrendDown = confirmedHTFClose < confirmedHTFEMA
 // Confirmed trend engine.
 var int lastTrendBar = na
 trendCooldownOK = na(lastTrendBar) or bar_index - lastTrendBar > cooldownBars
-trendLongSetup = enableTrend and barstate.isconfirmed and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp
-trendShortSetup = enableTrend and barstate.isconfirmed and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown
+trendLongSetup = enableTrend and decisionBarReady and strategy.position_size == 0 and trendCooldownOK and fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp
+trendShortSetup = enableTrend and decisionBarReady and strategy.position_size == 0 and trendCooldownOK and fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown
 
 // Reversal scout engine. It automatically stays inactive when the chart timeframe
 // is not below the confirmation timeframe, while the trend engine keeps working.
@@ -157,8 +186,8 @@ rsiRecentHigh = ta.highest(rsiValue, 4)
 sweptLow = not na(priorSwingLow) and low < priorSwingLow and close > priorSwingLow
 sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSwingHigh
 
-longWatch = enableReversal and reversalTimeframeOK and barstate.isconfirmed and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
-shortWatch = enableReversal and reversalTimeframeOK and barstate.isconfirmed and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
+longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1]
+shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1]
 
 var float trendStopPrice = na
 var float trendTargetPrice = na
@@ -366,6 +395,26 @@ plotshape(trendShortSetup, title = "TREND SHORT SETUP", text = "TREND SHORT", st
 plotshape(longWatch, title = "POSSIBLE LONG REVERSAL", text = "REV LONG", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.tiny)
 plotshape(shortWatch, title = "POSSIBLE SHORT REVERSAL", text = "REV SHORT", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.tiny)
 bgcolor(enableReversal and not reversalTimeframeOK ? color.new(color.orange, 92) : na, title = "Reversal timeframe warning")
+
+// Live status panel. Calculations refresh on incoming ticks, while actionable
+// setups remain locked until the current chart candle is confirmed.
+var table syncPanel = table.new(position.top_right, 2, 3, border_width = 1)
+secondsToClose = timeframe.isintraday ? math.max(0, int(math.floor((time_close - timenow) / 1000))) : 0
+minutesToClose = int(math.floor(secondsToClose / 60))
+remainingSeconds = secondsToClose % 60
+countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
+updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
+
+if barstate.islast
+    if showTimeframeSync
+        table.cell(syncPanel, 0, 0, "CHART", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 0, timeframe.period, bgcolor = color.new(color.aqua, 82), text_color = color.white, text_size = size.tiny)
+        table.cell(syncPanel, 0, 1, "FILTER", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 1, confirmationTimeframe, bgcolor = color.new(color.purple, 78), text_color = color.white, text_size = size.tiny)
+        table.cell(syncPanel, 0, 2, "NEXT CHECK", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+        table.cell(syncPanel, 1, 2, updateText, bgcolor = decisionBarReady ? color.new(color.lime, 76) : color.new(color.orange, 78), text_color = color.white, text_size = size.tiny)
+    else
+        table.clear(syncPanel, 0, 0, 1, 2)
 
 alertcondition(trendLongSetup, title = "Aurum Guard trend long", message = "Confirmed Aurum Guard trend long setup")
 alertcondition(trendShortSetup, title = "Aurum Guard trend short", message = "Confirmed Aurum Guard trend short setup")
@@ -702,7 +751,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · trend + reversal + liquidity + structure + automatic candidate Entry / TP / SL</CardDescription>
+              <CardDescription>One free-plan script slot · timeframe-synced trend + reversal + liquidity + structure + automatic candidate Entry / TP / SL</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -711,6 +760,23 @@ export default function Home() {
               </CardAction>
             </CardHeader>
             <CardContent className="pt-4">
+              <div className="mb-4 flex flex-col gap-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[.045] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-cyan-300/15 bg-cyan-300/10 text-cyan-200">
+                    <Clock3 className="size-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-cyan-100">Timeframe-synced updates</p>
+                    <p className="mt-1 max-w-2xl text-[10px] leading-4 text-muted-foreground">The selected TradingView chart controls the decision clock: 1m checks after each completed 1-minute candle, 3m after each completed 3-minute candle, and 15m after each completed 15-minute candle. The live panel counts down to the next confirmed check.</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold">
+                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">1m → 1 min</span>
+                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">3m → 3 min</span>
+                  <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">15m → 15 min</span>
+                </div>
+              </div>
+
               <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
@@ -748,14 +814,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Open settings → Automatic chart map to toggle liquidity, structure labels and projected Entry / TP / SL zones.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, paste into Pine Editor and select “Add to chart.” Change the chart interval normally; the script reloads automatically. Open settings → Automatic chart map to toggle the timeframe sync panel, liquidity, structure labels and Entry / TP / SL zones.</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Liquidity and HH/HL labels use confirmed pivots, so they appear after the swing is confirmed rather than at the exact turning point in real time. Entry, TP and SL are conditional projections. They do not predict outcomes or guarantee profit.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Live visuals recalculate on incoming TradingView price updates, but new BUY/SELL decisions wait for the selected candle to close to reduce intrabar repainting. Liquidity and HH/HL labels use confirmed pivots. Entry, TP and SL are conditional projections, not guaranteed outcomes.</p>
             </CardContent>
           </Card>
         </section>
