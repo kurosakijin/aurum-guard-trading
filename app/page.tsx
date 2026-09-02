@@ -94,11 +94,15 @@ minimumWickBody = input.float(1.5, "Minimum wick / body", minval = 0.5, step = 0
 expiryBars = input.int(3, "Entry expiry bars", minval = 1, maxval = 10, group = "Reversal scout")
 tradeSession = input.session("0700-1700", "Active session in UTC", group = "Reversal scout")
 
-enableReentry = input.bool(true, "Enable one controlled re-entry after SL", group = "Controlled re-entry")
+enableReentry = input.bool(true, "Enable post-SL reset scan", group = "Controlled re-entry")
 reentryWaitBars = input.int(1, "Closed candles to wait after SL", minval = 1, maxval = 10, group = "Controlled re-entry")
 reentryScanBars = input.int(12, "Post-SL direction scan bars", minval = 2, maxval = 50, group = "Controlled re-entry")
 reentryExpiryBars = input.int(2, "Re-entry trigger expiry bars", minval = 1, maxval = 10, group = "Controlled re-entry")
 reentrySizeMultiplier = input.float(0.50, "Re-entry size multiplier", minval = 0.10, maxval = 1.00, step = 0.05, group = "Controlled re-entry")
+
+enableOneMinuteRecoveryFlip = input.bool(true, "Enable confirmed 1m failure flip", group = "1m Auto Recovery")
+oneMinuteFlipRSI = input.float(45.0, "Opposite RSI confirmation", minval = 35.0, maxval = 50.0, step = 0.5, group = "1m Auto Recovery")
+oneMinuteFlipStopBufferATR = input.float(0.10, "Fresh SL buffer in ATR", minval = 0.02, maxval = 0.50, step = 0.01, group = "1m Auto Recovery")
 
 showTradeHealth = input.bool(true, "Show active-trade health warnings", group = "Active Trade Health")
 tp1ApproachPercent = input.float(0.75, "TP1 approach threshold", minval = 0.50, maxval = 0.95, step = 0.05, group = "Active Trade Health")
@@ -217,12 +221,15 @@ closedTradeThisBar = ta.change(strategy.closedtrades) > 0
 lastClosedTradeNumber = strategy.closedtrades - 1
 lastExitComment = strategy.closedtrades > 0 ? strategy.closedtrades.exit_comment(lastClosedTradeNumber) : ""
 stopClosedThisBar = closedTradeThisBar and lastExitComment == "SL"
+failureClosedThisBar = closedTradeThisBar and lastExitComment == "1M FAIL FLIP"
 
 // Confirmed trend engine.
 var int lastTrendBar = na
 trendCooldownOK = na(lastTrendBar) or bar_index - lastTrendBar > cooldownBars
 oneHourChart = timeframe.in_seconds() == 3600
 oneHourPrecisionActive = enableOneHourPrecision and oneHourChart
+oneMinuteChart = timeframe.in_seconds() == 60
+oneMinuteRecoveryActive = enableOneMinuteRecoveryFlip and oneMinuteChart
 signalBody = math.max(math.abs(close - open), syminfo.mintick)
 signalLowerWick = math.min(open, close) - low
 signalUpperWick = high - math.max(open, close)
@@ -233,8 +240,8 @@ oneHourLongRetest = oneHourLongBias and low <= fastEMA + atrValue * precisionPul
 oneHourShortRetest = oneHourShortBias and high >= fastEMA - atrValue * precisionPullbackBufferATR and close < fastEMA and close < slowEMA and close < open and signalUpperWick / signalBody >= 0.35 and fastEMA - close <= atrValue * precisionMaxEntryDistanceATR and rsiValue <= 48 and rsiValue >= 32 and signalRange <= atrValue * 1.50
 standardTrendLongSignal = fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp and metalSyncLongOK
 standardTrendShortSignal = fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown and metalSyncShortOK
-trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourLongRetest : standardTrendLongSignal)
-trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourShortRetest : standardTrendShortSignal)
+trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourLongRetest : standardTrendLongSignal)
+trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourShortRetest : standardTrendShortSignal)
 
 // Reversal scout engine. It automatically stays inactive when the chart timeframe
 // is not below the confirmation timeframe, while the trend engine keeps working.
@@ -276,8 +283,8 @@ rsiRecentHigh = ta.highest(rsiValue, 4)
 sweptLow = not na(priorSwingLow) and low < priorSwingLow and close > priorSwingLow
 sweptHigh = not na(priorSwingHigh) and high > priorSwingHigh and close < priorSwingHigh
 
-longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1] and metalSyncLongOK
-shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1] and metalSyncShortOK
+longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1] and metalSyncLongOK
+shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1] and metalSyncShortOK
 
 // Bad Entry Guard. These are warnings, never entry signals. They highlight the
 // two common mistakes shown in the sample: fading a protected trend pullback
@@ -357,6 +364,7 @@ var float reentryEntry = na
 var float reentryStop = na
 var float reentryTarget = na
 var int reentryPendingBar = na
+var int reentryForcedDirection = 0
 
 // Label handles make each projected plan self-cleaning. The old Entry / TP / SL
 // map is deleted before a replacement plan and immediately after a full exit.
@@ -396,6 +404,7 @@ if volatilityShock
         reentryStop := na
         reentryTarget := na
         reentryPendingBar := na
+        reentryForcedDirection := 0
         plannedEntry := na
         plannedStop := na
         plannedTarget1 := na
@@ -457,6 +466,7 @@ if primarySetupStarted
     reentryStop := na
     reentryTarget := na
     reentryPendingBar := na
+    reentryForcedDirection := 0
 
 // Confirmed trend entries take priority and cancel any unfilled reversal trigger.
 if trendLongSetup
@@ -749,7 +759,7 @@ tp1FailureWarning = longTP1FailureWarning or shortTP1FailureWarning
 if tp1FailureWarning
     tp1FailureWarned := true
     tp1ApproachArmed := false
-    label.new(bar_index, longTP1FailureWarning ? high : low, "TP1 FAILED · POSSIBLE REVERSE\nMOMENTUM BACK TOWARD SL", style = longTP1FailureWarning ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 4), textcolor = color.black, size = size.small)
+    label.new(bar_index, longTP1FailureWarning ? high : low, oneMinuteRecoveryActive ? "TP1 FAILED · FLIP WATCH\nWAIT FOR OPPOSITE CLOSE" : "TP1 FAILED · POSSIBLE REVERSE\nMOMENTUM BACK TOWARD SL", style = longTP1FailureWarning ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 4), textcolor = color.black, size = size.small)
 
 longHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size > 0 and not halfStopWarned and low <= plannedEntry - activePlanRisk * halfStopPercent and low > plannedStop
 shortHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size < 0 and not halfStopWarned and high >= plannedEntry + activePlanRisk * halfStopPercent and high < plannedStop
@@ -757,7 +767,27 @@ halfToSLWarning = longHalfToSLWarning or shortHalfToSLWarning
 
 if halfToSLWarning
     halfStopWarned := true
-    label.new(bar_index, longHalfToSLWarning ? low : high, "½ TO SL\nRISK DISTANCE CONSUMED", style = longHalfToSLWarning ? label.style_label_up : label.style_label_down, color = color.new(color.red, 4), textcolor = color.white, size = size.small)
+    label.new(bar_index, longHalfToSLWarning ? low : high, oneMinuteRecoveryActive ? "½ TO SL · FLIP WATCH\nWAIT FOR OPPOSITE CLOSE" : "½ TO SL\nRISK DISTANCE CONSUMED", style = longHalfToSLWarning ? label.style_label_up : label.style_label_down, color = color.new(color.red, 4), textcolor = color.white, size = size.small)
+
+// On the 1-minute chart, half-to-SL or a failed TP1 only arms the recovery
+// logic. The active trade is closed only after a completed candle confirms an
+// opposite break through the 20 EMA and the previous candle, with RSI and the
+// other metal agreeing. The fresh P3 bracket is calculated after one more close.
+oneMinuteFailureContext = oneMinuteRecoveryActive and validActivePlan and not tp1Reached and (halfStopWarned or tp1FailureWarned)
+oneMinuteFlipShortConfirmed = oneMinuteFailureContext and decisionBarReady and strategy.position_size > 0 and not shockPauseActive and close < plannedEntry and close < fastEMA and fastEMA < fastEMA[1] and close < low[1] and close < open and rsiValue <= oneMinuteFlipRSI and metalSyncShortOK
+oneMinuteFlipLongConfirmed = oneMinuteFailureContext and decisionBarReady and strategy.position_size < 0 and not shockPauseActive and close > plannedEntry and close > fastEMA and fastEMA > fastEMA[1] and close > high[1] and close > open and rsiValue >= 100.0 - oneMinuteFlipRSI and metalSyncLongOK
+
+if oneMinuteFlipShortConfirmed
+    reentryForcedDirection := -1
+    strategy.close_all(comment = "1M FAIL FLIP")
+    if showPriorityMarks
+        label.new(bar_index, high, "EXIT BUY\nSELL FLIP SCAN", style = label.style_label_down, color = color.new(color.red, 4), textcolor = color.white, size = size.small)
+
+if oneMinuteFlipLongConfirmed
+    reentryForcedDirection := 1
+    strategy.close_all(comment = "1M FAIL FLIP")
+    if showPriorityMarks
+        label.new(bar_index, low, "EXIT SELL\nBUY FLIP SCAN", style = label.style_label_up, color = color.new(color.lime, 4), textcolor = color.black, size = size.small)
 
 if not showTradeHealth
     tp1ApproachArmed := false
@@ -792,19 +822,27 @@ if positionJustClosed
     tp1FailureWarned := false
     halfStopWarned := false
 
-// Detect whether the broker emulator closed the latest trade at TP or SL.
-// A non-re-entry SL starts one direction-neutral reset scan. The script does
-// not assume the stopped direction is still correct.
+// Detect whether the broker emulator closed the latest trade at TP, SL or a
+// confirmed 1m failure exit. On 1m, every stop can start another smaller reset
+// scan; the strategy-wide daily-loss lock remains the final circuit breaker.
+recoveryEngineEnabled = enableReentry or oneMinuteRecoveryActive
 if closedTradeThisBar
     lastEntryId = strategy.closedtrades.entry_id(lastClosedTradeNumber)
     lastExitPrice = strategy.closedtrades.exit_price(lastClosedTradeNumber)
     closedCountThisBar = int(ta.change(strategy.closedtrades))
     float stoppedQtyThisBar = 0.0
+    float exitedQtyThisBar = 0.0
+    bool forcedFlipExit = false
     for closedOffset = 0 to closedCountThisBar - 1
         closedIndex = strategy.closedtrades - 1 - closedOffset
-        if strategy.closedtrades.exit_comment(closedIndex) == "SL"
+        closedComment = strategy.closedtrades.exit_comment(closedIndex)
+        exitedQtyThisBar += math.abs(strategy.closedtrades.size(closedIndex))
+        if closedComment == "SL"
             stoppedQtyThisBar += math.abs(strategy.closedtrades.size(closedIndex))
+        if closedComment == "1M FAIL FLIP"
+            forcedFlipExit := true
     stopHitThisBar = stoppedQtyThisBar > 0
+    recoveryExitThisBar = stopHitThisBar or forcedFlipExit
     closedWasReentry = str.contains(lastEntryId, "REENTRY")
     closedWasLong = str.contains(lastEntryId, "LONG")
     if strategy.position_size == 0
@@ -832,20 +870,24 @@ if closedTradeThisBar
         tp1Reached := false
         tp1FailureWarned := false
         halfStopWarned := false
-    if enableReentry and stopHitThisBar and strategy.position_size == 0 and not closedWasReentry and not shockPauseActive
+    if recoveryEngineEnabled and recoveryExitThisBar and strategy.position_size == 0 and (not closedWasReentry or oneMinuteRecoveryActive) and not shockPauseActive
         strategy.cancel("REENTRY LONG")
         strategy.cancel("REENTRY SHORT")
         reentryArmed := true
         reentryDirection := 0
         reentrySLBar := bar_index
         reentryRecoveryPrice := lastExitPrice
-        reentryQty := math.max(stoppedQtyThisBar * reentrySizeMultiplier, syminfo.mincontract)
+        if not forcedFlipExit
+            reentryForcedDirection := 0
+        recoveryQtySource = forcedFlipExit ? exitedQtyThisBar : stoppedQtyThisBar
+        reentryQty := math.max(recoveryQtySource * reentrySizeMultiplier, syminfo.mincontract)
         reentryEntry := na
         reentryStop := na
         reentryTarget := na
         reentryPendingBar := na
         if showPriorityMarks
-            label.new(bar_index, lastExitPrice, simpleChartMode ? "STOP HIT\nWAIT 1 CLOSE" : "SL HIT · PLAN CLEARED\nWAIT NEXT CLOSE · P3 SCAN", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.purple, 18), textcolor = color.white, size = size.tiny)
+            recoveryLabel = forcedFlipExit ? "FAIL EXIT\nWAIT 1 CLOSE" : oneMinuteRecoveryActive ? "STOP HIT\n1M RESET AFTER 1 CLOSE" : simpleChartMode ? "STOP HIT\nWAIT 1 CLOSE" : "SL HIT · PLAN CLEARED\nWAIT NEXT CLOSE · P3 SCAN"
+            label.new(bar_index, lastExitPrice, recoveryLabel, style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.purple, 18), textcolor = color.white, size = size.tiny)
     else
         reentryArmed := false
         reentryDirection := 0
@@ -856,16 +898,17 @@ if closedTradeThisBar
         reentryStop := na
         reentryTarget := na
         reentryPendingBar := na
+        reentryForcedDirection := 0
         if showPriorityMarks and closedWasReentry and stopHitThisBar
             label.new(bar_index, lastExitPrice, simpleChartMode ? "STOP HIT\nP3 ENDED" : "RE-ENTRY SL\nSTOP THIS SETUP", style = closedWasLong ? label.style_label_up : label.style_label_down, color = color.new(color.red, 12), textcolor = color.white, size = size.tiny)
 
 // After the wait, every completed chart candle is re-evaluated during the scan
 // window. The first fully aligned direction may be opposite the stopped trade.
-reentryScanActive = enableReentry and reentryArmed and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar <= reentryScanBars
+reentryScanActive = recoveryEngineEnabled and reentryArmed and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar <= reentryScanBars
 reentryWaitComplete = reentryScanActive and decisionBarReady and not shockPauseActive and bar_index - reentrySLBar >= reentryWaitBars
-reentryLongCandidate = reentryWaitComplete and higherTrendUp and close > reentryRecoveryPrice and close > close[1] and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 52 and close > open and metalSyncLongOK and not rawAvoidLong and not rawNoChaseLong
-reentryShortCandidate = reentryWaitComplete and not reentryLongCandidate and higherTrendDown and close < reentryRecoveryPrice and close < close[1] and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 48 and close < open and metalSyncShortOK and not rawAvoidShort and not rawNoChaseShort
-reentryScanExpired = enableReentry and reentryArmed and decisionBarReady and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar > reentryScanBars
+reentryLongCandidate = reentryWaitComplete and (reentryForcedDirection == 0 or reentryForcedDirection == 1) and higherTrendUp and close > reentryRecoveryPrice and close > close[1] and close > fastEMA and fastEMA > fastEMA[1] and rsiValue > 52 and close > open and metalSyncLongOK and not rawAvoidLong and not rawNoChaseLong
+reentryShortCandidate = reentryWaitComplete and not reentryLongCandidate and (reentryForcedDirection == 0 or reentryForcedDirection == -1) and higherTrendDown and close < reentryRecoveryPrice and close < close[1] and close < fastEMA and fastEMA < fastEMA[1] and rsiValue < 48 and close < open and metalSyncShortOK and not rawAvoidShort and not rawNoChaseShort
+reentryScanExpired = recoveryEngineEnabled and reentryArmed and decisionBarReady and strategy.position_size == 0 and not na(reentrySLBar) and bar_index - reentrySLBar > reentryScanBars
 
 if reentryScanExpired
     reentryArmed := false
@@ -873,6 +916,7 @@ if reentryScanExpired
     reentrySLBar := na
     reentryRecoveryPrice := na
     reentryQty := na
+    reentryForcedDirection := 0
     if showPriorityMarks and not simpleChartMode
         label.new(bar_index, close, "P3 RESET EXPIRED\nNO RE-ENTRY", style = label.style_label_left, color = color.new(color.gray, 28), textcolor = color.white, size = size.tiny)
 
@@ -880,7 +924,7 @@ if reentryLongCandidate
     reentryArmed := false
     reentryDirection := 1
     reentryEntry := high + syminfo.mintick
-    reentryStop := math.min(low, recentStructureLow) - syminfo.mintick * 2
+    reentryStop := oneMinuteRecoveryActive ? low - atrValue * oneMinuteFlipStopBufferATR : math.min(low, recentStructureLow) - syminfo.mintick * 2
     reentryRisk = reentryEntry - reentryStop
     reentryTarget := reentryEntry + reentryRisk * rewardRisk
     reentryPendingBar := bar_index
@@ -897,17 +941,17 @@ if reentryLongCandidate
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, reentryEntry, simpleChartMode ? "WAIT · P3 BUY\nTRIGGER" : "P3 RESET BUY\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, reentryEntry, oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "WAIT · 1M FLIP BUY\nTRIGGER" : simpleChartMode ? "WAIT · P3 BUY\nTRIGGER" : "P3 RESET BUY\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        planStopLabel := label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planStopLabel := label.new(bar_index, reentryStop, oneMinuteRecoveryActive ? "NEW SL" : "RE-SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if reentryShortCandidate
     reentryArmed := false
     reentryDirection := -1
     reentryEntry := low - syminfo.mintick
-    reentryStop := math.max(high, recentStructureHigh) + syminfo.mintick * 2
+    reentryStop := oneMinuteRecoveryActive ? high + atrValue * oneMinuteFlipStopBufferATR : math.max(high, recentStructureHigh) + syminfo.mintick * 2
     reentryRisk = reentryStop - reentryEntry
     reentryTarget := reentryEntry - reentryRisk * rewardRisk
     reentryPendingBar := bar_index
@@ -924,11 +968,11 @@ if reentryShortCandidate
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, reentryEntry, simpleChartMode ? "WAIT · P3 SELL\nTRIGGER" : "P3 RESET SELL\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_down, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+        planEntryLabel := label.new(bar_index, reentryEntry, oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "WAIT · 1M FLIP SELL\nTRIGGER" : simpleChartMode ? "WAIT · P3 SELL\nTRIGGER" : "P3 RESET SELL\nWAIT TRIGGER · " + str.tostring(reentrySizeMultiplier, "#.##") + "x STOPPED SIZE", style = label.style_label_down, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, reentryTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
-        planStopLabel := label.new(bar_index, reentryStop, "RE-SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+        planStopLabel := label.new(bar_index, reentryStop, oneMinuteRecoveryActive ? "NEW SL" : "RE-SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
 
 if not na(reentryPendingBar) and strategy.position_size == 0
     if bar_index - reentryPendingBar <= reentryExpiryBars and reentryQty > 0
@@ -939,13 +983,15 @@ if not na(reentryPendingBar) and strategy.position_size == 0
     else
         strategy.cancel("REENTRY LONG")
         strategy.cancel("REENTRY SHORT")
-        resumeResetScan = enableReentry and not shockPauseActive and not na(reentrySLBar) and bar_index - reentrySLBar <= reentryScanBars
+        resumeResetScan = recoveryEngineEnabled and not shockPauseActive and not na(reentrySLBar) and bar_index - reentrySLBar <= reentryScanBars
         reentryArmed := resumeResetScan
         reentryDirection := 0
         reentryEntry := na
         reentryStop := na
         reentryTarget := na
         reentryPendingBar := na
+        if not resumeResetScan
+            reentryForcedDirection := 0
         plannedEntry := na
         plannedStop := na
         plannedTarget1 := na
@@ -1022,8 +1068,10 @@ plotshape(showPriorityMarks and reversalLongConfirmed, title = "P2 CONFIRMED REV
 plotshape(showPriorityMarks and reversalShortConfirmed, title = "P2 CONFIRMED REVERSAL SELL", text = "SELL\nP2", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
 plotshape(showPriorityMarks and not simpleChartMode and reentryLongCandidate, title = "P3 RESET WATCH BUY", text = "P3 RESET BUY\nWAIT TRIGGER", style = shape.labelup, location = location.belowbar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
 plotshape(showPriorityMarks and not simpleChartMode and reentryShortCandidate, title = "P3 RESET WATCH SELL", text = "P3 RESET SELL\nWAIT TRIGGER", style = shape.labeldown, location = location.abovebar, color = color.new(color.purple, 20), textcolor = color.white, size = size.tiny)
-plotshape(showPriorityMarks and reentryLongConfirmed, title = "P3 CONFIRMED RESET BUY", text = "BUY\nP3", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
-plotshape(showPriorityMarks and reentryShortConfirmed, title = "P3 CONFIRMED RESET SELL", text = "SELL\nP3", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(showPriorityMarks and reentryLongConfirmed and not (oneMinuteRecoveryActive and reentryForcedDirection == 1), title = "P3 CONFIRMED RESET BUY", text = "BUY\nP3", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and reentryShortConfirmed and not (oneMinuteRecoveryActive and reentryForcedDirection == -1), title = "P3 CONFIRMED RESET SELL", text = "SELL\nP3", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
+plotshape(showPriorityMarks and reentryLongConfirmed and oneMinuteRecoveryActive and reentryForcedDirection == 1, title = "1M CONFIRMED FAILURE FLIP BUY", text = "BUY\n1M FLIP", style = shape.labelup, location = location.belowbar, color = color.lime, textcolor = color.black, size = size.small)
+plotshape(showPriorityMarks and reentryShortConfirmed and oneMinuteRecoveryActive and reentryForcedDirection == -1, title = "1M CONFIRMED FAILURE FLIP SELL", text = "SELL\n1M FLIP", style = shape.labeldown, location = location.abovebar, color = color.red, textcolor = color.white, size = size.small)
 plotshape(volatilityShock, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
 plotshape(not simpleChartMode and shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
 plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
@@ -1040,7 +1088,7 @@ minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
 countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
-priorityText = shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? "P3 RESET BUY WATCH" : reentryShortCandidate ? "P3 RESET SELL WATCH" : reentryArmed ? "P3 RESET SCANNING" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
+priorityText = shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED" : "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED" : "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED" : "P3 RESET BUY WATCH" : reentryShortCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED" : "P3 RESET SELL WATCH" : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY SCANNING" : oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL SCANNING" : "P3 RESET SCANNING" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
 priorityColor = shockPauseActive ? color.new(color.fuchsia, 58) : trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
 entryGuardText = avoidShort ? "AVOID SHORT" : avoidLong ? "AVOID LONG" : noChaseLong ? "NO CHASE LONG" : noChaseShort ? "NO CHASE SHORT" : "CLEAR"
 entryGuardColor = avoidShort ? color.new(color.orange, 58) : avoidLong ? color.new(color.red, 58) : noChaseLong or noChaseShort ? color.new(color.yellow, 64) : color.new(color.lime, 82)
@@ -1050,20 +1098,22 @@ shockStatusColor = shockPauseActive ? color.new(color.fuchsia, 58) : shockReset 
 metalSyncText = metalsBullishSync ? "GOOD · BULLISH" : metalsBearishSync ? "GOOD · BEARISH" : "NOT SYNCED · WAIT"
 metalSyncColor = metalsBullishSync ? color.new(color.lime, 64) : metalsBearishSync ? color.new(color.red, 58) : color.new(color.orange, 62)
 metalSyncTextColor = metalsBullishSync ? color.black : color.white
-tradeHealthText = strategy.position_size == 0 ? "NO ACTIVE TRADE" : tp1FailureWarned ? "TP1 FAILED · REVERSE RISK" : halfStopWarned ? "HALF TO SL" : tp1Reached ? "TP1 REACHED" : tp1ApproachArmed ? "TP1 APPROACHED" : "NORMAL"
+tradeHealthText = strategy.position_size == 0 ? "NO ACTIVE TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED · REVERSE RISK" : halfStopWarned ? "HALF TO SL" : tp1Reached ? "TP1 REACHED" : tp1ApproachArmed ? "TP1 APPROACHED" : "NORMAL"
 tradeHealthColor = strategy.position_size == 0 ? color.new(color.gray, 82) : tp1FailureWarned ? color.new(color.orange, 52) : halfStopWarned ? color.new(color.red, 54) : tp1Reached ? color.new(color.lime, 62) : tp1ApproachArmed ? color.new(color.yellow, 60) : color.new(color.aqua, 82)
 tradeHealthTextColor = tp1ApproachArmed and not tp1FailureWarned and not halfStopWarned ? color.black : color.white
 buySignalNow = trendLongSetup or reversalLongConfirmed or reentryLongConfirmed
 sellSignalNow = trendShortSetup or reversalShortConfirmed or reentryShortConfirmed
 activeEntryId = strategy.opentrades > 0 ? strategy.opentrades.entry_id(0) : ""
-activeSignalText = str.contains(activeEntryId, "TREND") ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : str.contains(activeEntryId, "REENTRY") ? "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
+activeSignalText = str.contains(activeEntryId, "TREND") ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : str.contains(activeEntryId, "REENTRY") ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? "1M AUTO FLIP" : "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
 simpleActionText = buySignalNow ? "BUY SIGNAL" : sellSignalNow ? "SELL SIGNAL" : strategy.position_size > 0 ? "LONG ACTIVE" : strategy.position_size < 0 ? "SHORT ACTIVE" : shockPauseActive ? "NO TRADE" : "WAIT"
 simpleActionColor = buySignalNow ? color.new(color.lime, 44) : sellSignalNow ? color.new(color.red, 42) : strategy.position_size != 0 ? color.new(color.aqua, 68) : shockPauseActive ? color.new(color.fuchsia, 48) : color.new(color.orange, 68)
-simpleSignalText = trendLongSetup or trendShortSetup ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · FORMING") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · FORMING") : "NONE · KEEP WAITING"
+simpleSignalText = trendLongSetup or trendShortSetup ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY" : "1M FLIP SELL") : "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY · ARMED" : "1M FLIP SELL · ARMED") : (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryForcedDirection == 1 ? "1M FLIP BUY · SCAN" : "1M FLIP SELL · SCAN") : "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · FORMING") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · FORMING") : "NONE · KEEP WAITING"
 simpleSignalColor = buySignalNow ? color.new(color.lime, 60) : sellSignalNow ? color.new(color.red, 56) : strategy.position_size != 0 ? color.new(color.aqua, 76) : not na(reentryPendingBar) or reentryArmed ? color.new(color.purple, 68) : not na(pendingLongBar) or not na(pendingShortBar) or p1LongForming or p1ShortForming ? color.new(color.yellow, 68) : color.new(color.gray, 82)
 simpleMetalText = metalsBullishSync ? "BULLISH" : metalsBearishSync ? "BEARISH" : "WAIT · NOT SYNCED"
-simpleRiskText = shockPauseActive ? "HIGH · NO NEW TRADE" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
+simpleRiskText = shockPauseActive ? "HIGH · NO NEW TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
 simpleRiskColor = shockPauseActive ? color.new(color.fuchsia, 48) : tp1FailureWarned ? color.new(color.orange, 48) : halfStopWarned ? color.new(color.red, 48) : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? color.new(color.orange, 62) : color.new(color.lime, 78)
+oneMinuteModeText = oneMinuteRecoveryActive ? "ON · AUTO SL/TP + FLIP" : oneMinuteChart ? "OFF IN SETTINGS" : "OFF · USE 1m CHART"
+oneMinuteModeColor = oneMinuteRecoveryActive ? color.new(color.lime, 72) : color.new(color.gray, 82)
 
 if barstate.islast
     table.clear(syncPanel, 0, 0, 1, 7)
@@ -1079,6 +1129,8 @@ if barstate.islast
             table.cell(syncPanel, 1, 3, simpleMetalText, bgcolor = metalSyncColor, text_color = metalSyncTextColor, text_size = size.tiny)
             table.cell(syncPanel, 0, 4, "RISK", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 4, simpleRiskText, bgcolor = simpleRiskColor, text_color = color.white, text_size = size.tiny)
+            table.cell(syncPanel, 0, 5, "1M RECOVERY", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
+            table.cell(syncPanel, 1, 5, oneMinuteModeText, bgcolor = oneMinuteModeColor, text_color = color.white, text_size = size.tiny)
         else
             table.cell(syncPanel, 0, 0, "CHART", bgcolor = color.new(color.black, 12), text_color = color.silver, text_size = size.tiny)
             table.cell(syncPanel, 1, 0, timeframe.period, bgcolor = color.new(color.aqua, 82), text_color = color.white, text_size = size.tiny)
@@ -1109,10 +1161,12 @@ sendAurumAlert(longWatch, "WATCH ONLY: possible long reversal; wait for trigger"
 sendAurumAlert(shortWatch, "WATCH ONLY: possible short reversal; wait for trigger")
 sendAurumAlert(reversalLongConfirmed, "P2 CONFIRMED: reversal long trigger filled")
 sendAurumAlert(reversalShortConfirmed, "P2 CONFIRMED: reversal short trigger filled")
-sendAurumAlert(reentryLongCandidate, "P3 RESET WATCH: fresh BUY direction qualified; wait for trigger")
-sendAurumAlert(reentryShortCandidate, "P3 RESET WATCH: fresh SELL direction qualified; wait for trigger")
-sendAurumAlert(reentryLongConfirmed, "P3 RESET CONFIRMED: BUY trigger filled")
-sendAurumAlert(reentryShortConfirmed, "P3 RESET CONFIRMED: SELL trigger filled")
+sendAurumAlert(oneMinuteFlipShortConfirmed, "1M FAILURE CONFIRMED: exit BUY; scan for fresh SELL with new SL and TP1/TP2/TP3")
+sendAurumAlert(oneMinuteFlipLongConfirmed, "1M FAILURE CONFIRMED: exit SELL; scan for fresh BUY with new SL and TP1/TP2/TP3")
+sendAurumAlert(reentryLongCandidate, oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED: wait for yellow trigger; fresh SL and TP1/TP2/TP3 projected" : "P3 RESET WATCH: fresh BUY direction qualified; wait for trigger")
+sendAurumAlert(reentryShortCandidate, oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED: wait for yellow trigger; fresh SL and TP1/TP2/TP3 projected" : "P3 RESET WATCH: fresh SELL direction qualified; wait for trigger")
+sendAurumAlert(reentryLongConfirmed, oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED: trigger filled with automatic SL and TP1/TP2/TP3" : "P3 RESET CONFIRMED: BUY trigger filled")
+sendAurumAlert(reentryShortConfirmed, oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED: trigger filled with automatic SL and TP1/TP2/TP3" : "P3 RESET CONFIRMED: SELL trigger filled")
 sendAurumAlert(reentryScanExpired, "P3 RESET EXPIRED: no qualified post-SL entry")
 sendAurumAlert(tp1FailureWarning, "TRADE HEALTH: TP1 approached but failed; possible reversal and increased SL risk")
 sendAurumAlert(halfToSLWarning, "TRADE HEALTH: price consumed half of the Entry-to-SL risk distance")
@@ -1241,6 +1295,7 @@ export default function Home() {
                   <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
                   <Badge variant="outline" className="border-lime-300/25 text-lime-200">SIMPLE MODE DEFAULT</Badge>
                   <Badge variant="outline" className="border-cyan-300/25 text-cyan-200">1H PRECISION ENTRY</Badge>
+                  <Badge variant="outline" className="border-purple-300/25 text-purple-200">1M AUTO RECOVERY</Badge>
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">TP1 / TP2 / TP3 + SL</Badge>
                   <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
@@ -1248,7 +1303,7 @@ export default function Home() {
                   <Badge variant="outline" className="border-red-300/25 text-red-200">SMART TRADE HEALTH</Badge>
                 </div>
                 <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and checks both metals</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while the entry, shock and active-trade guards monitor risk before and after entry.</p>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while 1-minute recovery mode can rebuild a smaller SL/TP plan after a confirmed failure or stop.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -1283,11 +1338,12 @@ export default function Home() {
                     <span className="rounded-lg border border-orange-300/20 bg-orange-300/10 px-3 py-2 text-orange-200">WAIT · NO ENTRY</span>
                   </div>
                 </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   {[
                     ['P1 · 1H RETEST', 'WAIT RETEST means the daily and 1H trends agree. BUY/SELL appears only after price pulls back near the 20 EMA and a 1H rejection candle confirms.', 'border-cyan-300/20 text-cyan-200'],
                     ['P2 · REVERSAL', 'ARMED means a liquidity-sweep reversal passed its first check. Keep waiting until price crosses the yellow trigger and BUY/SELL P2 appears.', 'border-emerald-300/20 text-emerald-200'],
                     ['P3 · RESET', 'SCANNING or ARMED means the post-stop reset is searching. It becomes actionable only when BUY/SELL P3 appears after its trigger.', 'border-purple-300/20 text-purple-200'],
+                    ['1M · FAILURE FLIP', 'FLIP WATCH is only a warning. BUY/SELL 1M FLIP appears after an opposite candle closes, the old trade exits, one candle passes and the fresh trigger fills.', 'border-red-300/20 text-red-200'],
                   ].map(([label, description, color]) => (
                     <div key={label} className={`rounded-lg border bg-black/15 p-3 ${color}`}>
                       <p className="text-[10px] font-bold tracking-[.05em]">{label}</p>
@@ -1337,7 +1393,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">On the candle, the only entry marks are green BUY P1/P2/P3 or red SELL P1/P2/P3. Liquidity lines and optional HH/HL/LH/LL labels are context only.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">On the candle, the only entry marks are green BUY P1/P2/P3/1M FLIP or red SELL P1/P2/P3/1M FLIP. Liquidity lines and optional HH/HL/LH/LL labels are context only.</p>
                 </div>
 
                 <div>
@@ -1603,11 +1659,12 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-cyan-100">Timeframe-synced updates</p>
-                    <p className="mt-1 max-w-2xl text-[10px] leading-4 text-muted-foreground">The selected TradingView chart controls the decision clock. On your 1H chart, a setup can confirm only after the hourly candle closes. The live panel counts down to that next confirmed check.</p>
+                    <p className="mt-1 max-w-2xl text-[10px] leading-4 text-muted-foreground">The selected TradingView chart controls the decision clock. A 1H setup confirms on the hourly close; 1-minute recovery checks run only when the chart is exactly 1m and confirm on each completed minute.</p>
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold">
                   <span className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-cyan-100">1H → hourly close</span>
+                  <span className="rounded-md border border-purple-300/20 bg-purple-300/10 px-2 py-1 text-purple-100">1m → recovery close</span>
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">Daily trend filter</span>
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">No intrabar entry</span>
                 </div>
@@ -1631,11 +1688,29 @@ export default function Home() {
                 <p className="mt-3 border-t border-cyan-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The stop is projected beyond the rejection candle with a 0.10 ATR buffer. This avoids placing it inside that signal candle, but it can make the stop distance—and therefore dollar risk—larger. Reduce position size accordingly and test it on paper first.</p>
               </div>
 
+              <div className="mb-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-semibold text-red-100">1m automatic failure recovery</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Every confirmed 1-minute entry receives a red SL and green TP1–TP3 bracket. Before TP1, reaching 50% of the Entry-to-SL distance or failing after a near-TP1 move changes the panel to FLIP WATCH. It does not reverse immediately. The current BUY closes only after a bearish 1m candle breaks the 20 EMA and prior low with bearish RSI and Gold/Silver agreement; SELL uses the mirrored bullish rules.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                    {['½ SL or TP1 fail', 'FLIP WATCH', 'Opposite close', 'Exit old trade', 'Wait 1 close', 'Fresh trigger + SL/TP'].map((step, index) => (
+                      <div key={step} className="flex items-center gap-1.5">
+                        {index > 0 && <span className="text-red-300/60">→</span>}
+                        <span className="rounded-md border border-red-300/15 bg-black/15 px-2 py-1.5 text-red-100">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-3 border-t border-red-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The replacement order uses 0.50× of the exited quantity by default, puts a new SL beyond its confirmation candle plus 0.10 ATR, and rebuilds TP1 = 1R, TP2 = 1.5R and TP3 = 2.14R. After an actual SL on 1m, the same reset process may run again; the 2% strategy daily-loss lock is the final stop.</p>
+              </div>
+
               <div className="mb-4 rounded-xl border border-purple-300/20 bg-purple-300/[.045] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
                     <p className="text-xs font-semibold text-purple-100">P3 post-SL direction reset</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">After an SL, the old Entry / TP / SL plan is removed immediately. The script then waits one completed chart candle and rescans every candle close for up to 12 bars. It no longer assumes the old direction: a stopped SELL can become a fresh RESET BUY when price rises through the stopped level and trend, RSI, entry guard, higher timeframe, and Gold/Silver sync all agree. The first qualified side gets one smaller 0.50×-stopped-quantity trigger.</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">After an SL, the old Entry / TP / SL plan is removed immediately. The script waits one completed candle and rescans for up to 12 bars. A stopped BUY may become a fresh SELL, or return as a BUY, only when price, trend, RSI, entry guard, higher timeframe and Gold/Silver sync agree. On 1m, another stopped reset may start a new smaller scan instead of ending the sequence.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
                     {['SL hit', 'Wait 1 close', 'Scan each close', 'Direction resets', 'P3 trigger', 'TP1 / TP2 / TP3 + SL'].map((step, index) => (
@@ -1646,7 +1721,7 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <p className="mt-3 border-t border-purple-300/10 pt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-purple-200">Why the reset?</span> An SL invalidates the old setup; it is not an instruction to revenge-trade. The scanner can choose either direction, retries an expired unfilled trigger while the 12-bar window remains, and stops completely after one reset trade or when the scan expires. Change the wait, scan window, trigger expiry, and size under Settings → Controlled re-entry.</p>
+                <p className="mt-3 border-t border-purple-300/10 pt-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-purple-200">Why the reset?</span> An SL invalidates the old setup; it is not an instruction to revenge-trade. The scanner chooses only a newly confirmed direction and retries an expired unfilled trigger while the 12-bar window remains. Outside 1m it stops after one reset trade; on 1m the recovery engine can restart after another SL, subject to the daily-loss lock.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[.045] p-4">
@@ -1674,7 +1749,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
                     <p className="text-xs font-semibold text-orange-100">Smart TP1 failure + halfway-to-stop warnings</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The strategy arms a TP1-failure check only after price travels 75% of the way to TP1 without touching it. A warning appears only if a completed candle gives the move back to 35% or less and confirms adverse price, EMA or RSI momentum. A separate ½ TO SL mark appears when the wick consumes 50% of the Entry-to-SL risk distance.</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The strategy arms a TP1-failure check only after price travels 75% of the way to TP1 without touching it. A separate ½ TO SL mark appears when price consumes 50% of the original risk. On 1m these become FLIP WATCH context; the old position changes direction only after the stricter opposite-close confirmation.</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
                     <span className="rounded-md border border-yellow-300/20 bg-black/15 px-2 py-1.5 text-yellow-200">TP1 approached</span>
@@ -1682,7 +1757,7 @@ export default function Home() {
                     <span className="rounded-md border border-red-300/20 bg-black/15 px-2 py-1.5 text-red-200">Watch SL risk</span>
                   </div>
                 </div>
-                <p className="mt-3 border-t border-orange-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">Both thresholds are adjustable under Settings → Active Trade Health. They react after a candle closes and do not move the protective order, guarantee a reversal, or predict a stop-out.</p>
+                <p className="mt-3 border-t border-orange-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">Both thresholds are adjustable under Settings → Active Trade Health. On timeframes other than 1m they remain warnings only. A recovery flip is still conditional and can also stop out.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-lime-300/20 bg-lime-300/[.04] p-4">
@@ -1707,6 +1782,7 @@ export default function Home() {
                   ['Three-target plan', 'Yellow candidate entry, green TP1 at 1R, TP2 at 1.5R, TP3 at the final target, and one red SL.'],
                   ['Simple chart mode', 'Shows only confirmed BUY/SELL marks and serious safety warnings; detailed context labels stay hidden.'],
                   ['1H precision entry', 'Waits for daily alignment, a 1H pullback to the 20 EMA and a confirmed rejection instead of chasing the crossover.'],
+                  ['1m auto recovery', 'Arms at half-to-SL or failed TP1, confirms an opposite close, then rebuilds a smaller fresh SL/TP bracket.'],
                   ['Bad Entry Guard', 'Avoid counter-trend liquidity traps and ATR-extended chase entries.'],
                   ['Shock circuit breaker', 'Cancels pending ideas, pauses new setups and enforces a configurable strategy daily-loss lock.'],
                   ['Gold / Silver Sync', 'Requires both metals to agree on bullish or bearish direction before that side can enter.'],
@@ -1743,14 +1819,14 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor, select “Add to chart,” then use a 1-hour chart. Keep Settings → 1H Precision Entry enabled and Settings → Automatic chart map → Simple chart mode enabled. For signals plus TP/SL fills, choose Create Alert → Aurum Guard → “Order fills and alert() function calls.”</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor and select “Add to chart.” Use exactly 1m for automatic failure recovery, or 1H for the selective pullback entry. Keep Settings → 1m Auto Recovery and Simple chart mode enabled. For signals plus TP/SL fills, choose Create Alert → Aurum Guard → “Order fills and alert() function calls.”</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
                 </a>
               </div>
 
-              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Gold/Silver sync, shock and bad-entry warnings are reactive rule-based filters, not forecasts. They cannot prevent the first spike or guarantee fills at SL. New decisions wait for candle close; provider latency, spread, slippage and fast markets can still produce worse results. Entry, TP and SL remain conditional projections.</p>
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Gold/Silver sync, shock, failure flips and bad-entry warnings are reactive rules—not forecasts. “Automatic” means simulated strategy orders and alerts inside TradingView; it does not trade a separate broker account unless you deliberately connect supported execution. Fast markets can gap through SL, create slippage and stop the replacement trade too.</p>
             </CardContent>
           </Card>
         </section>
