@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   ArrowUpRight,
   Bot,
+  BookOpenCheck,
   Calculator,
   CandlestickChart,
   Check,
@@ -497,6 +498,71 @@ export default function Home() {
                 <a href="#pine-script" className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[.035] px-4 text-xs font-medium text-foreground transition hover:bg-white/[.07]">
                   View full script <ArrowUpRight className="size-3.5" />
                 </a>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section id="chart-guide" className="mb-4" aria-labelledby="chart-guide-heading">
+          <Card className="overflow-hidden border-cyan-300/15 bg-[linear-gradient(145deg,rgba(34,211,238,.055),rgba(18,22,27,.96)_42%)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle id="chart-guide-heading" className="flex items-center gap-2 text-lg"><BookOpenCheck className="size-5 text-cyan-300" /> How to read the chart</CardTitle>
+              <CardDescription>Use this order: trend first, structure second, trade plan last.</CardDescription>
+              <CardAction><Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">QUICK GUIDE</Badge></CardAction>
+            </CardHeader>
+            <CardContent className="grid gap-4 pt-4 xl:grid-cols-[1.15fr_.85fr]">
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Lines and zones</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    ['bg-cyan-300', 'Smooth cyan', 'Fast EMA · short-term direction'],
+                    ['bg-orange-300', 'Smooth orange', 'Slow EMA · broader trend'],
+                    ['bg-fuchsia-400', 'Stepped magenta', 'Buy-side liquidity · confirmed swing high'],
+                    ['bg-cyan-500', 'Stepped teal', 'Sell-side liquidity · confirmed swing low'],
+                    ['bg-yellow-300', 'Yellow', 'Candidate entry · wait for confirmation'],
+                    ['bg-emerald-400', 'Green', 'Possible take-profit and reward zone'],
+                    ['bg-red-400', 'Red', 'Possible stop-loss and risk zone'],
+                    ['bg-blue-500', 'Blue circles', 'TradingView selection handles · not signals'],
+                  ].map(([color, title, description]) => (
+                    <div key={title} className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[.025] p-3">
+                      <span className={`h-1 w-9 shrink-0 rounded-full ${color}`} />
+                      <div><p className="text-xs font-semibold">{title}</p><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{description}</p></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid content-start gap-4">
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Market structure</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      ['HH', 'Higher High', 'bg-emerald-400/12 text-emerald-200'],
+                      ['HL', 'Higher Low', 'bg-cyan-400/12 text-cyan-200'],
+                      ['LH', 'Lower High', 'bg-orange-400/12 text-orange-200'],
+                      ['LL', 'Lower Low', 'bg-red-400/12 text-red-200'],
+                    ].map(([code, meaning, color]) => (
+                      <div key={code} className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/[.025] p-3">
+                        <span className={`grid size-8 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${color}`}>{code}</span>
+                        <p className="text-[11px] font-medium">{meaning}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground"><span className="text-emerald-300">HH + HL repeating</span> supports bullish structure. <span className="text-red-300">LH + LL repeating</span> supports bearish structure. One label alone is not enough.</p>
+                </div>
+
+                <div className="rounded-xl border border-primary/15 bg-primary/[.035] p-4">
+                  <p className="text-xs font-semibold">Read every setup in three checks</p>
+                  <ol className="mt-2 space-y-2 text-[11px] leading-5 text-muted-foreground">
+                    <li><span className="mr-2 text-primary">1.</span>Cyan above orange and both rising favors longs; cyan below orange and both falling favors shorts.</li>
+                    <li><span className="mr-2 text-primary">2.</span>Confirm the structure sequence and note which liquidity line price is approaching or sweeping.</li>
+                    <li><span className="mr-2 text-primary">3.</span>Wait for yellow Entry plus green TP and red SL. If they are absent, there is no qualifying plan.</li>
+                  </ol>
+                </div>
+
+                <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] p-3 text-[10px] leading-4 text-muted-foreground">
+                  <p><span className="font-semibold text-amber-200">Important:</span> HH/HL/LH/LL and liquidity levels use confirmed pivots, so they appear after the swing is confirmed. Blue circles disappear when you click empty chart space or press Esc.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
