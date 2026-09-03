@@ -28,10 +28,13 @@ the EA's risk controls and it does not promise profit.
    walk-forward checks, then reports a newest-period research test. If the gate
    fails, the model is marked `FAILED RESEARCH GATE - SHADOW ONLY` and cannot
    approve an automated entry.
-5. Run `run_ai_gate.cmd`. It publishes one score after each completed M1 candle.
-6. Attach the latest Aurum Guard EA with `UseAIApprovalGate=true`,
+5. Run `backtest_ai.cmd` to reproduce a fixed-threshold expanding walk-forward
+   shadow backtest. It rejects regime drift, prevents overlapping positions and
+   counts an ambiguous same-candle TP/SL as an SL.
+6. Run `run_ai_gate.cmd`. It publishes one score after each completed M1 candle.
+7. Attach the latest Aurum Guard EA with `UseAIApprovalGate=true`,
    `AIShadowMode=true`, and `EnableNewEntries=false` first.
-7. Compare at least several weeks of shadow decisions with your demo feed.
+8. Compare at least several weeks of shadow decisions with your demo feed.
 
 Only after acceptable out-of-sample and forward-demo evidence should you set
 `AIShadowMode=false`. A model that is not marked deployment-eligible remains

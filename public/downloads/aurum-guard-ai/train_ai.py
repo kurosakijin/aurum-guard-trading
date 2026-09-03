@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
+from threadpoolctl import threadpool_limits
 
 from aurum_guard_ai_core import (
     AurumProbabilityModel,
@@ -112,7 +113,8 @@ def main() -> int:
         validation_start_bar = int(usable.iloc[validation_start]["bar_index"])
         train_end = int(np.searchsorted(usable["bar_index"].to_numpy(), validation_start_bar - args.horizon, side="right"))
         estimator = new_estimator(260900 + fold_number)
-        estimator.fit(x[:train_end], y[:train_end])
+        with threadpool_limits(limits=1):
+            estimator.fit(x[:train_end], y[:train_end])
         probability = estimator.predict_proba(x[validation_start:validation_end])[:, 1]
         y_fold = y[validation_start:validation_end]
         utility_fold = utility[validation_start:validation_end]
@@ -128,7 +130,8 @@ def main() -> int:
     fold_reports = [evaluate_threshold(y_fold, utility_fold, probability, threshold) for y_fold, utility_fold, probability in fold_slices]
 
     final_estimator = new_estimator(260904)
-    final_estimator.fit(x[:dev_end], y[:dev_end])
+    with threadpool_limits(limits=1):
+        final_estimator.fit(x[:dev_end], y[:dev_end])
     test_probability = final_estimator.predict_proba(x[test_start:])[:, 1]
     test_report = evaluate_threshold(y[test_start:], utility[test_start:], test_probability, threshold)
 

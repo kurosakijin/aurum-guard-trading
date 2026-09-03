@@ -1586,6 +1586,26 @@ export default function Home() {
                     ))}
                   </div>
                   <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Honest result: only 2 of 4 walk-forward fold means were positive, and the newest 583-candidate period produced no approvals at the conservative threshold—insufficient evidence. The model therefore marks itself <span className="font-semibold">FAILED RESEARCH GATE</span>. You can observe it in demo shadow mode, but it cannot approve strict automated entries. Forward evidence—not an “AI” label—must earn promotion.</p>
+                  <div className="mt-3 rounded-lg border border-red-300/20 bg-red-300/[.04] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] font-semibold text-red-100">AI expanding walk-forward shadow backtest</p>
+                      <Badge variant="outline" className="border-red-300/25 text-red-200">FAILED · PF 0.77</Badge>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
+                      {[
+                        ['26', 'Non-overlap trades'],
+                        ['42.3%', 'Win rate'],
+                        ['−3.85 ATR', 'Net after costs'],
+                        ['6.20 ATR', 'Max drawdown'],
+                      ].map(([value, label]) => (
+                        <div key={label} className="rounded-md border border-white/7 bg-black/15 p-2">
+                          <p className="font-heading text-sm font-semibold text-red-100">{value}</p>
+                          <p className="mt-0.5 text-muted-foreground">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[10px] leading-4 text-muted-foreground">June 17–September 4, 2026 · 74,353 synchronized M1 bars · fixed 70% threshold · 0.10 ATR estimated round-trip cost · 27 probability approvals and 1 regime-drift block. Two deterministic reruns matched exactly. This tests the AI shadow layer, not exact MT5 fills or the EA’s full retest execution.</p>
+                  </div>
                 </div>
 
                 <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
