@@ -1571,11 +1571,11 @@ export default function Home() {
                     <p className="flex items-center gap-2 text-xs font-semibold text-violet-100"><Sparkles className="size-3.5" /> AI approval—not an uncontrolled replacement</p>
                     <Badge variant="outline" className="border-amber-300/25 text-amber-200">SHADOW ONLY</Badge>
                   </div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The upgraded model no longer tries to predict every candle. First it requires a defended trend/pullback candidate; then nonlinear gradient boosting evaluates 33 causal Gold/Silver, candle, volatility, trend and session features. Four expanding walk-forward checks use a 15-bar gap, and the outcome score deducts an estimated 0.10 ATR round-trip cost. The EA remains the executor and every hard risk rule retains final authority.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The upgraded model no longer tries to predict every candle. First it requires a defended trend/pullback candidate; then nonlinear gradient boosting evaluates 33 causal Gold/Silver, candle, volatility, trend and session features. Four expanding walk-forward checks use a 15-bar gap, and the outcome score deducts an estimated 0.10 ATR round-trip cost. A live regime-drift lock also rejects a candidate when too many inputs leave the development range. The EA remains the executor and every hard risk rule retains final authority.</p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
                     {[
                       ['74,353', 'Synchronized M1 bars'],
-                      ['3,881', 'Defended candidates'],
+                      ['3,886', 'Defended candidates'],
                       ['4', 'Walk-forward folds'],
                       ['2 / 4', 'Positive fold means'],
                     ].map(([value, label]) => (
@@ -1585,7 +1585,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Honest result: only 2 of 4 walk-forward fold means were positive, and the newest 583-candidate period produced just one approval at the conservative threshold—far too little evidence. The model therefore marks itself <span className="font-semibold">FAILED RESEARCH GATE</span>. You can observe it in demo shadow mode, but it cannot approve strict automated entries. Forward evidence—not an “AI” label—must earn promotion.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Honest result: only 2 of 4 walk-forward fold means were positive, and the newest 583-candidate period produced no approvals at the conservative threshold—insufficient evidence. The model therefore marks itself <span className="font-semibold">FAILED RESEARCH GATE</span>. You can observe it in demo shadow mode, but it cannot approve strict automated entries. Forward evidence—not an “AI” label—must earn promotion.</p>
                 </div>
 
                 <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">

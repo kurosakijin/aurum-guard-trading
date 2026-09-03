@@ -74,7 +74,7 @@ def main() -> int:
                 latest = features.iloc[-1]
                 bar_time = int(latest["time"])
                 if bar_time != last_bar_time:
-                    raw_direction, long_probability, short_probability, no_trade_probability = model.decide_frame_row(latest)
+                    raw_direction, long_probability, short_probability, no_trade_probability, health_code, drift_share = model.decide_frame_row(latest)
                     deployment_eligible = bool(model.metadata.get("deployment_eligible", False))
                     # Failed research models remain visible for shadow review but
                     # cannot approve an automated order in strict mode.
@@ -83,7 +83,7 @@ def main() -> int:
                     write_signal(
                         signal_path,
                         [
-                            2,
+                            3,
                             generated_at,
                             args.gold,
                             "M1",
@@ -94,12 +94,14 @@ def main() -> int:
                             model.model_id,
                             bar_time,
                             int(deployment_eligible),
+                            health_code,
+                            f"{drift_share:.6f}",
                         ],
                     )
                     raw_label = "BUY" if raw_direction > 0 else "SELL" if raw_direction < 0 else "NO TRADE"
                     label = raw_label if deployment_eligible else f"SHADOW {raw_label} (MODEL NOT PROMOTED)"
                     print(
-                        f"{pd.to_datetime(bar_time, unit='s', utc=True)} | {label} | "
+                        f"{pd.to_datetime(bar_time, unit='s', utc=True)} | {label} | health={health_code} drift={drift_share:.1%} | "
                         f"buy={long_probability:.1%} sell={short_probability:.1%} "
                         f"wait={no_trade_probability:.1%} threshold={model.threshold:.1%}"
                     )

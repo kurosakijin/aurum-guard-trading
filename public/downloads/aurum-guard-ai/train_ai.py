@@ -168,7 +168,9 @@ def main() -> int:
         "deployment_status": "PASSED RESEARCH GATE - FORWARD DEMO STILL REQUIRED" if deployment_eligible else "FAILED RESEARCH GATE - SHADOW ONLY",
         "warning": "Research probabilities are not guaranteed win rates or profit forecasts.",
     }
-    model = AurumProbabilityModel(final_estimator, threshold, model_id, metadata)
+    feature_low = np.quantile(x[:dev_end], 0.01, axis=0)
+    feature_high = np.quantile(x[:dev_end], 0.99, axis=0)
+    model = AurumProbabilityModel(final_estimator, threshold, model_id, metadata, feature_low, feature_high)
     model.save(args.model)
     args.report.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(json.dumps({"model": str(args.model), "model_id": model_id, **metadata}, indent=2))

@@ -15,6 +15,8 @@ the EA's risk controls and it does not promise profit.
 - A newest-period research test that includes an estimated 0.10 ATR round-trip cost.
 - Automatic fail-closed promotion: a model must show positive conservative
   utility in at least three walk-forward folds and in the newest test.
+- A live regime-drift lock blocks candidates when too many inputs fall outside
+  the development period's 1st-to-99th-percentile feature ranges.
 
 ## Safe first run
 

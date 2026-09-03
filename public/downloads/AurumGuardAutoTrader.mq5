@@ -799,18 +799,21 @@ bool AIAllowsEntry(const int direction,string &reason)
    string modelId=FileReadString(file);
    long scoredBar=(long)FileReadNumber(file);
    int deploymentEligible=FileIsEnding(file) ? 0 : (int)FileReadNumber(file);
+   string scoreHealth=FileIsEnding(file) ? "INVALID" : FileReadString(file);
+   double driftShare=FileIsEnding(file) ? 1.0 : FileReadNumber(file);
    FileClose(file);
 
    g_aiModel=modelId;
    g_aiProbability=direction>0 ? longProbability : shortProbability;
    long scoreAge=(long)TimeGMT()-generatedAt;
-   bool structurallyValid=(formatVersion==2 && generatedAt>0 && scoredBar>0 && modelId!="");
+   bool structurallyValid=(formatVersion==3 && generatedAt>0 && scoredBar>0 && modelId!="");
    bool symbolValid=(!AIRequireMatchingSymbol || scoreSymbol==g_symbol);
    bool timeframeValid=(scoreTimeframe=="M1" && SignalTimeframe==PERIOD_M1);
    bool ageValid=(scoreAge>=-30 && scoreAge<=MaximumAISignalAgeSeconds);
    double oppositeProbability=direction>0 ? shortProbability : longProbability;
    bool probabilityValid=(g_aiProbability>=MinimumAIApprovalProbability && g_aiProbability>oppositeProbability && g_aiProbability>noTradeProbability);
-   bool approved=(structurallyValid && symbolValid && timeframeValid && ageValid && deploymentEligible==1 && scoreDirection==direction && probabilityValid);
+   bool healthValid=(scoreHealth=="CANDIDATE_APPROVED" && driftShare<=0.15);
+   bool approved=(structurallyValid && symbolValid && timeframeValid && ageValid && deploymentEligible==1 && healthValid && scoreDirection==direction && probabilityValid);
 
    if(approved)
      {
@@ -828,6 +831,8 @@ bool AIAllowsEntry(const int direction,string &reason)
       reason="AI SCORE STALE";
    else if(deploymentEligible!=1)
       reason="AI MODEL NOT RESEARCH-VALIDATED";
+   else if(!healthValid)
+      reason="AI HEALTH "+scoreHealth;
    else if(scoreDirection!=direction)
       reason="AI DOES NOT CONFIRM DIRECTION";
    else

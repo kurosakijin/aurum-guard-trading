@@ -308,6 +308,8 @@ class AurumProbabilityModel:
     threshold: float
     model_id: str
     metadata: dict[str, Any]
+    feature_low: np.ndarray
+    feature_high: np.ndarray
 
     def predict_success_probability(self, x: np.ndarray) -> np.ndarray:
         values = np.asarray(x, dtype=float)
@@ -315,17 +317,22 @@ class AurumProbabilityModel:
             values = values.reshape(1, -1)
         return np.asarray(self.estimator.predict_proba(values)[:, 1], dtype=float)
 
-    def decide_frame_row(self, row: pd.Series) -> tuple[int, float, float, float]:
+    def decide_frame_row(self, row: pd.Series) -> tuple[int, float, float, float, str, float]:
         single = row.to_frame().T
         direction = int(candidate_direction(single).iloc[0])
         if direction == 0:
-            return 0, 0.0, 0.0, 1.0
+            return 0, 0.0, 0.0, 1.0, "NO_CANDIDATE", 0.0
         x = oriented_features(single, np.array([direction])).to_numpy(dtype=float)
+        outside_reference = (x[0] < self.feature_low) | (x[0] > self.feature_high)
+        drift_share = float(outside_reference.mean())
         probability = float(self.predict_success_probability(x)[0])
-        approved_direction = direction if probability >= self.threshold else 0
         long_probability = probability if direction > 0 else 0.0
         short_probability = probability if direction < 0 else 0.0
-        return approved_direction, long_probability, short_probability, 1.0 - probability
+        if drift_share > 0.15:
+            return 0, long_probability, short_probability, 1.0 - probability, "REGIME_DRIFT", drift_share
+        if probability < self.threshold:
+            return 0, long_probability, short_probability, 1.0 - probability, "LOW_CONFIDENCE", drift_share
+        return direction, long_probability, short_probability, 1.0 - probability, "CANDIDATE_APPROVED", drift_share
 
     def save(self, path: Path) -> None:
         payload = {
@@ -335,6 +342,8 @@ class AurumProbabilityModel:
             "threshold": self.threshold,
             "metadata": self.metadata,
             "estimator": self.estimator,
+            "feature_low": self.feature_low.tolist(),
+            "feature_high": self.feature_high.tolist(),
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(path.suffix + ".tmp")
@@ -353,4 +362,6 @@ class AurumProbabilityModel:
             threshold=float(payload["threshold"]),
             model_id=str(payload["model_id"]),
             metadata=dict(payload.get("metadata", {})),
+            feature_low=np.asarray(payload["feature_low"], dtype=float),
+            feature_high=np.asarray(payload["feature_high"], dtype=float),
         )
