@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--terminal", default=r"C:\Program Files\MetaTrader 5\terminal64.exe")
     parser.add_argument("--gold", default="XAUUSD")
     parser.add_argument("--silver", default="XAGUSD")
-    parser.add_argument("--model", type=Path, default=Path("aurum_guard_ai_model.json"))
+    parser.add_argument("--model", type=Path, default=Path("aurum_guard_ai_model.joblib"))
     parser.add_argument("--signal-file", default="aurum_guard_ai_signal.csv")
     parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--once", action="store_true")
@@ -74,8 +74,7 @@ def main() -> int:
                 latest = features.iloc[-1]
                 bar_time = int(latest["time"])
                 if bar_time != last_bar_time:
-                    raw_direction, probability = model.decide(latest[FEATURE_COLUMNS].to_numpy(dtype=float))
-                    short_probability, no_trade_probability, long_probability = [float(value) for value in probability]
+                    raw_direction, long_probability, short_probability, no_trade_probability = model.decide_frame_row(latest)
                     deployment_eligible = bool(model.metadata.get("deployment_eligible", False))
                     # Failed research models remain visible for shadow review but
                     # cannot approve an automated order in strict mode.

@@ -1,45 +1,47 @@
-"""Shared feature engineering and a small dependency-light probability model.
+"""Causal feature engineering and a nonlinear meta-label approval model.
 
-This module deliberately uses chronological features only.  It never places an
-order; the MT5 Expert Advisor remains responsible for execution and risk.
+The model does not guess a direction on every candle. It first requires a
+rule-based defended trend candidate, then estimates whether that candidate's
+TP is likely to arrive before its SL. MT5 remains the only order executor.
 """
 
 from __future__ import annotations
 
-import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
 
 
-MODEL_FORMAT_VERSION = 1
-CLASS_VALUES = np.array([-1, 0, 1], dtype=np.int8)
+MODEL_FORMAT_VERSION = 3
 FEATURE_COLUMNS = [
-    "return_1",
-    "return_3",
-    "return_5",
-    "return_15",
-    "ema20_distance_atr",
-    "ema50_distance_atr",
-    "ema20_slope_atr",
-    "ema_gap_atr",
-    "rsi_14",
-    "atr_percent",
-    "range_atr",
-    "body_share",
-    "lower_wick_share",
-    "upper_wick_share",
-    "volume_z20",
-    "range_position_20",
-    "silver_return_1",
-    "silver_return_5",
-    "metals_correlation_20",
-    "hour_sin",
-    "hour_cos",
+    "return_1", "return_3", "return_5", "return_15", "return_30",
+    "ema20_distance_atr", "ema50_distance_atr", "ema20_slope_atr",
+    "ema50_slope_atr", "ema_gap_atr", "rsi_14", "rsi_change_3",
+    "atr_percent", "atr_ratio_50", "range_atr", "directional_body",
+    "body_share", "lower_wick_share", "upper_wick_share", "volume_z20",
+    "volume_z50", "range_position_20", "range_position_50",
+    "silver_return_1", "silver_return_5", "silver_return_15",
+    "silver_ema_gap", "metals_correlation_20", "metal_return_divergence_5",
+    "hour_sin", "hour_cos", "weekday_sin", "weekday_cos",
+]
+
+ORIENTED_FEATURE_COLUMNS = [
+    "dir_return_1", "dir_return_3", "dir_return_5", "dir_return_15",
+    "dir_return_30", "dir_ema20_distance_atr", "dir_ema50_distance_atr",
+    "dir_ema20_slope_atr", "dir_ema50_slope_atr", "dir_ema_gap_atr",
+    "dir_rsi_bias", "dir_rsi_change_3", "atr_percent", "atr_ratio_50",
+    "range_atr", "dir_body", "body_share", "favorable_wick_share",
+    "adverse_wick_share", "volume_z20", "volume_z50",
+    "dir_range_position_20", "dir_range_position_50",
+    "dir_silver_return_1", "dir_silver_return_5", "dir_silver_return_15",
+    "dir_silver_ema_gap", "metals_correlation_20",
+    "dir_metal_return_divergence_5", "hour_sin", "hour_cos",
+    "weekday_sin", "weekday_cos",
 ]
 
 
@@ -70,7 +72,6 @@ def prepare_market_frame(gold: pd.DataFrame, silver: pd.DataFrame) -> pd.DataFra
     required = {"time", "open", "high", "low", "close", "tick_volume"}
     if not required.issubset(gold.columns) or not required.issubset(silver.columns):
         raise ValueError(f"Gold and Silver data need columns: {sorted(required)}")
-
     gold_clean = gold.copy().sort_values("time").drop_duplicates("time")
     silver_clean = silver[["time", "close"]].copy().sort_values("time").drop_duplicates("time")
     silver_clean = silver_clean.rename(columns={"close": "silver_close"})
@@ -87,309 +88,268 @@ def build_feature_frame(gold: pd.DataFrame, silver: pd.DataFrame) -> pd.DataFram
     open_price = frame["open"].astype(float)
     high = frame["high"].astype(float)
     low = frame["low"].astype(float)
-
+    frame["bar_index"] = np.arange(len(frame), dtype=np.int64)
     frame["atr"] = _atr(frame)
     frame["ema20"] = close.ewm(span=20, adjust=False).mean()
     frame["ema50"] = close.ewm(span=50, adjust=False).mean()
+    frame["silver_ema20"] = silver_close.ewm(span=20, adjust=False).mean()
+    frame["silver_ema50"] = silver_close.ewm(span=50, adjust=False).mean()
     safe_atr = frame["atr"].replace(0.0, np.nan)
     candle_range = (high - low).replace(0.0, np.nan)
-    candle_body = (close - open_price).abs()
+    signed_body = close - open_price
 
-    frame["return_1"] = np.log(close).diff(1)
-    frame["return_3"] = np.log(close).diff(3)
-    frame["return_5"] = np.log(close).diff(5)
-    frame["return_15"] = np.log(close).diff(15)
+    for length in (1, 3, 5, 15, 30):
+        frame[f"return_{length}"] = np.log(close).diff(length)
     frame["ema20_distance_atr"] = (close - frame["ema20"]) / safe_atr
     frame["ema50_distance_atr"] = (close - frame["ema50"]) / safe_atr
     frame["ema20_slope_atr"] = frame["ema20"].diff(3) / safe_atr
+    frame["ema50_slope_atr"] = frame["ema50"].diff(5) / safe_atr
     frame["ema_gap_atr"] = (frame["ema20"] - frame["ema50"]) / safe_atr
-    frame["rsi_14"] = _rsi(close) / 100.0
+    rsi = _rsi(close) / 100.0
+    frame["rsi_14"] = rsi
+    frame["rsi_change_3"] = rsi.diff(3)
     frame["atr_percent"] = safe_atr / close
+    frame["atr_ratio_50"] = safe_atr / safe_atr.rolling(50).median().replace(0.0, np.nan)
     frame["range_atr"] = candle_range / safe_atr
-    frame["body_share"] = candle_body / candle_range
+    frame["directional_body"] = signed_body / candle_range
+    frame["body_share"] = signed_body.abs() / candle_range
     frame["lower_wick_share"] = (np.minimum(open_price, close) - low) / candle_range
     frame["upper_wick_share"] = (high - np.maximum(open_price, close)) / candle_range
 
     volume = frame["tick_volume"].astype(float)
-    volume_mean = volume.rolling(20).mean()
-    volume_std = volume.rolling(20).std().replace(0.0, np.nan)
-    frame["volume_z20"] = (volume - volume_mean) / volume_std
-    rolling_low = low.rolling(20).min()
-    rolling_high = high.rolling(20).max()
-    frame["range_position_20"] = (close - rolling_low) / (rolling_high - rolling_low).replace(0.0, np.nan)
+    for length in (20, 50):
+        volume_std = volume.rolling(length).std().replace(0.0, np.nan)
+        frame[f"volume_z{length}"] = (volume - volume.rolling(length).mean()) / volume_std
+    for length in (20, 50):
+        rolling_low = low.rolling(length).min()
+        rolling_high = high.rolling(length).max()
+        frame[f"range_position_{length}"] = (close - rolling_low) / (rolling_high - rolling_low).replace(0.0, np.nan)
 
-    frame["silver_return_1"] = np.log(silver_close).diff(1)
-    frame["silver_return_5"] = np.log(silver_close).diff(5)
+    for length in (1, 5, 15):
+        frame[f"silver_return_{length}"] = np.log(silver_close).diff(length)
+    frame["silver_ema_gap"] = (frame["silver_ema20"] - frame["silver_ema50"]) / silver_close
     frame["metals_correlation_20"] = frame["return_1"].rolling(20).corr(frame["silver_return_1"])
+    frame["metal_return_divergence_5"] = frame["return_5"] - frame["silver_return_5"]
+
     timestamp = pd.to_datetime(frame["time"], unit="s", utc=True)
     minute_of_day = timestamp.dt.hour * 60 + timestamp.dt.minute
-    angle = 2.0 * math.pi * minute_of_day / 1440.0
-    frame["hour_sin"] = np.sin(angle)
-    frame["hour_cos"] = np.cos(angle)
+    day_angle = 2.0 * math.pi * minute_of_day / 1440.0
+    week_angle = 2.0 * math.pi * timestamp.dt.dayofweek / 5.0
+    frame["hour_sin"] = np.sin(day_angle)
+    frame["hour_cos"] = np.cos(day_angle)
+    frame["weekday_sin"] = np.sin(week_angle)
+    frame["weekday_cos"] = np.cos(week_angle)
     return frame
 
 
-def add_triple_barrier_labels(
+def add_trade_outcomes(
     frame: pd.DataFrame,
     horizon: int,
     target_atr: float,
     stop_atr: float,
+    round_trip_cost_atr: float,
 ) -> pd.DataFrame:
-    if horizon < 2 or target_atr <= 0 or stop_atr <= 0:
-        raise ValueError("Invalid label settings")
+    """Create side-specific first-touch outcomes with estimated trading cost."""
+    if horizon < 2 or target_atr <= 0 or stop_atr <= 0 or round_trip_cost_atr < 0:
+        raise ValueError("Invalid outcome settings")
     close = frame["close"].to_numpy(dtype=float)
     high = frame["high"].to_numpy(dtype=float)
     low = frame["low"].to_numpy(dtype=float)
     atr = frame["atr"].to_numpy(dtype=float)
-    labels = np.full(len(frame), np.nan)
-    utility_long = np.full(len(frame), np.nan)
+    long_win = np.full(len(frame), np.nan)
+    short_win = np.full(len(frame), np.nan)
+    long_utility = np.full(len(frame), np.nan)
+    short_utility = np.full(len(frame), np.nan)
 
     for index in range(len(frame) - horizon):
         if not np.isfinite(atr[index]) or atr[index] <= 0:
             continue
         future_high = high[index + 1 : index + horizon + 1]
         future_low = low[index + 1 : index + horizon + 1]
-        upper = close[index] + atr[index] * target_atr
-        lower = close[index] - atr[index] * stop_atr
-        upper_hits = np.flatnonzero(future_high >= upper)
-        lower_hits = np.flatnonzero(future_low <= lower)
-        first_upper = int(upper_hits[0]) if upper_hits.size else horizon + 1
-        first_lower = int(lower_hits[0]) if lower_hits.size else horizon + 1
-        if first_upper < first_lower:
-            labels[index] = 1
-            utility_long[index] = target_atr
-        elif first_lower < first_upper:
-            labels[index] = -1
-            utility_long[index] = -stop_atr
+        long_target = close[index] + atr[index] * target_atr
+        long_stop = close[index] - atr[index] * stop_atr
+        short_target = close[index] - atr[index] * target_atr
+        short_stop = close[index] + atr[index] * stop_atr
+
+        long_target_hits = np.flatnonzero(future_high >= long_target)
+        long_stop_hits = np.flatnonzero(future_low <= long_stop)
+        short_target_hits = np.flatnonzero(future_low <= short_target)
+        short_stop_hits = np.flatnonzero(future_high >= short_stop)
+        first_long_target = int(long_target_hits[0]) if long_target_hits.size else horizon + 1
+        first_long_stop = int(long_stop_hits[0]) if long_stop_hits.size else horizon + 1
+        first_short_target = int(short_target_hits[0]) if short_target_hits.size else horizon + 1
+        first_short_stop = int(short_stop_hits[0]) if short_stop_hits.size else horizon + 1
+
+        if first_long_target < first_long_stop:
+            long_win[index] = 1.0
+            long_utility[index] = target_atr - round_trip_cost_atr
+        elif first_long_stop < first_long_target:
+            long_win[index] = 0.0
+            long_utility[index] = -stop_atr - round_trip_cost_atr
         else:
-            labels[index] = 0
-            terminal_move = (close[index + horizon] - close[index]) / atr[index]
-            utility_long[index] = float(np.clip(terminal_move, -stop_atr, target_atr))
+            terminal = (close[index + horizon] - close[index]) / atr[index]
+            long_win[index] = 0.0
+            long_utility[index] = float(np.clip(terminal, -stop_atr, target_atr) - round_trip_cost_atr)
 
-    frame = frame.copy()
-    frame["label"] = labels
-    frame["utility_long"] = utility_long
-    return frame
+        if first_short_target < first_short_stop:
+            short_win[index] = 1.0
+            short_utility[index] = target_atr - round_trip_cost_atr
+        elif first_short_stop < first_short_target:
+            short_win[index] = 0.0
+            short_utility[index] = -stop_atr - round_trip_cost_atr
+        else:
+            terminal = (close[index] - close[index + horizon]) / atr[index]
+            short_win[index] = 0.0
+            short_utility[index] = float(np.clip(terminal, -stop_atr, target_atr) - round_trip_cost_atr)
+
+    output = frame.copy()
+    output["long_win"] = long_win
+    output["short_win"] = short_win
+    output["long_utility"] = long_utility
+    output["short_utility"] = short_utility
+    return output
 
 
-def training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
-    usable = frame.dropna(subset=FEATURE_COLUMNS + ["label", "utility_long"]).copy()
-    finite = np.isfinite(usable[FEATURE_COLUMNS].to_numpy(dtype=float)).all(axis=1)
+def candidate_direction(frame: pd.DataFrame) -> pd.Series:
+    """Return a causal defended-pullback direction, or zero when no setup exists."""
+    trend_direction = np.sign(frame["ema_gap_atr"]).astype(float)
+    direction = trend_direction.where(
+        (trend_direction != 0)
+        & (frame["ema20_slope_atr"] * trend_direction > 0.0)
+        & (frame["directional_body"] * trend_direction >= 0.25)
+        & (frame["body_share"] >= 0.30)
+        & (frame["range_atr"].between(0.30, 1.50))
+        & (frame["ema20_distance_atr"].abs() <= 0.90)
+        & (frame["ema50_distance_atr"].abs() <= 2.25)
+        & (((frame["rsi_14"] - 0.50) * trend_direction).between(-0.10, 0.30))
+        & (frame["silver_return_5"] * trend_direction >= -0.0015)
+        & (frame["metals_correlation_20"] >= -0.10),
+        0.0,
+    )
+    return direction.fillna(0.0).astype(np.int8)
+
+
+def oriented_features(frame: pd.DataFrame, direction: pd.Series | np.ndarray) -> pd.DataFrame:
+    d = pd.Series(np.asarray(direction, dtype=float), index=frame.index)
+    values: dict[str, pd.Series | np.ndarray] = {}
+    for length in (1, 3, 5, 15, 30):
+        values[f"dir_return_{length}"] = frame[f"return_{length}"] * d
+    for name in ("ema20_distance_atr", "ema50_distance_atr", "ema20_slope_atr", "ema50_slope_atr", "ema_gap_atr"):
+        values[f"dir_{name}"] = frame[name] * d
+    values["dir_rsi_bias"] = (frame["rsi_14"] - 0.50) * d
+    values["dir_rsi_change_3"] = frame["rsi_change_3"] * d
+    for name in ("atr_percent", "atr_ratio_50", "range_atr"):
+        values[name] = frame[name]
+    values["dir_body"] = frame["directional_body"] * d
+    values["body_share"] = frame["body_share"]
+    values["favorable_wick_share"] = np.where(d > 0, frame["lower_wick_share"], frame["upper_wick_share"])
+    values["adverse_wick_share"] = np.where(d > 0, frame["upper_wick_share"], frame["lower_wick_share"])
+    for name in ("volume_z20", "volume_z50"):
+        values[name] = frame[name]
+    values["dir_range_position_20"] = (frame["range_position_20"] - 0.50) * d
+    values["dir_range_position_50"] = (frame["range_position_50"] - 0.50) * d
+    for length in (1, 5, 15):
+        values[f"dir_silver_return_{length}"] = frame[f"silver_return_{length}"] * d
+    values["dir_silver_ema_gap"] = frame["silver_ema_gap"] * d
+    values["metals_correlation_20"] = frame["metals_correlation_20"]
+    values["dir_metal_return_divergence_5"] = frame["metal_return_divergence_5"] * d
+    for name in ("hour_sin", "hour_cos", "weekday_sin", "weekday_cos"):
+        values[name] = frame[name]
+    return pd.DataFrame(values, index=frame.index)[ORIENTED_FEATURE_COLUMNS]
+
+
+def meta_training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
+    outcome_columns = ["long_win", "short_win", "long_utility", "short_utility"]
+    usable = frame.dropna(subset=FEATURE_COLUMNS + outcome_columns).copy()
+    usable["direction"] = candidate_direction(usable)
+    usable = usable.loc[usable["direction"] != 0].copy()
+    oriented = oriented_features(usable, usable["direction"])
+    finite = np.isfinite(oriented.to_numpy(dtype=float)).all(axis=1)
     usable = usable.loc[finite].reset_index(drop=True)
-    x = usable[FEATURE_COLUMNS].to_numpy(dtype=float)
-    y = usable["label"].to_numpy(dtype=np.int8)
-    utility_long = usable["utility_long"].to_numpy(dtype=float)
-    return x, y, utility_long, usable
+    oriented = oriented.loc[finite].reset_index(drop=True)
+    direction = usable["direction"].to_numpy(dtype=np.int8)
+    y = np.where(direction > 0, usable["long_win"], usable["short_win"]).astype(np.int8)
+    utility = np.where(direction > 0, usable["long_utility"], usable["short_utility"]).astype(float)
+    return oriented.to_numpy(dtype=float), y, utility, usable
 
 
-def _softmax(logits: np.ndarray) -> np.ndarray:
-    shifted = logits - np.max(logits, axis=1, keepdims=True)
-    exp = np.exp(np.clip(shifted, -50.0, 50.0))
-    return exp / np.sum(exp, axis=1, keepdims=True)
-
-
-def _class_indexes(y: np.ndarray) -> np.ndarray:
-    mapping = {-1: 0, 0: 1, 1: 2}
-    return np.array([mapping[int(value)] for value in y], dtype=np.int64)
-
-
-def fit_softmax(
-    x: np.ndarray,
-    y: np.ndarray,
-    *,
-    steps: int = 2200,
-    batch_size: int = 2048,
-    learning_rate: float = 0.012,
-    l2: float = 0.001,
-    seed: int = 260904,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    if len(x) < 1000:
-        raise ValueError("At least 1,000 training samples are required")
-    mean = x.mean(axis=0)
-    scale = x.std(axis=0)
-    scale[scale < 1e-9] = 1.0
-    standardized = np.clip((x - mean) / scale, -8.0, 8.0)
-    y_index = _class_indexes(y)
-    counts = np.bincount(y_index, minlength=3).astype(float)
-    class_weights = np.sqrt(len(y_index) / np.maximum(counts * 3.0, 1.0))
-    class_weights = np.clip(class_weights, 0.55, 2.50)
-
-    rng = np.random.default_rng(seed)
-    weights = np.zeros((standardized.shape[1], 3), dtype=float)
-    bias = np.zeros(3, dtype=float)
-    mw = np.zeros_like(weights)
-    vw = np.zeros_like(weights)
-    mb = np.zeros_like(bias)
-    vb = np.zeros_like(bias)
-    beta1, beta2 = 0.9, 0.999
-
-    for step in range(1, steps + 1):
-        indexes = rng.integers(0, len(standardized), size=min(batch_size, len(standardized)))
-        xb = standardized[indexes]
-        yi = y_index[indexes]
-        probability = _softmax(xb @ weights + bias)
-        target = np.zeros_like(probability)
-        target[np.arange(len(yi)), yi] = 1.0
-        sample_weights = class_weights[yi]
-        gradient_logits = (probability - target) * sample_weights[:, None] / sample_weights.sum()
-        gradient_weights = xb.T @ gradient_logits + l2 * weights
-        gradient_bias = gradient_logits.sum(axis=0)
-
-        mw = beta1 * mw + (1.0 - beta1) * gradient_weights
-        vw = beta2 * vw + (1.0 - beta2) * np.square(gradient_weights)
-        mb = beta1 * mb + (1.0 - beta1) * gradient_bias
-        vb = beta2 * vb + (1.0 - beta2) * np.square(gradient_bias)
-        mw_hat = mw / (1.0 - beta1**step)
-        vw_hat = vw / (1.0 - beta2**step)
-        mb_hat = mb / (1.0 - beta1**step)
-        vb_hat = vb / (1.0 - beta2**step)
-        weights -= learning_rate * mw_hat / (np.sqrt(vw_hat) + 1e-8)
-        bias -= learning_rate * mb_hat / (np.sqrt(vb_hat) + 1e-8)
-    return mean, scale, weights, bias
-
-
-def probabilities(
-    x: np.ndarray,
-    mean: np.ndarray,
-    scale: np.ndarray,
-    weights: np.ndarray,
-    bias: np.ndarray,
-    temperature: float = 1.0,
-) -> np.ndarray:
-    standardized = np.clip((x - mean) / scale, -8.0, 8.0)
-    return _softmax((standardized @ weights + bias) / max(temperature, 0.05))
-
-
-def multiclass_log_loss(y: np.ndarray, probability: np.ndarray) -> float:
-    indexes = _class_indexes(y)
-    chosen = np.clip(probability[np.arange(len(indexes)), indexes], 1e-9, 1.0)
-    return float(-np.log(chosen).mean())
-
-
-def choose_temperature(
-    x: np.ndarray,
-    y: np.ndarray,
-    mean: np.ndarray,
-    scale: np.ndarray,
-    weights: np.ndarray,
-    bias: np.ndarray,
-) -> float:
-    candidates = np.linspace(0.65, 2.50, 38)
-    losses = [multiclass_log_loss(y, probabilities(x, mean, scale, weights, bias, value)) for value in candidates]
-    return float(candidates[int(np.argmin(losses))])
-
-
-def directional_mask(probability: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray]:
-    short_probability = probability[:, 0]
-    no_trade_probability = probability[:, 1]
-    long_probability = probability[:, 2]
-    direction = np.where(long_probability >= short_probability, 1, -1)
-    directional_probability = np.maximum(long_probability, short_probability)
-    approved = (directional_probability >= threshold) & (directional_probability > no_trade_probability)
-    return direction, approved
-
-
-def evaluate_threshold(
-    y: np.ndarray,
-    utility_long: np.ndarray,
-    probability: np.ndarray,
-    threshold: float,
-) -> dict[str, float | int]:
-    direction, approved = directional_mask(probability, threshold)
+def evaluate_threshold(y: np.ndarray, utility: np.ndarray, probability: np.ndarray, threshold: float) -> dict[str, float | int]:
+    approved = probability >= threshold
     count = int(approved.sum())
     if count == 0:
-        return {
-            "threshold": float(threshold),
-            "approved_signals": 0,
-            "coverage": 0.0,
-            "directional_precision": 0.0,
-            "mean_atr_utility": -999.0,
-            "conservative_score": -999.0,
-        }
-    approved_direction = direction[approved]
-    approved_y = y[approved]
-    signed_utility = utility_long[approved] * approved_direction
-    precision = float((approved_direction == approved_y).mean())
-    mean_utility = float(signed_utility.mean())
-    standard_error = float(signed_utility.std(ddof=1) / math.sqrt(count)) if count > 1 else 999.0
+        return {"threshold": float(threshold), "approved_signals": 0, "coverage": 0.0, "win_rate": 0.0, "mean_net_atr_utility": -999.0, "lower_confidence_utility": -999.0}
+    selected = utility[approved]
+    mean_utility = float(selected.mean())
+    standard_error = float(selected.std(ddof=1) / math.sqrt(count)) if count > 1 else 999.0
     return {
         "threshold": float(threshold),
         "approved_signals": count,
         "coverage": float(count / len(y)),
-        "directional_precision": precision,
-        "mean_atr_utility": mean_utility,
-        "conservative_score": mean_utility - 0.50 * standard_error,
+        "win_rate": float(y[approved].mean()),
+        "mean_net_atr_utility": mean_utility,
+        "lower_confidence_utility": mean_utility - 1.645 * standard_error,
     }
 
 
-def select_threshold(y: np.ndarray, utility_long: np.ndarray, probability: np.ndarray) -> tuple[float, dict[str, Any]]:
-    candidates = np.arange(0.55, 0.861, 0.01)
-    reports = [evaluate_threshold(y, utility_long, probability, float(value)) for value in candidates]
-    eligible = [report for report in reports if report["approved_signals"] >= 100 and report["coverage"] <= 0.20]
+def select_threshold(y: np.ndarray, utility: np.ndarray, probability: np.ndarray) -> tuple[float, dict[str, Any]]:
+    reports = [evaluate_threshold(y, utility, probability, float(value)) for value in np.arange(0.52, 0.811, 0.01)]
+    eligible = [report for report in reports if report["approved_signals"] >= 100 and report["coverage"] <= 0.35]
     if not eligible:
-        fallback = evaluate_threshold(y, utility_long, probability, 0.70)
-        return 0.70, fallback
-    best = max(eligible, key=lambda report: float(report["conservative_score"]))
-    if float(best["mean_atr_utility"]) <= 0.0:
-        fallback = evaluate_threshold(y, utility_long, probability, 0.70)
-        return 0.70, fallback
+        return 0.70, evaluate_threshold(y, utility, probability, 0.70)
+    best = max(eligible, key=lambda report: float(report["lower_confidence_utility"]))
+    if float(best["lower_confidence_utility"]) <= 0.0:
+        return 0.70, evaluate_threshold(y, utility, probability, 0.70)
     return float(best["threshold"]), best
 
 
 @dataclass
 class AurumProbabilityModel:
-    mean: np.ndarray
-    scale: np.ndarray
-    weights: np.ndarray
-    bias: np.ndarray
-    temperature: float
+    estimator: Any
     threshold: float
     model_id: str
     metadata: dict[str, Any]
 
-    def predict_proba(self, x: np.ndarray) -> np.ndarray:
+    def predict_success_probability(self, x: np.ndarray) -> np.ndarray:
         values = np.asarray(x, dtype=float)
         if values.ndim == 1:
             values = values.reshape(1, -1)
-        return probabilities(values, self.mean, self.scale, self.weights, self.bias, self.temperature)
+        return np.asarray(self.estimator.predict_proba(values)[:, 1], dtype=float)
 
-    def decide(self, x: np.ndarray) -> tuple[int, np.ndarray]:
-        probability = self.predict_proba(x)[0]
-        direction, approved = directional_mask(probability.reshape(1, -1), self.threshold)
-        return (int(direction[0]) if bool(approved[0]) else 0), probability
+    def decide_frame_row(self, row: pd.Series) -> tuple[int, float, float, float]:
+        single = row.to_frame().T
+        direction = int(candidate_direction(single).iloc[0])
+        if direction == 0:
+            return 0, 0.0, 0.0, 1.0
+        x = oriented_features(single, np.array([direction])).to_numpy(dtype=float)
+        probability = float(self.predict_success_probability(x)[0])
+        approved_direction = direction if probability >= self.threshold else 0
+        long_probability = probability if direction > 0 else 0.0
+        short_probability = probability if direction < 0 else 0.0
+        return approved_direction, long_probability, short_probability, 1.0 - probability
 
     def save(self, path: Path) -> None:
         payload = {
             "format_version": MODEL_FORMAT_VERSION,
             "model_id": self.model_id,
-            "feature_names": FEATURE_COLUMNS,
-            "class_values": CLASS_VALUES.tolist(),
-            "mean": self.mean.tolist(),
-            "scale": self.scale.tolist(),
-            "weights": self.weights.tolist(),
-            "bias": self.bias.tolist(),
-            "temperature": self.temperature,
+            "feature_names": ORIENTED_FEATURE_COLUMNS,
             "threshold": self.threshold,
             "metadata": self.metadata,
+            "estimator": self.estimator,
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        joblib.dump(payload, temporary, compress=3)
         temporary.replace(path)
 
     @classmethod
     def load(cls, path: Path) -> "AurumProbabilityModel":
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = joblib.load(path)
         if payload.get("format_version") != MODEL_FORMAT_VERSION:
             raise ValueError("Unsupported Aurum Guard AI model format")
-        if payload.get("feature_names") != FEATURE_COLUMNS:
+        if payload.get("feature_names") != ORIENTED_FEATURE_COLUMNS:
             raise ValueError("Model feature order does not match this AI runner")
         return cls(
-            mean=np.asarray(payload["mean"], dtype=float),
-            scale=np.asarray(payload["scale"], dtype=float),
-            weights=np.asarray(payload["weights"], dtype=float),
-            bias=np.asarray(payload["bias"], dtype=float),
-            temperature=float(payload["temperature"]),
+            estimator=payload["estimator"],
             threshold=float(payload["threshold"]),
             model_id=str(payload["model_id"]),
             metadata=dict(payload.get("metadata", {})),

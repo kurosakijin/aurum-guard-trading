@@ -1,47 +1,76 @@
 {
-  "trained_at_utc": "2026-09-03T16:48:10+00:00",
+  "model_type": "nonlinear defended-entry meta-label classifier",
+  "trained_at_utc": "2026-09-03T17:05:38+00:00",
   "gold_symbol": "XAUUSD",
   "silver_symbol": "XAGUSD",
   "timeframe": "M1",
   "horizon_bars": 15,
   "target_atr": 1.25,
   "stop_atr": 1.0,
-  "samples": 74318,
-  "train_samples": 44590,
-  "validation_samples": 14864,
-  "test_samples": 14864,
-  "train_period_utc": [
-    "2026-06-17T04:34:00+00:00",
-    "2026-08-04T08:00:00+00:00"
+  "estimated_round_trip_cost_atr": 0.1,
+  "synchronized_bars": 74353,
+  "defended_candidates": 3881,
+  "development_candidates": 3298,
+  "locked_test_candidates": 583,
+  "development_period_utc": [
+    "2026-06-17T05:43:00+00:00",
+    "2026-08-21T22:44:00+00:00"
   ],
-  "validation_period_utc": [
-    "2026-08-04T08:01:00+00:00",
-    "2026-08-19T13:49:00+00:00"
+  "locked_test_period_utc": [
+    "2026-08-24T01:17:00+00:00",
+    "2026-09-03T19:47:00+00:00"
   ],
-  "test_period_utc": [
-    "2026-08-19T13:50:00+00:00",
-    "2026-09-03T19:33:00+00:00"
-  ],
-  "class_counts": {
-    "-1": 40880,
-    "0": 1627,
-    "1": 31811
+  "threshold": 0.7,
+  "walk_forward": {
+    "threshold": 0.7,
+    "approved_signals": 26,
+    "coverage": 0.013137948458817585,
+    "win_rate": 0.38461538461538464,
+    "mean_net_atr_utility": -0.23461538461538467,
+    "lower_confidence_utility": -0.594750159683022
   },
-  "validation": {
-    "threshold": 0.5700000000000001,
-    "approved_signals": 1161,
-    "coverage": 0.07810818083961249,
-    "directional_precision": 0.5727820844099913,
-    "mean_atr_utility": 0.05385169797580363,
-    "conservative_score": 0.037591328911890584
-  },
+  "walk_forward_folds": [
+    {
+      "threshold": 0.7,
+      "approved_signals": 17,
+      "coverage": 0.03441295546558704,
+      "win_rate": 0.29411764705882354,
+      "mean_net_atr_utility": -0.4382352941176471,
+      "lower_confidence_utility": -0.8598494002985353
+    },
+    {
+      "threshold": 0.7,
+      "approved_signals": 3,
+      "coverage": 0.006060606060606061,
+      "win_rate": 0.3333333333333333,
+      "mean_net_atr_utility": -0.3500000000000001,
+      "lower_confidence_utility": -1.5837500000000002
+    },
+    {
+      "threshold": 0.7,
+      "approved_signals": 4,
+      "coverage": 0.00808080808080808,
+      "win_rate": 0.75,
+      "mean_net_atr_utility": 0.5874999999999999,
+      "lower_confidence_utility": -0.33781250000000007
+    },
+    {
+      "threshold": 0.7,
+      "approved_signals": 2,
+      "coverage": 0.00404040404040404,
+      "win_rate": 0.5,
+      "mean_net_atr_utility": 0.02499999999999991,
+      "lower_confidence_utility": -1.825625
+    }
+  ],
+  "positive_walk_forward_folds": 2,
   "locked_test": {
-    "threshold": 0.5700000000000001,
-    "approved_signals": 1174,
-    "coverage": 0.07898277717976318,
-    "directional_precision": 0.5323679727427598,
-    "mean_atr_utility": -0.040151779531830196,
-    "conservative_score": -0.05645755390602118
+    "threshold": 0.7,
+    "approved_signals": 1,
+    "coverage": 0.0017152658662092624,
+    "win_rate": 1.0,
+    "mean_net_atr_utility": 1.15,
+    "lower_confidence_utility": -1642.205
   },
   "deployment_eligible": false,
   "deployment_status": "FAILED RESEARCH GATE - SHADOW ONLY",

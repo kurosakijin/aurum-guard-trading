@@ -4,9 +4,9 @@
 //|   Educational automation. Demo-only by default.                  |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "1.50"
+#property version   "1.60"
 #property strict
-#property description "Selective Gold pullback EA with fixed 0.01 lot, hard risk controls and an optional fail-closed local AI approval layer."
+#property description "Selective Gold pullback EA with fixed 0.01 lot, hard risk controls and an optional nonlinear fail-closed AI meta-label approval layer."
 
 #include <Trade/Trade.mqh>
 
