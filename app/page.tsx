@@ -1517,7 +1517,7 @@ export default function Home() {
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
-              <CardDescription>Downloadable research Expert Advisor · fixed 0.01 lot · $7.50 planned SL · $20 TP · one-loss daily lock</CardDescription>
+              <CardDescription>MT5 v1.50 + local AI approval layer · fixed 0.01 lot · $7.50 planned SL · $20 TP · one-loss daily lock</CardDescription>
               <CardAction><Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-200">ENTRIES OFF BY DEFAULT</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
@@ -1526,15 +1526,24 @@ export default function Home() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-2xl">
                       <p className="text-sm font-semibold text-emerald-100">A real MT5 Expert Advisor—not a browser trade button</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.40 waits for a completed pullback and break-confirmation candle, then watches for a 50% confirmation-body retest. Touching that price no longer opens a trade: a completed bullish or bearish defense candle must reclaim the level while D1, H1, M15 strength, Gold/Silver agreement, spread and USD-news safety remain valid. It can then send exactly 0.01 lot with a money-based SL and final $20 TP. This candidate is still research-only, so new entries and live trading are disabled by default.</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.50 keeps the defended-retest entry, D1/H1/M15 trend checks, Gold/Silver agreement, spread, news guard and fixed-money protection. It now also reads a fresh BUY / SELL / NO TRADE score from a local Python model after each completed M1 candle. The AI starts in shadow mode and cannot bypass any EA risk control. New entries and live trading remain disabled by default.</p>
                     </div>
-                    <a
-                      href="./downloads/AurumGuardAutoTrader.mq5"
-                      download
-                      className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
-                    >
-                      <Download className="size-4" /> Download MT5 bot
-                    </a>
+                    <div className="flex shrink-0 flex-col gap-2">
+                      <a
+                        href="./downloads/AurumGuardAutoTrader.mq5"
+                        download
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
+                      >
+                        <Download className="size-4" /> Download MT5 v1.50
+                      </a>
+                      <a
+                        href="./downloads/AurumGuardAI.zip"
+                        download
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/15"
+                      >
+                        <Sparkles className="size-4" /> Download AI layer
+                      </a>
+                    </div>
                   </div>
                 </div>
 
@@ -1555,6 +1564,28 @@ export default function Home() {
                 <div className="mt-4 rounded-xl border border-sky-300/20 bg-sky-300/[.04] p-4">
                   <p className="text-xs font-semibold text-sky-100">Early-entry protection added</p>
                   <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The failed first BUY in your example was the type of entry that can occur when an EMA signal appears before buyers defend the pullback. The revised logic treats that first indication as a watch. It waits for price to retest, refuses a falling touch, and requires a completed reclaim candle before showing a confirmed entry. This may avoid some premature entries, but it also enters later and can miss fast reversals.</p>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-violet-300/20 bg-violet-300/[.045] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-2 text-xs font-semibold text-violet-100"><Sparkles className="size-3.5" /> AI approval—not an uncontrolled replacement</p>
+                    <Badge variant="outline" className="border-amber-300/25 text-amber-200">SHADOW ONLY</Badge>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The Python model studies synchronized Gold and Silver M1 bars and publishes probabilities only after a candle closes. The EA remains the executor: its fixed 0.01 lot, money SL/TP, daily loss lock, news, spread and trend rules always have final authority. Missing, stale, wrong-symbol or unvalidated AI scores fail closed in strict mode.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
+                    {[
+                      ['74,318', 'Synchronized samples'],
+                      ['1,174', 'Locked-test approvals'],
+                      ['53.24%', 'Directional precision'],
+                      ['−0.04 ATR', 'Mean test utility'],
+                    ].map(([value, label]) => (
+                      <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
+                        <p className="font-heading text-sm font-semibold text-violet-100">{value}</p>
+                        <p className="mt-0.5 text-muted-foreground">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Honest result: the newest chronological holdout was negative, so this model automatically marks itself <span className="font-semibold">FAILED RESEARCH GATE</span>. You can observe its calls in demo shadow mode, but it cannot approve strict automated entries. Forward evidence—not an “AI” label—must earn promotion.</p>
                 </div>
 
                 <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
@@ -1607,7 +1638,7 @@ export default function Home() {
                     ))}
                   </div>
                   <p className="mt-3 text-[10px] leading-4 text-red-100/85">The retest improved the older −$7.73 candidate to break-even, but it still failed validation: a 1.00 profit factor shows no measured edge, and seven trades are far too few for a reliable conclusion. The built-in optimizer gate rejected it because validation requires at least 30 trades, positive net profit, profit factor of 1.20 or better, and no more than 5% equity drawdown. The 71.43% win rate is misleading by itself because several wins were tiny while two losses reached the planned stop. New entries and live trading remain off by default. No result here is a profit prediction.</p>
-                  <p className="mt-2 text-[10px] leading-4 text-sky-100/80">Version 1.40 adds the defended-retest close described above. It compiled with zero errors and warnings, but its backtest is not listed here until a fresh full test completes.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-sky-100/80">Version 1.50 adds the optional local AI approval reader described above. It compiled with zero errors and warnings. The displayed AI result is a separate chronological model check, not an EA profit backtest.</p>
                 </div>
 
                 <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-4">
@@ -1619,6 +1650,8 @@ export default function Home() {
                     <li><span className="mr-2 font-semibold text-cyan-200">4.</span>Open your broker’s Gold chart and drag Aurum Guard onto it. H1 is the lower-frequency default; M1 remains research-only.</li>
                     <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Enter your broker’s exact Silver symbol—such as XAGUSD, XAGUSD.a or SILVER.</li>
                     <li><span className="mr-2 font-semibold text-cyan-200">6.</span>For a deliberate demo/tester run only, set <span className="font-mono text-foreground">EnableNewEntries = true</span>, enable Algo Trading and monitor Experts and Journal.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">7.</span>For AI shadow testing, download and unzip the AI layer, run <span className="font-mono text-foreground">install_ai.cmd</span>, then <span className="font-mono text-foreground">train_ai.cmd</span> and keep <span className="font-mono text-foreground">run_ai_gate.cmd</span> open beside MT5.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">8.</span>Leave <span className="font-mono text-foreground">AIShadowMode = true</span>. The current included model failed its locked research gate, so strict mode correctly blocks rather than pretending it has an edge.</li>
                   </ol>
                 </div>
 

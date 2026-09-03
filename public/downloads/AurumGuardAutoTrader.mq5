@@ -4,9 +4,9 @@
 //|   Educational automation. Demo-only by default.                  |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "1.40"
+#property version   "1.50"
 #property strict
-#property description "Selective Gold pullback EA with fixed 0.01 lot, multi-timeframe trend strength, money-based SL/TP, daily loss protection and Gold/Silver confirmation."
+#property description "Selective Gold pullback EA with fixed 0.01 lot, hard risk controls and an optional fail-closed local AI approval layer."
 
 #include <Trade/Trade.mqh>
 
@@ -24,6 +24,14 @@ input ulong  DeviationPoints               = 30;
 input double MaxSpreadAsATR                = 0.08;
 
 const double FIXED_LOTS                    = 0.01;
+
+// --- Local AI approval layer (Python scores; this EA keeps execution and risk control)
+input bool   UseAIApprovalGate             = true;
+input bool   AIShadowMode                  = true;  // observe decisions without blocking or approving orders
+input string AIApprovalFile                = "aurum_guard_ai_signal.csv";
+input double MinimumAIApprovalProbability  = 0.70;
+input int    MaximumAISignalAgeSeconds      = 180;
+input bool   AIRequireMatchingSymbol       = true;
 
 // --- Symbols and timeframes
 input string TradeSymbol                   = "";       // Blank uses the chart symbol
@@ -108,6 +116,9 @@ datetime g_pendingExpires = 0;
 bool     g_pendingTouched = false;
 datetime g_pendingTouchBar = 0;
 datetime g_pendingLastCheckedBar = 0;
+string   g_aiStatus = "SHADOW - WAITING FOR SCORE";
+double   g_aiProbability = 0.0;
+string   g_aiModel = "NONE";
 
 int g_fastHandle = INVALID_HANDLE;
 int g_slowHandle = INVALID_HANDLE;
@@ -751,8 +762,90 @@ bool SpreadAllowsEntry(const double atrValue,string &reason)
    return true;
   }
 
+bool AIAllowsEntry(const int direction,string &reason)
+  {
+   if(!UseAIApprovalGate)
+     {
+      g_aiStatus="OFF";
+      g_aiProbability=0.0;
+      return true;
+     }
+
+   if((bool)MQLInfoInteger(MQL_TESTER) && !AIShadowMode)
+     {
+      reason="AI STRICT MODE NEEDS LIVE DEMO FEED";
+      g_aiStatus="BLOCK - TESTER HAS NO AI REPLAY";
+      return false;
+     }
+
+   ResetLastError();
+   int file=FileOpen(AIApprovalFile,FILE_READ|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_COMMON,',');
+   if(file==INVALID_HANDLE)
+     {
+      reason="AI SCORE FILE MISSING";
+      g_aiStatus=AIShadowMode ? "SHADOW - SCORE FILE MISSING" : "BLOCK - SCORE FILE MISSING";
+      g_aiProbability=0.0;
+      return AIShadowMode;
+     }
+
+   int formatVersion=(int)FileReadNumber(file);
+   long generatedAt=(long)FileReadNumber(file);
+   string scoreSymbol=FileReadString(file);
+   string scoreTimeframe=FileReadString(file);
+   int scoreDirection=(int)FileReadNumber(file);
+   double longProbability=FileReadNumber(file);
+   double shortProbability=FileReadNumber(file);
+   double noTradeProbability=FileReadNumber(file);
+   string modelId=FileReadString(file);
+   long scoredBar=(long)FileReadNumber(file);
+   int deploymentEligible=FileIsEnding(file) ? 0 : (int)FileReadNumber(file);
+   FileClose(file);
+
+   g_aiModel=modelId;
+   g_aiProbability=direction>0 ? longProbability : shortProbability;
+   long scoreAge=(long)TimeGMT()-generatedAt;
+   bool structurallyValid=(formatVersion==2 && generatedAt>0 && scoredBar>0 && modelId!="");
+   bool symbolValid=(!AIRequireMatchingSymbol || scoreSymbol==g_symbol);
+   bool timeframeValid=(scoreTimeframe=="M1" && SignalTimeframe==PERIOD_M1);
+   bool ageValid=(scoreAge>=-30 && scoreAge<=MaximumAISignalAgeSeconds);
+   double oppositeProbability=direction>0 ? shortProbability : longProbability;
+   bool probabilityValid=(g_aiProbability>=MinimumAIApprovalProbability && g_aiProbability>oppositeProbability && g_aiProbability>noTradeProbability);
+   bool approved=(structurallyValid && symbolValid && timeframeValid && ageValid && deploymentEligible==1 && scoreDirection==direction && probabilityValid);
+
+   if(approved)
+     {
+      g_aiStatus=StringFormat("%s%s %.0f%% (%s)",AIShadowMode ? "SHADOW WOULD APPROVE " : "APPROVE ",direction>0 ? "BUY" : "SELL",g_aiProbability*100.0,modelId);
+      return true;
+     }
+
+   if(!structurallyValid)
+      reason="AI SCORE INVALID";
+   else if(!symbolValid)
+      reason="AI SYMBOL MISMATCH";
+   else if(!timeframeValid)
+      reason="AI MODEL IS M1 ONLY";
+   else if(!ageValid)
+      reason="AI SCORE STALE";
+   else if(deploymentEligible!=1)
+      reason="AI MODEL NOT RESEARCH-VALIDATED";
+   else if(scoreDirection!=direction)
+      reason="AI DOES NOT CONFIRM DIRECTION";
+   else
+      reason="AI CONFIDENCE BELOW GATE";
+
+   g_aiStatus=StringFormat("%s - %s %.0f%%",AIShadowMode ? "SHADOW WOULD BLOCK" : "BLOCK",reason,g_aiProbability*100.0);
+   return AIShadowMode;
+  }
+
 void OpenSignalTrade(const int direction,const double signalATR)
   {
+   string aiReason="";
+   if(!AIAllowsEntry(direction,aiReason))
+     {
+      g_lastDecision=aiReason;
+      return;
+     }
+
    MqlTick tick;
    if(!SymbolInfoTick(g_symbol,tick))
      {
@@ -1099,6 +1192,7 @@ void UpdateChartPanel()
            "Mode: ",modeText," | Symbol: ",g_symbol,"\n",
            "Signal decision: ",g_lastDecision,"\n",
            "M15 safety: ",pauseText,"\n",
+           "AI approval: ",g_aiStatus,"\n",
            "Setup score: ",IntegerToString(g_lastSetupScore),"/100 | Entry gate: ",IntegerToString(MinimumSetupScore),"\n",
            "Today realized: ",currency," ",DoubleToString(dayPnL,2)," | Entries: ",tradesToday,"/",entryLimitText,"\n",
            "Fixed lot: 0.01 | Planned SL: ",currency," ",DoubleToString(StopLossMoney,2)," | TP: ",currency," ",DoubleToString(TakeProfitMoney,2),"\n",
@@ -1115,6 +1209,11 @@ int OnInit()
    if(StopLossMoney<5.0 || StopLossMoney>10.0 || TakeProfitMoney<=StopLossMoney || DailyLossLimitMoney<StopLossMoney || MaxTradesPerDay<0)
      {
       Print("Aurum Guard: invalid money controls. SL must be 5-10 account-currency units, TP must exceed SL, and daily loss must cover one planned SL.");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+   if(MinimumAIApprovalProbability<0.50 || MinimumAIApprovalProbability>0.99 || MaximumAISignalAgeSeconds<60)
+     {
+      Print("Aurum Guard: invalid AI controls. Probability must be 0.50-0.99 and signal age must be at least 60 seconds.");
       return INIT_PARAMETERS_INCORRECT;
      }
    if(MinimumSafetyADX<0.0 || MaximumSignalRangeATR<=0.0 || MinimumEntryBodyShare<0.0 || MinimumEntryBodyShare>1.0 || MinimumStopDistanceATR<=0.0 || MinimumSetupScore<0 || MinimumSetupScore>100 || ConfirmationRetestFraction<0.0 || ConfirmationRetestFraction>1.0 || ConfirmationRetestBars<1 || RetestDefenseBars<1 || MinimumDefenseBodyShare<0.0 || MinimumDefenseBodyShare>1.0)
