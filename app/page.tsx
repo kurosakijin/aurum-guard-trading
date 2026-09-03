@@ -88,6 +88,10 @@ slowLength = input.int(50, "Slow EMA", minval = 3, group = "Confirmed trend engi
 trendAtrMultiple = input.float(1.5, "ATR stop multiple", minval = 0.5, step = 0.1, group = "Confirmed trend engine")
 slopeBars = input.int(3, "EMA slope lookback", minval = 1, group = "Confirmed trend engine")
 cooldownBars = input.int(10, "Bars between trend setups", minval = 1, group = "Confirmed trend engine")
+useDefendedTrendEntry = input.bool(true, "Require pullback + defended reclaim", group = "Confirmed trend engine")
+trendPullbackBufferATR = input.float(0.35, "Pullback touch buffer in ATR", minval = 0.05, maxval = 1.00, step = 0.05, group = "Confirmed trend engine")
+trendMaximumRangeATR = input.float(1.25, "Maximum reclaim candle range in ATR", minval = 0.50, maxval = 3.00, step = 0.05, group = "Confirmed trend engine")
+trendMinimumBodyShare = input.float(0.40, "Minimum reclaim candle body share", minval = 0.20, maxval = 0.80, step = 0.05, group = "Confirmed trend engine")
 
 enableOneHourPrecision = input.bool(true, "Use 1H pullback + rejection entries", group = "1H Precision Entry")
 precisionPullbackBufferATR = input.float(0.20, "20 EMA touch buffer in ATR", minval = 0.05, maxval = 1.00, step = 0.05, group = "1H Precision Entry")
@@ -252,12 +256,17 @@ signalBody = math.max(math.abs(close - open), syminfo.mintick)
 signalLowerWick = math.min(open, close) - low
 signalUpperWick = high - math.max(open, close)
 signalRange = high - low
+signalBodyShare = signalBody / math.max(signalRange, syminfo.mintick)
 oneHourLongBias = fastEMA > slowEMA and slowSlopeUp and higherTrendUp and trendVolatilityOK and metalSyncLongOK
 oneHourShortBias = fastEMA < slowEMA and slowSlopeDown and higherTrendDown and trendVolatilityOK and metalSyncShortOK
 oneHourLongRetest = oneHourLongBias and low <= fastEMA + atrValue * precisionPullbackBufferATR and close > fastEMA and close > slowEMA and close > open and signalLowerWick / signalBody >= 0.35 and close - fastEMA <= atrValue * precisionMaxEntryDistanceATR and rsiValue >= 52 and rsiValue <= 68 and signalRange <= atrValue * 1.50
 oneHourShortRetest = oneHourShortBias and high >= fastEMA - atrValue * precisionPullbackBufferATR and close < fastEMA and close < slowEMA and close < open and signalUpperWick / signalBody >= 0.35 and fastEMA - close <= atrValue * precisionMaxEntryDistanceATR and rsiValue <= 48 and rsiValue >= 32 and signalRange <= atrValue * 1.50
-standardTrendLongSignal = fastCrossUp and slowSlopeUp and rsiValue > 55 and trendVolatilityOK and higherTrendUp and metalSyncLongOK
-standardTrendShortSignal = fastCrossDown and slowSlopeDown and rsiValue < 45 and trendVolatilityOK and higherTrendDown and metalSyncShortOK
+longPullbackCandle = close[1] < open[1] and low[1] <= fastEMA[1] + atrValue[1] * trendPullbackBufferATR
+shortPullbackCandle = close[1] > open[1] and high[1] >= fastEMA[1] - atrValue[1] * trendPullbackBufferATR
+longDefendedReclaim = longPullbackCandle and close > open and close > high[1] and close > fastEMA and close > slowEMA and signalBodyShare >= trendMinimumBodyShare and signalRange <= atrValue * trendMaximumRangeATR and close - fastEMA <= atrValue * 0.75 and rsiValue >= 52 and rsiValue <= 68
+shortDefendedReclaim = shortPullbackCandle and close < open and close < low[1] and close < fastEMA and close < slowEMA and signalBodyShare >= trendMinimumBodyShare and signalRange <= atrValue * trendMaximumRangeATR and fastEMA - close <= atrValue * 0.75 and rsiValue <= 48 and rsiValue >= 32
+standardTrendLongSignal = fastEMA > slowEMA and slowSlopeUp and trendVolatilityOK and higherTrendUp and metalSyncLongOK and (useDefendedTrendEntry ? longDefendedReclaim : fastCrossUp and rsiValue > 55)
+standardTrendShortSignal = fastEMA < slowEMA and slowSlopeDown and trendVolatilityOK and higherTrendDown and metalSyncShortOK and (useDefendedTrendEntry ? shortDefendedReclaim : fastCrossDown and rsiValue < 45)
 trendLongSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourLongRetest : standardTrendLongSignal)
 trendShortSetup = enableTrend and decisionBarReady and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and trendCooldownOK and (oneHourPrecisionActive ? oneHourShortRetest : standardTrendShortSignal)
 
@@ -413,9 +422,9 @@ if noChaseShort
     lastBadEntryBar := bar_index
 
 // Optional early heads-up for the compact panel. FORMING is not a signal: P1
-// still requires the actual EMA cross and every filter at a completed candle.
-p1LongForming = enableTrend and not fifteenMinuteRiskDetected and not shockPauseActive and strategy.position_size == 0 and not trendLongSetup and not rawAvoidLong and not rawNoChaseLong and (oneHourPrecisionActive ? oneHourLongBias and close > slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeUp and higherTrendUp and metalSyncLongOK and trendVolatilityOK and rsiValue > 50 and fastEMA <= slowEMA and slowEMA - fastEMA <= atrValue * 0.20)
-p1ShortForming = enableTrend and not fifteenMinuteRiskDetected and not shockPauseActive and strategy.position_size == 0 and not trendShortSetup and not rawAvoidShort and not rawNoChaseShort and (oneHourPrecisionActive ? oneHourShortBias and close < slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : slowSlopeDown and higherTrendDown and metalSyncShortOK and trendVolatilityOK and rsiValue < 50 and fastEMA >= slowEMA and fastEMA - slowEMA <= atrValue * 0.20)
+// requires a completed pullback and defended reclaim when the safer default is on.
+p1LongForming = enableTrend and not fifteenMinuteRiskDetected and not shockPauseActive and strategy.position_size == 0 and not trendLongSetup and not rawAvoidLong and not rawNoChaseLong and (oneHourPrecisionActive ? oneHourLongBias and close > slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : fastEMA > slowEMA and slowSlopeUp and higherTrendUp and metalSyncLongOK and trendVolatilityOK and rsiValue > 48 and (longPullbackCandle or low <= fastEMA + atrValue * trendPullbackBufferATR))
+p1ShortForming = enableTrend and not fifteenMinuteRiskDetected and not shockPauseActive and strategy.position_size == 0 and not trendShortSetup and not rawAvoidShort and not rawNoChaseShort and (oneHourPrecisionActive ? oneHourShortBias and close < slowEMA and math.abs(close - fastEMA) <= atrValue * 0.75 : fastEMA < slowEMA and slowSlopeDown and higherTrendDown and metalSyncShortOK and trendVolatilityOK and rsiValue < 52 and (shortPullbackCandle or high >= fastEMA - atrValue * trendPullbackBufferATR))
 
 var float trendStopPrice = na
 var float trendTargetPrice = na
@@ -600,7 +609,7 @@ if trendLongSetup
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? (oneHourPrecisionActive ? "BUY ENTRY\nP1 · 1H RETEST" : "BUY ENTRY\nP1") : "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? (oneHourPrecisionActive ? "BUY CONFIRMED\n1H RETEST" : "BUY CONFIRMED\nDEFENDED P1") : "LONG ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_up, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_down, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -635,7 +644,7 @@ if trendShortSetup
     planTarget3Label := na
     planStopLabel := na
     if showTradePlan
-        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? (oneHourPrecisionActive ? "SELL ENTRY\nP1 · 1H RETEST" : "SELL ENTRY\nP1") : "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
+        planEntryLabel := label.new(bar_index, plannedEntry, simpleChartMode ? (oneHourPrecisionActive ? "SELL CONFIRMED\n1H RETEST" : "SELL CONFIRMED\nDEFENDED P1") : "SHORT ENTRY\nR:R " + str.tostring(rewardRisk, "#.##"), style = label.style_label_down, color = color.new(color.yellow, 5), textcolor = color.black, size = size.tiny)
         planTarget1Label := label.new(bar_index, plannedTarget1, "TP1 · 1R", style = label.style_label_up, color = color.new(color.lime, 18), textcolor = color.black, size = size.tiny)
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
@@ -1253,10 +1262,10 @@ tradeHealthTextColor = tp1ApproachArmed and not tp1FailureWarned and not halfSto
 buySignalNow = not fifteenMinuteRiskDetected and (trendLongSetup or reversalLongConfirmed or reentryLongConfirmed)
 sellSignalNow = not fifteenMinuteRiskDetected and (trendShortSetup or reversalShortConfirmed or reentryShortConfirmed)
 activeEntryId = strategy.opentrades > 0 ? strategy.opentrades.entry_id(0) : ""
-activeSignalText = str.contains(activeEntryId, "TREND") ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : str.contains(activeEntryId, "REENTRY") ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? "1M AUTO FLIP" : "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
+activeSignalText = str.contains(activeEntryId, "TREND") ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · DEFENDED") : str.contains(activeEntryId, "REENTRY") ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? "1M AUTO FLIP" : "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
 simpleActionText = buySignalNow ? "BUY SIGNAL" : sellSignalNow ? "SELL SIGNAL" : strategy.position_size > 0 ? "LONG ACTIVE" : strategy.position_size < 0 ? "SHORT ACTIVE" : shockPauseActive or fifteenMinuteRiskDetected ? "NO TRADE" : "WAIT"
 simpleActionColor = buySignalNow ? color.new(color.lime, 44) : sellSignalNow ? color.new(color.red, 42) : strategy.position_size != 0 ? color.new(color.aqua, 68) : shockPauseActive or fifteenMinuteRiskDetected ? color.new(color.fuchsia, 48) : color.new(color.orange, 68)
-simpleSignalText = trendLongSetup or trendShortSetup ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · TREND") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY" : "1M FLIP SELL") : "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY · ARMED" : "1M FLIP SELL · ARMED") : (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryForcedDirection == 1 ? "1M FLIP BUY · SCAN" : "1M FLIP SELL · SCAN") : "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · FORMING") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · FORMING") : "NONE · KEEP WAITING"
+simpleSignalText = trendLongSetup or trendShortSetup ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · DEFENDED") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY" : "1M FLIP SELL") : "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY · ARMED" : "1M FLIP SELL · ARMED") : (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryForcedDirection == 1 ? "1M FLIP BUY · SCAN" : "1M FLIP SELL · SCAN") : "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · WAIT DEFENSE") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · WAIT DEFENSE") : "NONE · KEEP WAITING"
 simpleSignalColor = buySignalNow ? color.new(color.lime, 60) : sellSignalNow ? color.new(color.red, 56) : strategy.position_size != 0 ? color.new(color.aqua, 76) : not na(reentryPendingBar) or reentryArmed ? color.new(color.purple, 68) : not na(pendingLongBar) or not na(pendingShortBar) or p1LongForming or p1ShortForming ? color.new(color.yellow, 68) : color.new(color.gray, 82)
 simpleMetalText = metalsBullishSync ? "BULLISH" : metalsBearishSync ? "BEARISH" : "WAIT · NOT SYNCED"
 simpleRiskText = blowOffTop ? "BLOW-OFF TOP" : blowOffBottom ? "BLOW-OFF BOTTOM" : buySideManipulation ? "MANIPULATION · AVOID LONG" : sellSideManipulation ? "MANIPULATION · AVOID SHORT" : shockPauseActive ? "HIGH · NO NEW TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
@@ -1481,6 +1490,7 @@ export default function Home() {
                   <Badge variant="outline" className="border-purple-300/25 text-purple-200">1M AUTO RECOVERY</Badge>
                   <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">TP1 / TP2 / TP3 + SL</Badge>
                   <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
+                  <Badge variant="outline" className="border-sky-300/25 text-sky-200">DEFENDED PULLBACK ENTRY</Badge>
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
                   <Badge variant="outline" className="border-lime-300/25 text-lime-200">GOLD + SILVER SYNC</Badge>
                   <Badge variant="outline" className="border-red-300/25 text-red-200">SMART TRADE HEALTH</Badge>
@@ -1488,7 +1498,7 @@ export default function Home() {
                   <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">15M MANIPULATION + BLOW-OFF</Badge>
                 </div>
                 <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and checks both metals</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">P1–P3 marks separate confirmed entries from watch-only conditions. Gold and Silver must agree on direction, while 1-minute recovery mode can rebuild a smaller SL/TP plan after a confirmed failure or stop.</p>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">A moving-average cross is now watch-only. P1 requires a completed pullback followed by a strong reclaim candle; P2–P3 remain reversal and controlled-reset setups. Gold and Silver must still agree before any direction becomes actionable.</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
@@ -1507,8 +1517,8 @@ export default function Home() {
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
-              <CardDescription>Downloadable Expert Advisor · H1 entries · M15 safety · automatic broker-side SL and managed TP1/TP2/TP3</CardDescription>
-              <CardAction><Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-200">DEMO-ONLY DEFAULT</Badge></CardAction>
+              <CardDescription>Downloadable research Expert Advisor · fixed 0.01 lot · $7.50 planned SL · $20 TP · one-loss daily lock</CardDescription>
+              <CardAction><Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-200">ENTRIES OFF BY DEFAULT</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
               <div>
@@ -1516,7 +1526,7 @@ export default function Home() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-2xl">
                       <p className="text-sm font-semibold text-emerald-100">A real MT5 Expert Advisor—not a browser trade button</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">It waits for a completed H1 pullback signal, checks daily direction and Gold/Silver agreement, applies the M15 manipulation/shock gate, checks high-impact USD news, sizes the position from the stop distance and sends the order with SL plus final TP3.</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.40 waits for a completed pullback and break-confirmation candle, then watches for a 50% confirmation-body retest. Touching that price no longer opens a trade: a completed bullish or bearish defense candle must reclaim the level while D1, H1, M15 strength, Gold/Silver agreement, spread and USD-news safety remain valid. It can then send exactly 0.01 lot with a money-based SL and final $20 TP. This candidate is still research-only, so new entries and live trading are disabled by default.</p>
                     </div>
                     <a
                       href="./downloads/AurumGuardAutoTrader.mq5"
@@ -1530,10 +1540,10 @@ export default function Home() {
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {[
-                    ['1 · Confirm', 'Processes only completed H1 candles—no forming-candle entry.'],
-                    ['2 · Filter', 'Requires daily trend, 20/50 EMA retest, RSI and Gold/Silver sync.'],
-                    ['3 · Protect', 'M15 manipulation, blow-off, abnormal spread and USD news can block entry.'],
-                    ['4 · Execute', 'Risk-sized market order with SL, TP1 at 1R, TP2 at 1.5R and TP3 at 2.14R.'],
+                    ['1 · Confirm', 'Requires a completed pullback, then a separate candle closing through its extreme.'],
+                    ['2 · Retest', 'Waits for the confirmation-body midpoint; touching it is only a watch, not an order.'],
+                    ['3 · Defend', 'Requires a strong close back through the retest while D1/H1/M15, metals, spread and news remain clear.'],
+                    ['4 · Execute', 'Only the defended close allows a fixed 0.01-lot order with $7.50 planned SL and final $20 TP.'],
                   ].map(([title, description]) => (
                     <div key={title} className="rounded-xl border border-white/8 bg-black/15 p-3">
                       <p className="text-[10px] font-semibold text-emerald-200">{title}</p>
@@ -1542,9 +1552,14 @@ export default function Home() {
                   ))}
                 </div>
 
+                <div className="mt-4 rounded-xl border border-sky-300/20 bg-sky-300/[.04] p-4">
+                  <p className="text-xs font-semibold text-sky-100">Early-entry protection added</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The failed first BUY in your example was the type of entry that can occur when an EMA signal appears before buyers defend the pullback. The revised logic treats that first indication as a watch. It waits for price to retest, refuses a falling touch, and requires a completed reclaim candle before showing a confirmed entry. This may avoid some premature entries, but it also enters later and can miss fast reversals.</p>
+                </div>
+
                 <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
                   <p className="flex items-center gap-2 text-xs font-semibold text-red-100"><LockKeyhole className="size-3.5" /> Live-account lock</p>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The EA refuses to initialize on a real-money account while <span className="font-mono text-red-200">AllowLiveTrading = false</span>. Do not unlock it until the exact broker symbols, volume sizing, stop distance, partial exits and news behavior have been forward-tested on demo. It has no martingale and no instant revenge re-entry.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The EA refuses to initialize on a real-money account while <span className="font-mono text-red-200">AllowLiveTrading = false</span>. It also starts with <span className="font-mono text-red-200">EnableNewEntries = false</span>. Do not unlock either control until the exact broker symbols, volume sizing, stop distance, partial exits and news behavior have been forward-tested on demo. It has no martingale and no instant revenge re-entry.</p>
                 </div>
               </div>
 
@@ -1553,10 +1568,10 @@ export default function Home() {
                   <p className="text-xs font-semibold">Safe defaults included</p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
                     {[
-                      ['0.25%', 'Risk per trade'],
-                      ['1.00%', 'Daily loss lock'],
-                      ['2', 'Maximum entries/day'],
-                      ['H1 + M15', 'Signal + safety'],
+                      ['0.01', 'Fixed lot size'],
+                      ['$7.50', 'Default planned SL'],
+                      ['$20', 'Final TP per trade'],
+                      ['$7.50', 'One-loss daily lock'],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/8 bg-white/[.025] p-3">
                         <p className="font-heading text-base font-semibold text-primary">{value}</p>
@@ -1564,8 +1579,35 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">If the calculated size is below your broker’s minimum lot, the EA skips the trade instead of rounding risk upward. Partial TP1/TP2 closes happen only when the broker’s volume step permits them; the remaining position keeps TP3.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">The EA refuses to initialize if the broker does not support exactly 0.01 lot. The SL is configurable only from $5 to $10 and defaults to $7.50. There is no daily profit cutoff, but one planned full loss locks new entries for the day. These amounts use the account currency; gaps, slippage and commissions can make the actual result different.</p>
                   <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The MT5 economic calendar guard is intentionally bypassed in Strategy Tester because historical calendar availability differs by terminal. Verify its real-time USD-event blocking during demo forward testing.</p>
+                </div>
+
+                <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-amber-100">Broad M1 research result</p>
+                    <Badge variant="outline" className="border-red-300/25 text-red-200">NOT LIVE READY</Badge>
+                  </div>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Version 1.30 confirmation + 50% candle-retest candidate · XAUUSD M1 · every tick · January 1–September 2, 2026 · $10,000 tester balance · zero-latency model</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4 xl:grid-cols-2">
+                    {[
+                      ['+$0.04', 'Net result'],
+                      ['1.00', 'Profit factor'],
+                      ['$15.11', 'Gross profit'],
+                      ['−$15.07', 'Gross loss'],
+                      ['0.19%', 'Max equity drawdown'],
+                      ['7', 'Total trades'],
+                      ['71.43%', 'Winning trades'],
+                      ['100%', 'History quality'],
+                    ].map(([value, label]) => (
+                      <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
+                        <p className="font-heading text-sm font-semibold text-amber-100">{value}</p>
+                        <p className="mt-0.5 text-muted-foreground">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-red-100/85">The retest improved the older −$7.73 candidate to break-even, but it still failed validation: a 1.00 profit factor shows no measured edge, and seven trades are far too few for a reliable conclusion. The built-in optimizer gate rejected it because validation requires at least 30 trades, positive net profit, profit factor of 1.20 or better, and no more than 5% equity drawdown. The 71.43% win rate is misleading by itself because several wins were tiny while two losses reached the planned stop. New entries and live trading remain off by default. No result here is a profit prediction.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-sky-100/80">Version 1.40 adds the defended-retest close described above. It compiled with zero errors and warnings, but its backtest is not listed here until a fresh full test completes.</p>
                 </div>
 
                 <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-4">
@@ -1574,9 +1616,9 @@ export default function Home() {
                     <li><span className="mr-2 font-semibold text-cyan-200">1.</span>Download the <span className="font-mono text-foreground">.mq5</span> file.</li>
                     <li><span className="mr-2 font-semibold text-cyan-200">2.</span>In MT5: File → Open Data Folder → MQL5 → Experts, then place the file there.</li>
                     <li><span className="mr-2 font-semibold text-cyan-200">3.</span>Open MetaEditor, compile with F7, then refresh Navigator → Expert Advisors.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>Open your broker’s Gold chart on H1 and drag Aurum Guard onto it.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>Open your broker’s Gold chart and drag Aurum Guard onto it. H1 is the lower-frequency default; M1 remains research-only.</li>
                     <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Enter your broker’s exact Silver symbol—such as XAGUSD, XAGUSD.a or SILVER.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">6.</span>Enable Algo Trading on demo and monitor the Experts and Journal tabs.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">6.</span>For a deliberate demo/tester run only, set <span className="font-mono text-foreground">EnableNewEntries = true</span>, enable Algo Trading and monitor Experts and Journal.</li>
                   </ol>
                 </div>
 
@@ -1610,7 +1652,7 @@ export default function Home() {
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   {[
-                    ['P1 · 1H RETEST', 'WAIT RETEST means the daily and 1H trends agree. BUY/SELL appears only after price pulls back near the 20 EMA and a 1H rejection candle confirms.', 'border-cyan-300/20 text-cyan-200'],
+                    ['P1 · DEFENDED', 'WAIT DEFENSE is not an entry. BUY/SELL appears only after a completed pullback and a strong reclaim close; on 1H it also requires the daily-aligned 20 EMA retest.', 'border-cyan-300/20 text-cyan-200'],
                     ['P2 · REVERSAL', 'ARMED means a liquidity-sweep reversal passed its first check. Keep waiting until price crosses the yellow trigger and BUY/SELL P2 appears.', 'border-emerald-300/20 text-emerald-200'],
                     ['P3 · RESET', 'SCANNING or ARMED means the post-stop reset is searching. It becomes actionable only when BUY/SELL P3 appears after its trigger.', 'border-purple-300/20 text-purple-200'],
                     ['1M · FAILURE FLIP', 'FLIP WATCH is only a warning. BUY/SELL 1M FLIP appears after an opposite candle closes, the old trade exits, one candle passes and the fresh trigger fills.', 'border-red-300/20 text-red-200'],
@@ -2018,11 +2060,11 @@ export default function Home() {
               <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.045] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
-                    <p className="text-xs font-semibold text-cyan-100">P1 · 1H precision pullback entry</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The old 1H crossover entry is replaced by a more selective retest. The completed daily candle sets direction; the 1H 20 EMA must stay on the correct side of the 50 EMA; price must pull back near the 20 EMA; then a rejection candle must close back with the trend while RSI is not stretched and Gold/Silver remain aligned.</p>
+                    <p className="text-xs font-semibold text-cyan-100">P1 · defended pullback entry</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The old crossover entry is replaced by a more selective sequence. The 20 EMA must remain on the correct side of the 50 EMA, one completed candle must pull back toward value, and the next candle must reclaim that candle’s high or low with a meaningful body. Higher-timeframe direction, RSI and Gold/Silver alignment must remain valid. On 1H, the completed daily candle adds the direction filter.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
-                    {['Daily bias', '1H trend', '20 EMA retest', 'Rejection close', 'BUY / SELL P1'].map((step, index) => (
+                    {['Trend aligned', 'Pullback closes', 'High / low reclaimed', 'Defense confirmed', 'BUY / SELL P1'].map((step, index) => (
                       <div key={step} className="flex items-center gap-1.5">
                         {index > 0 && <span className="text-cyan-300/60">→</span>}
                         <span className="rounded-md border border-cyan-300/15 bg-black/15 px-2 py-1.5 text-cyan-100">{step}</span>
@@ -2030,7 +2072,7 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <p className="mt-3 border-t border-cyan-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The stop is projected beyond the rejection candle with a 0.10 ATR buffer. This avoids placing it inside that signal candle, but it can make the stop distance—and therefore dollar risk—larger. Reduce position size accordingly and test it on paper first.</p>
+                <p className="mt-3 border-t border-cyan-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">A crossover by itself now stays at WAIT DEFENSE. The extra confirmation reduces early entries but cannot guarantee the next move; it can also arrive late or miss a fast reversal. Test the exact market and broker feed on paper first.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
@@ -2124,7 +2166,8 @@ export default function Home() {
                 {[
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
-                  ['Three-target plan', 'Yellow candidate entry, green TP1 at 1R, TP2 at 1.5R, TP3 at the final target, and one red SL.'],
+                    ['Defended P1 entry', 'An EMA cross is watch-only; P1 needs a completed pullback candle and a strong reclaim through its high or low.'],
+                    ['Three-target plan', 'Yellow candidate entry, green TP1 at 1R, TP2 at 1.5R, TP3 at the final target, and one red SL.'],
                   ['Simple chart mode', 'Shows only confirmed BUY/SELL marks and serious safety warnings; detailed context labels stay hidden.'],
                   ['1H precision entry', 'Waits for daily alignment, a 1H pullback to the 20 EMA and a confirmed rejection instead of chasing the crossover.'],
                   ['1m auto recovery', 'Arms at half-to-SL or failed TP1, confirms an opposite close, then rebuilds a smaller fresh SL/TP bracket.'],
