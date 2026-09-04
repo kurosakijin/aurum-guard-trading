@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--silver", default="XAGUSD")
     parser.add_argument("--model", type=Path, default=Path("aurum_guard_ai_model.joblib"))
     parser.add_argument("--signal-file", default="aurum_guard_ai_signal.csv")
+    parser.add_argument("--history-file", default="", help="Optional append-only closed-bar shadow log in Common/Files")
     parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--once", action="store_true")
     return parser.parse_args()
@@ -44,6 +45,21 @@ def write_signal(path: Path, row: list[object]) -> None:
     os.replace(temporary, path)
 
 
+def append_history(path: Path, row: list[object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new_file = not path.exists()
+    with path.open("a", newline="", encoding="ascii") as handle:
+        writer = csv.writer(handle)
+        if new_file:
+            writer.writerow([
+                "generated_at", "bar_time", "model_id", "raw_label", "health",
+                "buy_probability", "sell_probability", "wait_probability", "drift_share",
+            ])
+        writer.writerow(row)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -59,6 +75,7 @@ def main() -> int:
         mt5.shutdown()
         raise SystemExit("MT5 common data path is unavailable")
     signal_path = Path(terminal.commondata_path) / "Files" / args.signal_file
+    history_path = Path(terminal.commondata_path) / "Files" / args.history_file if args.history_file else None
     last_bar_time = 0
     print(f"Aurum Guard AI connected. Publishing closed-bar scores to {signal_path}")
 
@@ -99,6 +116,12 @@ def main() -> int:
                         ],
                     )
                     raw_label = "BUY" if raw_direction > 0 else "SELL" if raw_direction < 0 else "NO TRADE"
+                    if history_path is not None:
+                        append_history(history_path, [
+                            generated_at, bar_time, model.model_id, raw_label, health_code,
+                            f"{long_probability:.6f}", f"{short_probability:.6f}",
+                            f"{no_trade_probability:.6f}", f"{drift_share:.6f}",
+                        ])
                     label = raw_label if deployment_eligible else f"SHADOW {raw_label} (MODEL NOT PROMOTED)"
                     print(
                         f"{pd.to_datetime(bar_time, unit='s', utc=True)} | {label} | health={health_code} drift={drift_share:.1%} | "

@@ -36,6 +36,19 @@ challenger with `train_ai.py --multitimeframe-challenger --model challenger.jobl
 --report challenger.json`; never overwrite a champion merely because a model has
 more inputs.
 
+## V7 forward-shadow challenger
+
+A broader 1,824-experiment chronological search selected a 33-feature Random
+Forest at a fixed 55% threshold. Its first three selection folds totalled
++21.42R, but the untouched confirmation fold lost 7.28R with a 0.74 profit
+factor. The previously observed newest diagnostic window showed +8.31R and a
+1.42 profit factor, which cannot erase the confirmation failure. It is therefore
+packaged as `aurum_guard_ai_v7_shadow.joblib` with `deployment_eligible=false`.
+
+`run_v7_shadow.cmd` records fresh closed-bar probabilities in a separate file;
+it does not replace the EA signal and cannot authorize an order. Use that forward
+log to gather new evidence without changing the v5 champion or risking money.
+
 ## Safe first run
 
 1. Use a MetaTrader 5 demo account and keep MT5 open.

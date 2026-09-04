@@ -1,0 +1,734 @@
+{
+  "method": "models and thresholds selected on folds 1-3 only; fold 4 confirmation; previously observed quarantine diagnostic",
+  "experiment_count": 1824,
+  "eligible_on_selection": 12,
+  "winner": {
+    "feature_set": "legacy33",
+    "model": "rfc",
+    "kind": "classifier",
+    "weighted": false,
+    "side": "both",
+    "threshold": 0.55,
+    "selection_trades": 313,
+    "selection_net_r": 21.424213997660736,
+    "selection_positive_folds": 3,
+    "selection_worst_lcb": -0.11705105630649243,
+    "selection_max_dd_r": 10.09738298103668,
+    "selection_folds": [
+      {
+        "trades": 91,
+        "wins": 40,
+        "win_rate": 0.43956043956043955,
+        "net_r": 10.743828933178138,
+        "mean_r": 0.11806405421074877,
+        "lower_r": -0.05993182489405714,
+        "pf": 1.3569378383115696,
+        "dd_r": 6.030442117576135
+      },
+      {
+        "trades": 111,
+        "wins": 46,
+        "win_rate": 0.4144144144144144,
+        "net_r": 6.367526882398399,
+        "mean_r": 0.05736510704863422,
+        "lower_r": -0.09071368988036975,
+        "pf": 1.1793669544337577,
+        "dd_r": 10.09738298103668
+      },
+      {
+        "trades": 111,
+        "wins": 46,
+        "win_rate": 0.4144144144144144,
+        "net_r": 4.312858182084199,
+        "mean_r": 0.038854578216974765,
+        "lower_r": -0.11705105630649243,
+        "pf": 1.1064903254835672,
+        "dd_r": 7.595225854555562
+      }
+    ],
+    "confirmation_fold": {
+      "trades": 84,
+      "wins": 29,
+      "win_rate": 0.34523809523809523,
+      "net_r": -7.279643497309542,
+      "mean_r": -0.08666242258701835,
+      "lower_r": -0.23151248581295342,
+      "pf": 0.7445739123751082,
+      "dd_r": 10.550833568813662
+    }
+  },
+  "quarantine_diagnostic": {
+    "trades": 75,
+    "wins": 39,
+    "win_rate": 0.52,
+    "net_r": 8.310935160838994,
+    "mean_r": 0.11081246881118659,
+    "lower_r": -0.062283298932013925,
+    "pf": 1.4240273041244385,
+    "dd_r": 5.750485904739069
+  },
+  "promotion_eligible": false,
+  "warning": "The quarantine period has been observed in earlier research and is no longer a pristine final test. Forward demo remains mandatory.",
+  "top_selection_candidates": [
+    {
+      "feature_set": "legacy33",
+      "model": "rfc",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "both",
+      "threshold": 0.55,
+      "selection_trades": 313,
+      "selection_net_r": 21.424213997660736,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.11705105630649243,
+      "selection_max_dd_r": 10.09738298103668,
+      "selection_folds": [
+        {
+          "trades": 91,
+          "wins": 40,
+          "win_rate": 0.43956043956043955,
+          "net_r": 10.743828933178138,
+          "mean_r": 0.11806405421074877,
+          "lower_r": -0.05993182489405714,
+          "pf": 1.3569378383115696,
+          "dd_r": 6.030442117576135
+        },
+        {
+          "trades": 111,
+          "wins": 46,
+          "win_rate": 0.4144144144144144,
+          "net_r": 6.367526882398399,
+          "mean_r": 0.05736510704863422,
+          "lower_r": -0.09071368988036975,
+          "pf": 1.1793669544337577,
+          "dd_r": 10.09738298103668
+        },
+        {
+          "trades": 111,
+          "wins": 46,
+          "win_rate": 0.4144144144144144,
+          "net_r": 4.312858182084199,
+          "mean_r": 0.038854578216974765,
+          "lower_r": -0.11705105630649243,
+          "pf": 1.1064903254835672,
+          "dd_r": 7.595225854555562
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 84,
+        "wins": 29,
+        "win_rate": 0.34523809523809523,
+        "net_r": -7.279643497309542,
+        "mean_r": -0.08666242258701835,
+        "lower_r": -0.23151248581295342,
+        "pf": 0.7445739123751082,
+        "dd_r": 10.550833568813662
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "etc_d8_l20",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "both",
+      "threshold": 0.525,
+      "selection_trades": 401,
+      "selection_net_r": 9.746213016034636,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.12722543299305422,
+      "selection_max_dd_r": 16.055959869729087,
+      "selection_folds": [
+        {
+          "trades": 133,
+          "wins": 51,
+          "win_rate": 0.38345864661654133,
+          "net_r": 0.2734557533703299,
+          "mean_r": 0.002056058296017518,
+          "lower_r": -0.12722543299305422,
+          "pf": 1.0063299942909798,
+          "dd_r": 11.662069643048678
+        },
+        {
+          "trades": 155,
+          "wins": 63,
+          "win_rate": 0.4064516129032258,
+          "net_r": 1.8582317441764502,
+          "mean_r": 0.011988591897912583,
+          "lower_r": -0.11548544279972218,
+          "pf": 1.0336636185539212,
+          "dd_r": 16.055959869729087
+        },
+        {
+          "trades": 113,
+          "wins": 48,
+          "win_rate": 0.4247787610619469,
+          "net_r": 7.614525518487856,
+          "mean_r": 0.06738518157953854,
+          "lower_r": -0.08240206843152043,
+          "pf": 1.2030540138263546,
+          "dd_r": 8.640801181466145
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 115,
+        "wins": 39,
+        "win_rate": 0.3391304347826087,
+        "net_r": -1.3508920714446857,
+        "mean_r": -0.011746887577779875,
+        "lower_r": -0.1482303168121908,
+        "pf": 0.9620535934987456,
+        "dd_r": 10.134836590182278
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "etc_d6_l40",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "both",
+      "threshold": 0.525,
+      "selection_trades": 367,
+      "selection_net_r": 7.7824359615765,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.1294182009586541,
+      "selection_max_dd_r": 12.918181981145509,
+      "selection_folds": [
+        {
+          "trades": 130,
+          "wins": 52,
+          "win_rate": 0.4,
+          "net_r": 0.7370112238523223,
+          "mean_r": 0.0056693171065563255,
+          "lower_r": -0.1294182009586541,
+          "pf": 1.016826740270601,
+          "dd_r": 9.974137832697382
+        },
+        {
+          "trades": 134,
+          "wins": 54,
+          "win_rate": 0.40298507462686567,
+          "net_r": 4.674792643938348,
+          "mean_r": 0.034886512268196626,
+          "lower_r": -0.10120267698501147,
+          "pf": 1.1038842809764078,
+          "dd_r": 12.918181981145509
+        },
+        {
+          "trades": 103,
+          "wins": 45,
+          "win_rate": 0.4368932038834951,
+          "net_r": 2.37063209378583,
+          "mean_r": 0.023015845570736212,
+          "lower_r": -0.1251996200425225,
+          "pf": 1.0701370441948512,
+          "dd_r": 11.396616363352472
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 98,
+        "wins": 35,
+        "win_rate": 0.35714285714285715,
+        "net_r": 0.5870496838319758,
+        "mean_r": 0.005990302896244651,
+        "lower_r": -0.14377357949599395,
+        "pf": 1.0193745770241571,
+        "dd_r": 8.857902320962271
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "etc_d6_l20",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "both",
+      "threshold": 0.525,
+      "selection_trades": 384,
+      "selection_net_r": 8.432595001421895,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.13919365115834942,
+      "selection_max_dd_r": 13.760592631066263,
+      "selection_folds": [
+        {
+          "trades": 138,
+          "wins": 58,
+          "win_rate": 0.42028985507246375,
+          "net_r": 5.086553695130332,
+          "mean_r": 0.03685908474732125,
+          "lower_r": -0.08963682375403217,
+          "pf": 1.1211084213126281,
+          "dd_r": 9.062069643048797
+        },
+        {
+          "trades": 139,
+          "wins": 57,
+          "win_rate": 0.41007194244604317,
+          "net_r": 1.9562895535450995,
+          "mean_r": 0.014074025565072657,
+          "lower_r": -0.12118005634574795,
+          "pf": 1.0389699114252011,
+          "dd_r": 13.760592631066263
+        },
+        {
+          "trades": 107,
+          "wins": 43,
+          "win_rate": 0.40186915887850466,
+          "net_r": 1.389751752746463,
+          "mean_r": 0.012988334137817411,
+          "lower_r": -0.13919365115834942,
+          "pf": 1.0371591377739713,
+          "dd_r": 9.571536284524198
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 100,
+        "wins": 34,
+        "win_rate": 0.34,
+        "net_r": -2.3517748845413786,
+        "mean_r": -0.023517748845413786,
+        "lower_r": -0.17455162855806722,
+        "pf": 0.9300066998648407,
+        "dd_r": 9.680551962401825
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "rfc",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "short",
+      "threshold": 0.5,
+      "selection_trades": 359,
+      "selection_net_r": 6.434564068383541,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.14407321786578467,
+      "selection_max_dd_r": 9.56131127697121,
+      "selection_folds": [
+        {
+          "trades": 118,
+          "wins": 50,
+          "win_rate": 0.423728813559322,
+          "net_r": 0.5738400046832675,
+          "mean_r": 0.0048630508871463345,
+          "lower_r": -0.13074123888666286,
+          "pf": 1.014789690842352,
+          "dd_r": 8.791136043197257
+        },
+        {
+          "trades": 137,
+          "wins": 58,
+          "win_rate": 0.4233576642335766,
+          "net_r": 5.2392364844104025,
+          "mean_r": 0.03824260207598834,
+          "lower_r": -0.09996612520368281,
+          "pf": 1.1071418503969406,
+          "dd_r": 9.56131127697121
+        },
+        {
+          "trades": 104,
+          "wins": 46,
+          "win_rate": 0.4423076923076923,
+          "net_r": 0.6214875792898709,
+          "mean_r": 0.005975842108556451,
+          "lower_r": -0.14407321786578467,
+          "pf": 1.0168882494372251,
+          "dd_r": 8.2503379942117
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 109,
+        "wins": 39,
+        "win_rate": 0.3577981651376147,
+        "net_r": -5.765829454491651,
+        "mean_r": -0.052897517931116064,
+        "lower_r": -0.19661667199799748,
+        "pf": 0.8441667715002285,
+        "dd_r": 16.694778753714385
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "etc_d6_l40",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "short",
+      "threshold": 0.5,
+      "selection_trades": 346,
+      "selection_net_r": 1.0768870574986233,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.15165467571541372,
+      "selection_max_dd_r": 15.155318556999987,
+      "selection_folds": [
+        {
+          "trades": 122,
+          "wins": 49,
+          "win_rate": 0.4016393442622951,
+          "net_r": 0.03536240228759552,
+          "mean_r": 0.00028985575645570097,
+          "lower_r": -0.13441761254124773,
+          "pf": 1.0008562325009103,
+          "dd_r": 10.000931971348663
+        },
+        {
+          "trades": 129,
+          "wins": 52,
+          "win_rate": 0.40310077519379844,
+          "net_r": 0.6149350212612541,
+          "mean_r": 0.004766938149312047,
+          "lower_r": -0.14064893570962717,
+          "pf": 1.012372938053546,
+          "dd_r": 15.155318556999987
+        },
+        {
+          "trades": 95,
+          "wins": 41,
+          "win_rate": 0.43157894736842106,
+          "net_r": 0.4265896339497738,
+          "mean_r": 0.004490417199471303,
+          "lower_r": -0.15165467571541372,
+          "pf": 1.0127721447290354,
+          "dd_r": 8.103137138564081
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 105,
+        "wins": 37,
+        "win_rate": 0.3523809523809524,
+        "net_r": -2.507709667491902,
+        "mean_r": -0.02388294921420859,
+        "lower_r": -0.17244328649339102,
+        "pf": 0.927939377370923,
+        "dd_r": 13.876296388776685
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "etc_d4_l20",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "both",
+      "threshold": 0.525,
+      "selection_trades": 309,
+      "selection_net_r": 11.610114560106576,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.17716240192364202,
+      "selection_max_dd_r": 9.667112285445013,
+      "selection_folds": [
+        {
+          "trades": 131,
+          "wins": 53,
+          "win_rate": 0.40458015267175573,
+          "net_r": 3.909586619771442,
+          "mean_r": 0.02984417267001101,
+          "lower_r": -0.10061533765762538,
+          "pf": 1.0982308195922479,
+          "dd_r": 7.827472555509887
+        },
+        {
+          "trades": 107,
+          "wins": 42,
+          "win_rate": 0.3925233644859813,
+          "net_r": 6.7896952731319,
+          "mean_r": 0.06345509601057851,
+          "lower_r": -0.09743430377703878,
+          "pf": 1.1810585406168528,
+          "dd_r": 8.1810126768266
+        },
+        {
+          "trades": 71,
+          "wins": 27,
+          "win_rate": 0.38028169014084506,
+          "net_r": 0.9108326672032336,
+          "mean_r": 0.012828629115538502,
+          "lower_r": -0.17716240192364202,
+          "pf": 1.0358595538269018,
+          "dd_r": 9.667112285445013
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 62,
+        "wins": 21,
+        "win_rate": 0.3387096774193548,
+        "net_r": -0.6298994396024233,
+        "mean_r": -0.010159668380684248,
+        "lower_r": -0.2255931204855085,
+        "pf": 0.973863093792431,
+        "dd_r": 8.200489121017004
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "etc_d8_l40",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "long",
+      "threshold": 0.525,
+      "selection_trades": 175,
+      "selection_net_r": 5.137528918322038,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.19346869113288775,
+      "selection_max_dd_r": 7.014056560377232,
+      "selection_folds": [
+        {
+          "trades": 48,
+          "wins": 18,
+          "win_rate": 0.375,
+          "net_r": 3.091915881657859,
+          "mean_r": 0.06441491420120539,
+          "lower_r": -0.17292320846317355,
+          "pf": 1.2061277254438587,
+          "dd_r": 3.327472555510104
+        },
+        {
+          "trades": 61,
+          "wins": 23,
+          "win_rate": 0.3770491803278688,
+          "net_r": 0.2507004463770236,
+          "mean_r": 0.004109843383229895,
+          "lower_r": -0.19346869113288775,
+          "pf": 1.0126616387059098,
+          "dd_r": 7.014056560377232
+        },
+        {
+          "trades": 66,
+          "wins": 28,
+          "win_rate": 0.42424242424242425,
+          "net_r": 1.7949125902871552,
+          "mean_r": 0.02719564530738114,
+          "lower_r": -0.1664423648491549,
+          "pf": 1.0823354399214327,
+          "dd_r": 5.4740246620949975
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 63,
+        "wins": 22,
+        "win_rate": 0.3492063492063492,
+        "net_r": 4.03553945334427,
+        "mean_r": 0.06405618179911539,
+        "lower_r": -0.1339296591614299,
+        "pf": 1.20077310713155,
+        "dd_r": 6.4579023209623205
+      }
+    },
+    {
+      "feature_set": "multitimeframe45",
+      "model": "hgc_shallow",
+      "kind": "classifier",
+      "weighted": true,
+      "side": "short",
+      "threshold": 0.55,
+      "selection_trades": 197,
+      "selection_net_r": 5.411820715074954,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.19842110563059728,
+      "selection_max_dd_r": 11.996630903413106,
+      "selection_folds": [
+        {
+          "trades": 81,
+          "wins": 37,
+          "win_rate": 0.4567901234567901,
+          "net_r": 1.9913564955296432,
+          "mean_r": 0.024584648092958558,
+          "lower_r": -0.14338251551018194,
+          "pf": 1.0726772443623953,
+          "dd_r": 11.996630903413106
+        },
+        {
+          "trades": 70,
+          "wins": 28,
+          "win_rate": 0.4,
+          "net_r": 2.9132992637633404,
+          "mean_r": 0.041618560910904864,
+          "lower_r": -0.13585967294278117,
+          "pf": 1.131229696565916,
+          "dd_r": 7.8669371599157945
+        },
+        {
+          "trades": 46,
+          "wins": 22,
+          "win_rate": 0.4782608695652174,
+          "net_r": 0.5071649557819712,
+          "mean_r": 0.011025325125695026,
+          "lower_r": -0.19842110563059728,
+          "pf": 1.0378481310285081,
+          "dd_r": 4.799999999999592
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 41,
+        "wins": 16,
+        "win_rate": 0.3902439024390244,
+        "net_r": -2.4043608441315345,
+        "mean_r": -0.0586429474178423,
+        "lower_r": -0.3213155423782581,
+        "pf": 0.8542811609617343,
+        "dd_r": 7.224055982661435
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "rfc",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "both",
+      "threshold": 0.5750000000000001,
+      "selection_trades": 153,
+      "selection_net_r": 14.344751989945836,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.20351327707554828,
+      "selection_max_dd_r": 6.58209050882799,
+      "selection_folds": [
+        {
+          "trades": 47,
+          "wins": 16,
+          "win_rate": 0.3404255319148936,
+          "net_r": 2.2839140463341545,
+          "mean_r": 0.0485939158794501,
+          "lower_r": -0.20351327707554828,
+          "pf": 1.1335622249318245,
+          "dd_r": 6.58209050882799
+        },
+        {
+          "trades": 47,
+          "wins": 19,
+          "win_rate": 0.40425531914893614,
+          "net_r": 4.502168226181773,
+          "mean_r": 0.09579081332301645,
+          "lower_r": -0.13879268685813861,
+          "pf": 1.3042005558231022,
+          "dd_r": 4.899999999999601
+        },
+        {
+          "trades": 59,
+          "wins": 25,
+          "win_rate": 0.423728813559322,
+          "net_r": 7.5586697174299085,
+          "mean_r": 0.12811304605813403,
+          "lower_r": -0.06399610748253148,
+          "pf": 1.4908227089240431,
+          "dd_r": 6.033333333332932
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 28,
+        "wins": 10,
+        "win_rate": 0.35714285714285715,
+        "net_r": -2.486399509745143,
+        "mean_r": -0.08879998249089796,
+        "lower_r": -0.36274950109542037,
+        "pf": 0.746285764311717,
+        "dd_r": 4.935743781658257
+      }
+    },
+    {
+      "feature_set": "legacy33",
+      "model": "etc_d6_l40",
+      "kind": "classifier",
+      "weighted": false,
+      "side": "both",
+      "threshold": 0.55,
+      "selection_trades": 146,
+      "selection_net_r": 6.159103923592681,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.2318112079476883,
+      "selection_max_dd_r": 7.045150067776897,
+      "selection_folds": [
+        {
+          "trades": 48,
+          "wins": 17,
+          "win_rate": 0.3541666666666667,
+          "net_r": 0.42767231517887394,
+          "mean_r": 0.008909839899559874,
+          "lower_r": -0.2318112079476883,
+          "pf": 1.025010076911045,
+          "dd_r": 5.499999999999925
+        },
+        {
+          "trades": 58,
+          "wins": 22,
+          "win_rate": 0.3793103448275862,
+          "net_r": 2.069507310079525,
+          "mean_r": 0.0356811605186125,
+          "lower_r": -0.18637241596774876,
+          "pf": 1.0915711199150244,
+          "dd_r": 7.045150067776897
+        },
+        {
+          "trades": 40,
+          "wins": 17,
+          "win_rate": 0.425,
+          "net_r": 3.6619242983342826,
+          "mean_r": 0.09154810745835706,
+          "lower_r": -0.1754979536722155,
+          "pf": 1.275332654010106,
+          "dd_r": 3.520305933384544
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 22,
+        "wins": 7,
+        "win_rate": 0.3181818181818182,
+        "net_r": -7.12571669240438,
+        "mean_r": -0.3238962132911082,
+        "lower_r": -0.5567060677308108,
+        "pf": 0.24992455869427202,
+        "dd_r": 7.225716692404592
+      }
+    },
+    {
+      "feature_set": "multitimeframe45",
+      "model": "hgc_regular",
+      "kind": "classifier",
+      "weighted": true,
+      "side": "short",
+      "threshold": 0.6000000000000001,
+      "selection_trades": 138,
+      "selection_net_r": 3.94461860727885,
+      "selection_positive_folds": 3,
+      "selection_worst_lcb": -0.252824812176762,
+      "selection_max_dd_r": 6.432327669500402,
+      "selection_folds": [
+        {
+          "trades": 57,
+          "wins": 26,
+          "win_rate": 0.45614035087719296,
+          "net_r": 3.0098654514381256,
+          "mean_r": 0.05280465704277413,
+          "lower_r": -0.1287460933528629,
+          "pf": 1.1869481646856,
+          "dd_r": 6.432327669500402
+        },
+        {
+          "trades": 53,
+          "wins": 21,
+          "win_rate": 0.39622641509433965,
+          "net_r": 0.6968635699865149,
+          "mean_r": 0.013148369245028583,
+          "lower_r": -0.19373831130350827,
+          "pf": 1.0382892071421161,
+          "dd_r": 6.203604418592109
+        },
+        {
+          "trades": 28,
+          "wins": 15,
+          "win_rate": 0.5357142857142857,
+          "net_r": 0.23788958585420972,
+          "mean_r": 0.008496056637650348,
+          "lower_r": -0.252824812176762,
+          "pf": 1.028661395886052,
+          "dd_r": 3.2999999999996787
+        }
+      ],
+      "confirmation_fold": {
+        "trades": 21,
+        "wins": 10,
+        "win_rate": 0.47619047619047616,
+        "net_r": 2.1201962410624806,
+        "mean_r": 0.10096172576488002,
+        "lower_r": -0.29532393357037945,
+        "pf": 1.298619188882001,
+        "dd_r": 2.624055982661349
+      }
+    }
+  ]
+}

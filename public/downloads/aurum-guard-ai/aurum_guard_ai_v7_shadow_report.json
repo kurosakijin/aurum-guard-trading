@@ -1,0 +1,37 @@
+{
+  "model_type": "v7 Random Forest chronological-selection challenger",
+  "trained_at_utc": "2026-09-04T05:26:48+00:00",
+  "gold_symbol": "XAUUSD",
+  "silver_symbol": "XAGUSD",
+  "decision_timeframe": "M1",
+  "feature_count": 33,
+  "threshold": 0.55,
+  "selection_folds_1_to_3": {
+    "trades": 313,
+    "net_r": 21.424213997660736,
+    "positive_folds": 3
+  },
+  "confirmation_fold": {
+    "trades": 84,
+    "wins": 29,
+    "win_rate": 0.34523809523809523,
+    "net_r": -7.279643497309542,
+    "mean_r": -0.08666242258701835,
+    "lower_r": -0.23151248581295342,
+    "pf": 0.7445739123751082,
+    "dd_r": 10.550833568813662
+  },
+  "quarantine_diagnostic": {
+    "trades": 75,
+    "wins": 39,
+    "win_rate": 0.52,
+    "net_r": 8.310935160838994,
+    "mean_r": 0.11081246881118659,
+    "lower_r": -0.062283298932013925,
+    "pf": 1.4240273041244385,
+    "dd_r": 5.750485904739069
+  },
+  "deployment_eligible": false,
+  "deployment_status": "FAILED CONFIRMATION FOLD - SHADOW ONLY",
+  "warning": "The quarantine period has been observed in earlier research and is no longer a pristine final test. Forward demo remains mandatory."
+}
