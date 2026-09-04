@@ -1,0 +1,80 @@
+{
+  "model_type": "three-member nonlinear defended-entry meta-label ensemble",
+  "ensemble_members": 3,
+  "maximum_probability_disagreement": 0.08,
+  "trained_at_utc": "2026-09-04T01:41:28+00:00",
+  "gold_symbol": "XAUUSD",
+  "silver_symbol": "XAGUSD",
+  "timeframe": "M1",
+  "horizon_bars": 15,
+  "target_atr": 1.25,
+  "stop_atr": 1.0,
+  "estimated_round_trip_cost_atr": 0.1,
+  "synchronized_bars": 74353,
+  "defended_candidates": 3535,
+  "development_candidates": 3004,
+  "locked_test_candidates": 531,
+  "development_period_utc": [
+    "2026-06-17T12:07:00+00:00",
+    "2026-08-24T10:21:00+00:00"
+  ],
+  "locked_test_period_utc": [
+    "2026-08-24T10:40:00+00:00",
+    "2026-09-04T04:23:00+00:00"
+  ],
+  "threshold": 0.7,
+  "walk_forward": {
+    "threshold": 0.7,
+    "approved_signals": 42,
+    "coverage": 0.02329450915141431,
+    "win_rate": 0.4523809523809524,
+    "mean_net_atr_utility": -0.08214285714285717,
+    "lower_confidence_utility": -0.36984819539987557
+  },
+  "walk_forward_folds": [
+    {
+      "threshold": 0.7,
+      "approved_signals": 20,
+      "coverage": 0.044444444444444446,
+      "win_rate": 0.4,
+      "mean_net_atr_utility": -0.2000000000000001,
+      "lower_confidence_utility": -0.6159845882140095
+    },
+    {
+      "threshold": 0.7,
+      "approved_signals": 13,
+      "coverage": 0.028824833702882482,
+      "win_rate": 0.6923076923076923,
+      "mean_net_atr_utility": 0.4576923076923076,
+      "lower_confidence_utility": -0.03544254242417749
+    },
+    {
+      "threshold": 0.7,
+      "approved_signals": 3,
+      "coverage": 0.0066518847006651885,
+      "win_rate": 0.3333333333333333,
+      "mean_net_atr_utility": -0.3500000000000001,
+      "lower_confidence_utility": -1.5837500000000002
+    },
+    {
+      "threshold": 0.7,
+      "approved_signals": 6,
+      "coverage": 0.013303769401330377,
+      "win_rate": 0.16666666666666666,
+      "mean_net_atr_utility": -0.7250000000000001,
+      "lower_confidence_utility": -1.3418750000000002
+    }
+  ],
+  "positive_walk_forward_folds": 1,
+  "locked_test": {
+    "threshold": 0.7,
+    "approved_signals": 0,
+    "coverage": 0.0,
+    "win_rate": 0.0,
+    "mean_net_atr_utility": -999.0,
+    "lower_confidence_utility": -999.0
+  },
+  "deployment_eligible": false,
+  "deployment_status": "FAILED RESEARCH GATE - SHADOW ONLY",
+  "warning": "Research probabilities are not guaranteed win rates or profit forecasts."
+}

@@ -4,7 +4,7 @@
 //|   Educational automation. Demo-only by default.                  |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "1.60"
+#property version   "1.70"
 #property strict
 #property description "Selective Gold pullback EA with fixed 0.01 lot, hard risk controls and an optional nonlinear fail-closed AI meta-label approval layer."
 
@@ -98,6 +98,12 @@ input double TP2ClosePercent                = 33.0;
 input bool   MoveStopToBreakEvenAtTP1        = true;
 input int    BreakEvenOffsetPoints           = 5;
 input bool   LockOneRAtTP2                   = true;  // protect about one planned SL of profit
+input bool   EnableEarlyProfitProtection      = true;  // one-way stop tightening; never widens risk
+input double BreakEvenTriggerMoney            = 3.00;  // move near break-even after this open profit
+input double ProfitLockTriggerMoney            = 6.00;  // then lock a small realized gain if price allows
+input double ProfitLockMoney                   = 1.50;
+input double TrailingTriggerMoney              = 10.00; // trail after a stronger scalp move
+input double TrailingGivebackMoney             = 3.00;  // maximum intended give-back, before slippage
 
 string   g_symbol = "";
 datetime g_lastSignalBar = 0;
@@ -931,6 +937,47 @@ bool ReducePosition(const ulong ticket,const double volume,const ENUM_POSITION_T
    return sent && TradeResultAccepted();
   }
 
+void ApplyEarlyProfitProtection(const ulong ticket,const ENUM_POSITION_TYPE type,const double entry,const double finalTarget,const double currentVolume,const double marketPrice)
+  {
+   if(!EnableEarlyProfitProtection || !PositionSelectByTicket(ticket))
+      return;
+   double openProfit=PositionGetDouble(POSITION_PROFIT);
+   if(openProfit<BreakEvenTriggerMoney)
+      return;
+
+   int direction=type==POSITION_TYPE_BUY ? 1 : -1;
+   double point=SymbolInfoDouble(g_symbol,SYMBOL_POINT);
+   double currentStop=PositionGetDouble(POSITION_SL);
+   double candidate=NormalizePrice(direction>0 ? entry+BreakEvenOffsetPoints*point : entry-BreakEvenOffsetPoints*point);
+
+   if(openProfit>=ProfitLockTriggerMoney)
+     {
+      double lockDistance=MoneyToPriceDistance(direction,entry,ProfitLockMoney,currentVolume,false);
+      if(lockDistance>0.0)
+         candidate=NormalizePrice(direction>0 ? entry+lockDistance : entry-lockDistance);
+     }
+   if(openProfit>=TrailingTriggerMoney)
+     {
+      double givebackDistance=MoneyToPriceDistance(direction,marketPrice,TrailingGivebackMoney,currentVolume,true);
+      if(givebackDistance>0.0)
+        {
+         double trailingStop=NormalizePrice(direction>0 ? marketPrice-givebackDistance : marketPrice+givebackDistance);
+         bool trailImproves=direction>0 ? trailingStop>candidate : trailingStop<candidate;
+         if(trailImproves)
+            candidate=trailingStop;
+        }
+     }
+
+   MqlTick latest;
+   if(!SymbolInfoTick(g_symbol,latest))
+      return;
+   double stopLevel=(double)SymbolInfoInteger(g_symbol,SYMBOL_TRADE_STOPS_LEVEL)*point;
+   bool valid=direction>0 ? candidate<latest.bid-stopLevel : candidate>latest.ask+stopLevel;
+   bool improves=direction>0 ? (currentStop<=0.0 || candidate>currentStop+point) : (currentStop<=0.0 || candidate<currentStop-point);
+   if(valid && improves && !trade.PositionModify(ticket,candidate,finalTarget))
+      Print("Aurum Guard profit-protection modify failed: ",trade.ResultRetcodeDescription());
+  }
+
 void ManageOpenPosition()
   {
    ulong ticket=0;
@@ -968,6 +1015,8 @@ void ManageOpenPosition()
    double marketPrice=type==POSITION_TYPE_BUY ? tick.bid : tick.ask;
    double tp1=type==POSITION_TYPE_BUY ? entry+risk : entry-risk;
    double tp2=type==POSITION_TYPE_BUY ? entry+risk*1.50 : entry-risk*1.50;
+
+   ApplyEarlyProfitProtection(ticket,type,entry,finalTarget,currentVolume,marketPrice);
 
    bool reachedTP1=type==POSITION_TYPE_BUY ? marketPrice>=tp1 : marketPrice<=tp1;
    bool reachedTP2=type==POSITION_TYPE_BUY ? marketPrice>=tp2 : marketPrice<=tp2;
@@ -1211,7 +1260,7 @@ void UpdateChartPanel()
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   if(StopLossMoney<5.0 || StopLossMoney>10.0 || TakeProfitMoney<=StopLossMoney || DailyLossLimitMoney<StopLossMoney || MaxTradesPerDay<0)
+   if(StopLossMoney<5.0 || StopLossMoney>10.0 || TakeProfitMoney<=StopLossMoney || DailyLossLimitMoney<StopLossMoney || MaxTradesPerDay<0 || BreakEvenTriggerMoney<=0.0 || ProfitLockTriggerMoney<BreakEvenTriggerMoney || ProfitLockMoney<0.0 || TrailingTriggerMoney<ProfitLockTriggerMoney || TrailingGivebackMoney<=0.0)
      {
       Print("Aurum Guard: invalid money controls. SL must be 5-10 account-currency units, TP must exceed SL, and daily loss must cover one planned SL.");
       return INIT_PARAMETERS_INCORRECT;

@@ -1517,7 +1517,7 @@ export default function Home() {
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
-              <CardDescription>MT5 v1.60 + nonlinear AI meta-label layer · fixed 0.01 lot · $7.50 planned SL · $20 TP · one-loss daily lock</CardDescription>
+              <CardDescription>MT5 v1.70 + nonlinear AI meta-label layer · fixed 0.01 lot · stepped profit protection · fail-closed research gate</CardDescription>
               <CardAction><Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-200">ENTRIES OFF BY DEFAULT</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
@@ -1526,7 +1526,7 @@ export default function Home() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-2xl">
                       <p className="text-sm font-semibold text-emerald-100">A real MT5 Expert Advisor—not a browser trade button</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.60 keeps the defended-retest entry, D1/H1/M15 trend checks, Gold/Silver agreement, spread, news guard and fixed-money protection. Its enhanced Python layer ignores ordinary candles, then scores only a causal defended trend/pullback candidate after the M1 candle closes. The AI starts in shadow mode and cannot bypass any EA risk control. New entries and live trading remain disabled by default.</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.70 keeps the defended-retest entry, D1/H1/M15 trend checks, Gold/Silver agreement, spread, news guard and fixed-money protection. It now tightens the stop one way after an open gain: near break-even at $3, a $1.50 intended profit lock at $6, then a $3 give-back trail after $10. Broker stop rules, gaps and slippage still apply. The AI starts in shadow mode and cannot bypass any EA risk control. New entries and live trading remain disabled by default.</p>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <a
@@ -1534,7 +1534,7 @@ export default function Home() {
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
                       >
-                        <Download className="size-4" /> Download MT5 v1.60
+                        <Download className="size-4" /> Download MT5 v1.70
                       </a>
                       <a
                         href="./downloads/AurumGuardAI.zip"
@@ -1575,9 +1575,9 @@ export default function Home() {
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
                     {[
                       ['74,353', 'Synchronized M1 bars'],
-                      ['3,886', 'Defended candidates'],
+                      ['3,880', 'Defended candidates'],
                       ['4', 'Walk-forward folds'],
-                      ['2 / 4', 'Positive fold means'],
+                      ['1 / 4', 'Positive fold means'],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
                         <p className="font-heading text-sm font-semibold text-violet-100">{value}</p>
@@ -1585,18 +1585,18 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Honest result: only 2 of 4 walk-forward fold means were positive, and the newest 583-candidate period produced no approvals at the conservative threshold—insufficient evidence. The model therefore marks itself <span className="font-semibold">FAILED RESEARCH GATE</span>. You can observe it in demo shadow mode, but it cannot approve strict automated entries. Forward evidence—not an “AI” label—must earn promotion.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Honest result: only 1 of 4 development fold means was positive, and the newest 582-candidate period produced only one approval—far too little evidence. The model therefore marks itself <span className="font-semibold">FAILED RESEARCH GATE</span>. You can observe it in demo shadow mode, but it cannot approve strict automated entries. A stricter three-model challenger was also tested and rejected after producing a 0.72 profit factor. Forward evidence—not an “AI” label—must earn promotion.</p>
                   <div className="mt-3 rounded-lg border border-red-300/20 bg-red-300/[.04] p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[10px] font-semibold text-red-100">AI expanding walk-forward shadow backtest</p>
-                      <Badge variant="outline" className="border-red-300/25 text-red-200">FAILED · PF 0.77</Badge>
+                      <Badge variant="outline" className="border-red-300/25 text-red-200">FAILED · PF 0.58</Badge>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
                       {[
-                        ['26', 'Non-overlap trades'],
-                        ['42.3%', 'Win rate'],
-                        ['−3.85 ATR', 'Net after costs'],
-                        ['6.20 ATR', 'Max drawdown'],
+                        ['28', 'Non-overlap trades'],
+                        ['35.7%', 'Win rate'],
+                        ['−8.30 ATR', 'Net after costs'],
+                        ['11.75 ATR', 'Max drawdown'],
                       ].map(([value, label]) => (
                         <div key={label} className="rounded-md border border-white/7 bg-black/15 p-2">
                           <p className="font-heading text-sm font-semibold text-red-100">{value}</p>
@@ -1604,7 +1604,7 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
-                    <p className="mt-2 text-[10px] leading-4 text-muted-foreground">June 17–September 4, 2026 · 74,353 synchronized M1 bars · fixed 70% threshold · 0.10 ATR estimated round-trip cost · 27 probability approvals and 1 regime-drift block. Two deterministic reruns matched exactly. This tests the AI shadow layer, not exact MT5 fills or the EA’s full retest execution.</p>
+                    <p className="mt-2 text-[10px] leading-4 text-muted-foreground">June 17–September 4, 2026 · 74,353 synchronized M1 bars · fixed 70% threshold · 0.10 ATR estimated round-trip cost · 29 probability approvals and 1 regime-drift block. This newest replay is the controlling result. It tests the AI shadow layer, not exact MT5 fills or the EA’s full retest execution.</p>
                   </div>
                 </div>
 

@@ -6,6 +6,12 @@ trend/pullback candidate must exist first, then a nonlinear gradient-boosted
 model estimates whether that candidate deserves approval. It does not bypass
 the EA's risk controls and it does not promise profit.
 
+EA v1.70 also adds one-way profit protection for a qualifying demo position:
+near break-even at $3 open profit, an intended $1.50 lock at $6, and a $3
+give-back trail after $10. These are defaults for a 0.01-lot setup, not a
+guarantee; broker stop distance, gaps, slippage, commissions and latency can
+produce a different result.
+
 ## What is enhanced
 
 - Side-specific TP-before-SL labels instead of a blanket next-direction guess.
@@ -40,6 +46,11 @@ Only after acceptable out-of-sample and forward-demo evidence should you set
 `AIShadowMode=false`. A model that is not marked deployment-eligible remains
 fail-closed even if strict mode is selected. Keep `AllowLiveTrading=false`; the AI gate is research
 software and sudden moves, slippage, gaps, bad data, and regime changes remain.
+
+The September 4 replay failed promotion (28 non-overlapping shadow trades,
+35.7% wins, 0.58 profit factor and -8.30 ATR after estimated costs). A stricter
+three-model challenger was also rejected (0.72 profit factor). The packaged EA
+therefore remains entry-disabled and the AI remains shadow-only.
 
 The signal file is written atomically to MetaTrader's shared Common/Files
 folder. If the runner stops or its score becomes stale, strict mode blocks new

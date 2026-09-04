@@ -4,7 +4,7 @@ A responsive gold and silver market dashboard with live TradingView widgets, a c
 
 ## MT5 Expert Advisor
 
-The downloadable `public/downloads/AurumGuardAutoTrader.mq5` is an H1 Gold Expert Advisor with M15 manipulation/shock protection, Gold/Silver confirmation, the MT5 USD economic-calendar filter, risk-based sizing, a daily loss lock, broker-side SL/TP3, and managed TP1/TP2 partial exits. It refuses real-account initialization unless `AllowLiveTrading` is deliberately enabled; use demo forward testing first.
+The downloadable `public/downloads/AurumGuardAutoTrader.mq5` is a research-safe Gold Expert Advisor with M15 manipulation/shock protection, Gold/Silver confirmation, the MT5 USD economic-calendar filter, fixed 0.01-lot sizing, a daily loss lock, broker-side SL/TP3, managed TP1/TP2 exits, and stepped one-way profit protection. It refuses real-account initialization unless `AllowLiveTrading` is deliberately enabled, starts with new entries disabled, and its current AI model failed the research gate; use shadow/demo validation first.
 
 ## Public website
 
