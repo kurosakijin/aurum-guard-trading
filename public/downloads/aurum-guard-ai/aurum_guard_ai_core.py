@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 
-MODEL_FORMAT_VERSION = 3
+MODEL_FORMAT_VERSION = 5
 FEATURE_COLUMNS = [
     "return_1", "return_3", "return_5", "return_15", "return_30",
     "ema20_distance_atr", "ema50_distance_atr", "ema20_slope_atr",
@@ -210,6 +210,74 @@ def add_trade_outcomes(
     return output
 
 
+def add_protected_trade_outcomes(
+    frame: pd.DataFrame,
+    horizon: int = 60,
+    stop_atr: float = 1.25,
+    target_r: float = 20.0 / 7.5,
+    cost_r: float = 0.10,
+) -> pd.DataFrame:
+    """Model the EA's fixed-money reward/risk and stepped stop protection.
+
+    R is the planned account-currency loss. Stop changes become active on the
+    following M1 bar so OHLC data never assumes a favorable intrabar path.
+    """
+    if horizon < 2 or stop_atr <= 0 or target_r <= 0 or cost_r < 0:
+        raise ValueError("Invalid protected outcome settings")
+    close = frame["close"].to_numpy(dtype=float)
+    high = frame["high"].to_numpy(dtype=float)
+    low = frame["low"].to_numpy(dtype=float)
+    atr = frame["atr"].to_numpy(dtype=float)
+    output = frame.copy()
+
+    for direction, name in ((1, "long"), (-1, "short")):
+        utility = np.full(len(frame), np.nan)
+        exit_bar = np.full(len(frame), -1, dtype=np.int64)
+        for index in range(len(frame) - horizon):
+            if not np.isfinite(atr[index]) or atr[index] <= 0:
+                continue
+            entry = close[index]
+            risk_distance = atr[index] * stop_atr
+            active_stop = entry - direction * risk_distance
+            target = entry + direction * risk_distance * target_r
+            best_r = 0.0
+            last = index + horizon
+            result = None
+            for future in range(index + 1, last + 1):
+                adverse = low[future] if direction > 0 else high[future]
+                favorable = high[future] if direction > 0 else low[future]
+                stop_hit = adverse <= active_stop if direction > 0 else adverse >= active_stop
+                target_hit = favorable >= target if direction > 0 else favorable <= target
+                if stop_hit:  # conservative if the same bar could also improve the stop
+                    result = direction * (active_stop - entry) / risk_distance - cost_r
+                    exit_bar[index] = future
+                    break
+                if target_hit:
+                    result = target_r - cost_r
+                    exit_bar[index] = future
+                    break
+
+                best_r = max(best_r, direction * (favorable - entry) / risk_distance)
+                next_stop_r = -1.0
+                if best_r >= 0.40:  # about $3 on the default $7.50 planned loss
+                    next_stop_r = 0.0
+                if best_r >= 0.80:  # about $6 open profit, then lock about $1.50
+                    next_stop_r = 0.20
+                if best_r >= 4.0 / 3.0:  # about $10, trail with about $3 give-back
+                    next_stop_r = max(next_stop_r, best_r - 0.40)
+                proposed = entry + direction * risk_distance * next_stop_r
+                active_stop = max(active_stop, proposed) if direction > 0 else min(active_stop, proposed)
+
+            if result is None:
+                terminal_r = direction * (close[last] - entry) / risk_distance
+                result = float(np.clip(terminal_r, -1.0, target_r) - cost_r)
+                exit_bar[index] = last
+            utility[index] = result
+        output[f"{name}_protected_utility"] = utility
+        output[f"{name}_protected_exit_bar"] = exit_bar
+    return output
+
+
 def candidate_direction(frame: pd.DataFrame) -> pd.Series:
     """Return a causal defended-pullback direction, or zero when no setup exists."""
     trend_direction = np.sign(frame["ema_gap_atr"]).astype(float)
@@ -271,6 +339,64 @@ def meta_training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, n
     y = np.where(direction > 0, usable["long_win"], usable["short_win"]).astype(np.int8)
     utility = np.where(direction > 0, usable["long_utility"], usable["short_utility"]).astype(float)
     return oriented.to_numpy(dtype=float), y, utility, usable
+
+
+def protected_training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
+    outcome_columns = [
+        "long_protected_utility", "short_protected_utility",
+        "long_protected_exit_bar", "short_protected_exit_bar",
+    ]
+    usable = frame.dropna(subset=FEATURE_COLUMNS + outcome_columns).copy()
+    usable["direction"] = candidate_direction(usable)
+    usable = usable.loc[usable["direction"] != 0].copy()
+    oriented = oriented_features(usable, usable["direction"])
+    finite = np.isfinite(oriented.to_numpy(dtype=float)).all(axis=1)
+    usable = usable.loc[finite].reset_index(drop=True)
+    oriented = oriented.loc[finite].reset_index(drop=True)
+    direction = usable["direction"].to_numpy(dtype=np.int8)
+    utility = np.where(direction > 0, usable["long_protected_utility"], usable["short_protected_utility"]).astype(float)
+    exit_bar = np.where(direction > 0, usable["long_protected_exit_bar"], usable["short_protected_exit_bar"]).astype(np.int64)
+    y = (utility > 0.0).astype(np.int8)
+    return oriented.to_numpy(dtype=float), y, utility, exit_bar, usable
+
+
+def evaluate_protected_trades(
+    probability: np.ndarray,
+    threshold: float,
+    utility: np.ndarray,
+    exit_bar: np.ndarray,
+    bar_index: np.ndarray,
+) -> dict[str, float | int]:
+    trades: list[float] = []
+    busy_until = -1
+    approvals = 0
+    for score, result, exit_index, entry_index in zip(probability, utility, exit_bar, bar_index):
+        if score < threshold:
+            continue
+        approvals += 1
+        if int(entry_index) <= busy_until:
+            continue
+        trades.append(float(result))
+        busy_until = int(exit_index)
+    if not trades:
+        return {"probability_approvals": approvals, "trades": 0, "wins": 0, "win_rate": 0.0, "net_r": 0.0, "mean_r": -999.0, "lower_confidence_r": -999.0, "profit_factor": 0.0, "max_drawdown_r": 0.0}
+    values = np.asarray(trades, dtype=float)
+    standard_error = float(values.std(ddof=1) / math.sqrt(len(values))) if len(values) > 1 else 999.0
+    equity = np.cumsum(values)
+    drawdown = np.maximum.accumulate(np.r_[0.0, equity])[1:] - equity
+    gross_profit = float(values[values > 0].sum())
+    gross_loss = float(-values[values < 0].sum())
+    return {
+        "probability_approvals": approvals,
+        "trades": len(values),
+        "wins": int((values > 0).sum()),
+        "win_rate": float((values > 0).mean()),
+        "net_r": float(values.sum()),
+        "mean_r": float(values.mean()),
+        "lower_confidence_r": float(values.mean() - 1.645 * standard_error),
+        "profit_factor": float(gross_profit / gross_loss) if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0),
+        "max_drawdown_r": float(drawdown.max()),
+    }
 
 
 def evaluate_threshold(y: np.ndarray, utility: np.ndarray, probability: np.ndarray, threshold: float) -> dict[str, float | int]:

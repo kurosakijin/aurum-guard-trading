@@ -1,78 +1,115 @@
 {
-  "model_type": "nonlinear defended-entry meta-label classifier",
-  "trained_at_utc": "2026-09-04T01:42:53+00:00",
+  "model_type": "execution-aligned protected-outcome Extra Trees classifier",
+  "trained_at_utc": "2026-09-04T02:04:13+00:00",
   "gold_symbol": "XAUUSD",
   "silver_symbol": "XAGUSD",
   "timeframe": "M1",
-  "horizon_bars": 15,
-  "target_atr": 1.25,
-  "stop_atr": 1.0,
-  "estimated_round_trip_cost_atr": 0.1,
-  "synchronized_bars": 74353,
-  "defended_candidates": 3880,
-  "development_candidates": 3297,
-  "locked_test_candidates": 582,
-  "development_period_utc": [
-    "2026-06-17T12:09:00+00:00",
-    "2026-08-24T10:26:00+00:00"
-  ],
-  "locked_test_period_utc": [
-    "2026-08-24T10:54:00+00:00",
-    "2026-09-04T04:23:00+00:00"
-  ],
-  "threshold": 0.7,
-  "walk_forward": {
-    "threshold": 0.7,
-    "approved_signals": 32,
-    "coverage": 0.01616978271854472,
-    "win_rate": 0.34375,
-    "mean_net_atr_utility": -0.3265625000000001,
-    "lower_confidence_utility": -0.642298123725789
+  "horizon_bars": 60,
+  "minimum_stop_atr": 1.25,
+  "final_target_r": 2.6666666666666665,
+  "estimated_round_trip_cost_r": 0.1,
+  "profit_protection_r": {
+    "break_even_trigger": 0.4,
+    "profit_lock_trigger": 0.8,
+    "locked_profit": 0.2,
+    "trailing_trigger": 1.3333333333333333,
+    "trailing_giveback": 0.4
   },
-  "walk_forward_folds": [
+  "threshold": 0.525,
+  "synchronized_bars": 74353,
+  "defended_candidates": 3878,
+  "development_candidates": 3291,
+  "quarantine_candidates": 582,
+  "development_period_utc": [
+    "2026-06-17T12:33:00+00:00",
+    "2026-08-24T08:46:00+00:00"
+  ],
+  "quarantine_period_utc": [
+    "2026-08-24T10:40:00+00:00",
+    "2026-09-04T03:39:00+00:00"
+  ],
+  "development_walk_forward": {
+    "probability_approvals": 566,
+    "trades": 473,
+    "wins": 187,
+    "win_rate": 0.3953488372093023,
+    "net_r": 6.522730310758588,
+    "mean_r": 0.013790127506889191,
+    "lower_confidence_r": -0.05630177699446349,
+    "profit_factor": 1.041126925036309,
+    "max_drawdown_r": 14.806184995951703
+  },
+  "development_folds": [
     {
-      "threshold": 0.7,
-      "approved_signals": 20,
-      "coverage": 0.04048582995951417,
-      "win_rate": 0.35,
-      "mean_net_atr_utility": -0.3125,
-      "lower_confidence_utility": -0.7175068050415131
+      "probability_approvals": 162,
+      "trades": 139,
+      "wins": 57,
+      "win_rate": 0.41007194244604317,
+      "net_r": 7.005829768544791,
+      "mean_r": 0.0504016530111136,
+      "lower_confidence_r": -0.07878049085265881,
+      "profit_factor": 1.1621719853829822,
+      "max_drawdown_r": 7.967609826936224,
+      "fold": 1,
+      "train_candidates": 1146,
+      "test_candidates": 535
     },
     {
-      "threshold": 0.7,
-      "approved_signals": 5,
-      "coverage": 0.010101010101010102,
-      "win_rate": 0.2,
-      "mean_net_atr_utility": -0.6500000000000001,
-      "lower_confidence_utility": -1.39025
+      "probability_approvals": 156,
+      "trades": 132,
+      "wins": 53,
+      "win_rate": 0.4015151515151515,
+      "net_r": 0.600919790284129,
+      "mean_r": 0.004552422653667644,
+      "lower_confidence_r": -0.13174314605298515,
+      "profit_factor": 1.0128127887054186,
+      "max_drawdown_r": 11.494971337447534,
+      "fold": 2,
+      "train_candidates": 1685,
+      "test_candidates": 535
     },
     {
-      "threshold": 0.7,
-      "approved_signals": 5,
-      "coverage": 0.010101010101010102,
-      "win_rate": 0.6,
-      "mean_net_atr_utility": 0.24999999999999992,
-      "lower_confidence_utility": -0.656617391047624
+      "probability_approvals": 142,
+      "trades": 105,
+      "wins": 43,
+      "win_rate": 0.4095238095238095,
+      "net_r": 2.4493970952836297,
+      "mean_r": 0.023327591383653618,
+      "lower_confidence_r": -0.12246684479722139,
+      "profit_factor": 1.0716197981077122,
+      "max_drawdown_r": 10.69661636335266,
+      "fold": 3,
+      "train_candidates": 2220,
+      "test_candidates": 535
     },
     {
-      "threshold": 0.7,
-      "approved_signals": 2,
-      "coverage": 0.00404040404040404,
-      "win_rate": 0.0,
-      "mean_net_atr_utility": -1.1,
-      "lower_confidence_utility": -1.1
+      "probability_approvals": 106,
+      "trades": 97,
+      "wins": 34,
+      "win_rate": 0.35051546391752575,
+      "net_r": -3.53341634335397,
+      "mean_r": -0.0364269726118966,
+      "lower_confidence_r": -0.1908841102871846,
+      "profit_factor": 0.8969849462579039,
+      "max_drawdown_r": 10.230629999085876,
+      "fold": 4,
+      "train_candidates": 2755,
+      "test_candidates": 535
     }
   ],
-  "positive_walk_forward_folds": 1,
-  "locked_test": {
-    "threshold": 0.7,
-    "approved_signals": 1,
-    "coverage": 0.001718213058419244,
-    "win_rate": 1.0,
-    "mean_net_atr_utility": 1.15,
-    "lower_confidence_utility": -1642.205
+  "positive_development_folds": 3,
+  "quarantine": {
+    "probability_approvals": 105,
+    "trades": 95,
+    "wins": 46,
+    "win_rate": 0.4842105263157895,
+    "net_r": 7.110777640874975,
+    "mean_r": 0.07485029095657868,
+    "lower_confidence_r": -0.06764026752945383,
+    "profit_factor": 1.2975220770240559,
+    "max_drawdown_r": 6.014527354284526
   },
   "deployment_eligible": false,
   "deployment_status": "FAILED RESEARCH GATE - SHADOW ONLY",
-  "warning": "Research probabilities are not guaranteed win rates or profit forecasts."
+  "warning": "Positive retrospective performance is not a profit forecast; this model still requires untouched forward-demo evidence."
 }

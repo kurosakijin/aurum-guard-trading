@@ -4,7 +4,7 @@
 //|   Educational automation. Demo-only by default.                  |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "1.70"
+#property version   "1.80"
 #property strict
 #property description "Selective Gold pullback EA with fixed 0.01 lot, hard risk controls and an optional nonlinear fail-closed AI meta-label approval layer."
 
@@ -29,7 +29,7 @@ const double FIXED_LOTS                    = 0.01;
 input bool   UseAIApprovalGate             = true;
 input bool   AIShadowMode                  = true;  // observe decisions without blocking or approving orders
 input string AIApprovalFile                = "aurum_guard_ai_signal.csv";
-input double MinimumAIApprovalProbability  = 0.70;
+input double MinimumAIApprovalProbability  = 0.525; // calibrated for the protected-outcome model; not a claimed win rate
 input int    MaximumAISignalAgeSeconds      = 180;
 input bool   AIRequireMatchingSymbol       = true;
 

@@ -2,11 +2,11 @@
 
 This package adds a local BUY / SELL / NO TRADE meta-label model to the Aurum
 Guard MT5 Expert Advisor. It does not guess on every candle: a causal defended
-trend/pullback candidate must exist first, then a nonlinear gradient-boosted
-model estimates whether that candidate deserves approval. It does not bypass
+trend/pullback candidate must exist first, then a regularized Extra Trees
+classifier estimates whether that candidate deserves approval. It does not bypass
 the EA's risk controls and it does not promise profit.
 
-EA v1.70 also adds one-way profit protection for a qualifying demo position:
+EA v1.80 also adds one-way profit protection for a qualifying demo position:
 near break-even at $3 open profit, an intended $1.50 lock at $6, and a $3
 give-back trail after $10. These are defaults for a 0.01-lot setup, not a
 guarantee; broker stop distance, gaps, slippage, commissions and latency can
@@ -14,11 +14,14 @@ produce a different result.
 
 ## What is enhanced
 
-- Side-specific TP-before-SL labels instead of a blanket next-direction guess.
+- Execution-aligned labels approximate the EA's $7.50 planned loss, $20 final
+  target, break-even, profit lock and trailing give-back instead of scoring a
+  different generic ATR trade.
 - 33 causal Gold/Silver, volatility, candle, trend and session features.
-- Nonlinear gradient boosting with regularization instead of a linear classifier.
-- Four expanding walk-forward checks with a 15-bar leakage gap.
-- A newest-period research test that includes an estimated 0.10 ATR round-trip cost.
+- A shallow, regularized 300-tree Extra Trees classifier instead of the former
+  gradient-boosted model.
+- Four expanding walk-forward checks with a 60-bar leakage gap.
+- A newest-period quarantine check with an estimated 0.10R round-trip cost.
 - Automatic fail-closed promotion: a model must show positive conservative
   utility in at least three walk-forward folds and in the newest test.
 - A live regime-drift lock blocks candidates when too many inputs fall outside
@@ -30,8 +33,8 @@ produce a different result.
 2. Confirm that Market Watch contains your broker's exact `XAUUSD` and `XAGUSD`
    symbols. Edit the two `.cmd` files if your broker uses suffixes.
 3. Run `install_ai.cmd` once.
-4. Run `train_ai.cmd`. It selects its probability threshold only from expanding
-   walk-forward checks, then reports a newest-period research test. If the gate
+4. Run `train_ai.cmd`. It uses the fixed 52.5% protected-outcome threshold chosen
+   on older development windows, then reports a newest-period quarantine test. If the gate
    fails, the model is marked `FAILED RESEARCH GATE - SHADOW ONLY` and cannot
    approve an automated entry.
 5. Run `backtest_ai.cmd` to reproduce a fixed-threshold expanding walk-forward
@@ -47,14 +50,20 @@ Only after acceptable out-of-sample and forward-demo evidence should you set
 fail-closed even if strict mode is selected. Keep `AllowLiveTrading=false`; the AI gate is research
 software and sudden moves, slippage, gaps, bad data, and regime changes remain.
 
-The September 4 replay failed promotion (28 non-overlapping shadow trades,
-35.7% wins, 0.58 profit factor and -8.30 ATR after estimated costs). A stricter
-three-model challenger was also rejected (0.72 profit factor). The packaged EA
-therefore remains entry-disabled and the AI remains shadow-only.
+The September 4 execution-aligned replay improved materially but still failed
+promotion. Its newest quarantine had 95 non-overlapping shadow trades, 48.4%
+wins, +7.11R and a 1.30 profit factor after estimated costs. However, one of the
+four development folds lost, the development profit factor was only 1.04, the
+confidence bounds stayed below zero, and drawdown exceeded the strict limit.
+The packaged EA therefore remains entry-disabled and the AI remains shadow-only.
 
 The signal file is written atomically to MetaTrader's shared Common/Files
 folder. If the runner stops or its score becomes stale, strict mode blocks new
 entries rather than trading without AI approval.
+
+`train_ai.cmd` also freezes the exact Gold/Silver research window in
+`aurum_guard_ai_research_snapshot.joblib`. `backtest_ai.cmd` reuses that file,
+so a later moving MT5 history window cannot silently change the published test.
 
 Only load the included model or one you trained yourself. Joblib model files
 are executable Python artifacts and should never be accepted from an untrusted
