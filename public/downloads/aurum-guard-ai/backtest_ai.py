@@ -11,7 +11,11 @@ import numpy as np
 import joblib
 from threadpoolctl import threadpool_limits
 
-from aurum_guard_ai_core import add_protected_trade_outcomes, build_feature_frame, evaluate_protected_trades, protected_training_matrix
+from aurum_guard_ai_core import (
+    FEATURE_COLUMNS, LEGACY_FEATURE_COLUMNS, LEGACY_ORIENTED_FEATURE_COLUMNS,
+    ORIENTED_FEATURE_COLUMNS, add_protected_trade_outcomes, build_feature_frame,
+    evaluate_protected_trades, protected_training_matrix,
+)
 from train_ai import DEFAULT_COST_R, DEFAULT_HORIZON, DEFAULT_STOP_ATR, DEFAULT_TARGET_R, DEFAULT_THRESHOLD, fetch_rates, new_estimator
 
 
@@ -23,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bars", type=int, default=75000)
     parser.add_argument("--report", type=Path, default=Path("aurum_guard_ai_backtest.json"))
     parser.add_argument("--snapshot", type=Path, default=Path("aurum_guard_ai_research_snapshot.joblib"))
+    parser.add_argument("--multitimeframe-challenger", action="store_true")
     return parser.parse_args()
 
 
@@ -50,7 +55,9 @@ def main() -> int:
 
     frame = build_feature_frame(gold, silver)
     labelled = add_protected_trade_outcomes(frame, DEFAULT_HORIZON, DEFAULT_STOP_ATR, DEFAULT_TARGET_R, DEFAULT_COST_R)
-    x, y, utility, exit_bar, usable = protected_training_matrix(labelled)
+    feature_names = ORIENTED_FEATURE_COLUMNS if args.multitimeframe_challenger else LEGACY_ORIENTED_FEATURE_COLUMNS
+    required_names = FEATURE_COLUMNS if args.multitimeframe_challenger else LEGACY_FEATURE_COLUMNS
+    x, y, utility, exit_bar, usable = protected_training_matrix(labelled, required_names, feature_names)
     quarantine_start = int(len(x) * 0.85)
     quarantine_start_bar = int(usable.iloc[quarantine_start]["bar_index"])
     dev_end = int(np.searchsorted(usable["bar_index"].to_numpy(), quarantine_start_bar - DEFAULT_HORIZON, side="right"))
@@ -84,7 +91,9 @@ def main() -> int:
     )
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-        "method": "execution-aligned expanding walk-forward plus quarantined newest period", "timeframe": "M1",
+        "method": "causal multi-timeframe challenger" if args.multitimeframe_challenger else "execution-aligned expanding walk-forward plus quarantined newest period",
+        "decision_timeframe": "M1", "context_timeframes": ["M5", "M15", "H1"] if args.multitimeframe_challenger else [],
+        "feature_count": len(feature_names),
         "history_period_utc": [datetime.fromtimestamp(int(usable.iloc[0]["time"]), timezone.utc).isoformat(), datetime.fromtimestamp(int(usable.iloc[-1]["time"]), timezone.utc).isoformat()],
         "synchronized_bars": len(frame), "defended_candidates": len(x), "threshold": DEFAULT_THRESHOLD,
         "horizon_bars": DEFAULT_HORIZON, "minimum_stop_atr": DEFAULT_STOP_ATR, "final_target_r": DEFAULT_TARGET_R,

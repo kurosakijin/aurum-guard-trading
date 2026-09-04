@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 
-MODEL_FORMAT_VERSION = 5
+MODEL_FORMAT_VERSION = 6
 FEATURE_COLUMNS = [
     "return_1", "return_3", "return_5", "return_15", "return_30",
     "ema20_distance_atr", "ema50_distance_atr", "ema20_slope_atr",
@@ -28,7 +28,11 @@ FEATURE_COLUMNS = [
     "silver_return_1", "silver_return_5", "silver_return_15",
     "silver_ema_gap", "metals_correlation_20", "metal_return_divergence_5",
     "hour_sin", "hour_cos", "weekday_sin", "weekday_cos",
+    "m5_ema_gap_atr", "m5_ema20_slope_atr", "m5_rsi_14", "m5_range_atr",
+    "m15_ema_gap_atr", "m15_ema20_slope_atr", "m15_rsi_14", "m15_range_atr",
+    "h1_ema_gap_atr", "h1_ema20_slope_atr", "h1_rsi_14", "h1_range_atr",
 ]
+LEGACY_FEATURE_COLUMNS = FEATURE_COLUMNS[:-12]
 
 ORIENTED_FEATURE_COLUMNS = [
     "dir_return_1", "dir_return_3", "dir_return_5", "dir_return_15",
@@ -42,7 +46,11 @@ ORIENTED_FEATURE_COLUMNS = [
     "dir_silver_ema_gap", "metals_correlation_20",
     "dir_metal_return_divergence_5", "hour_sin", "hour_cos",
     "weekday_sin", "weekday_cos",
+    "dir_m5_ema_gap_atr", "dir_m5_ema20_slope_atr", "dir_m5_rsi_bias", "m5_range_atr",
+    "dir_m15_ema_gap_atr", "dir_m15_ema20_slope_atr", "dir_m15_rsi_bias", "m15_range_atr",
+    "dir_h1_ema_gap_atr", "dir_h1_ema20_slope_atr", "dir_h1_rsi_bias", "h1_range_atr",
 ]
+LEGACY_ORIENTED_FEATURE_COLUMNS = ORIENTED_FEATURE_COLUMNS[:-12]
 
 
 def _rsi(close: pd.Series, length: int = 14) -> pd.Series:
@@ -79,6 +87,31 @@ def prepare_market_frame(gold: pd.DataFrame, silver: pd.DataFrame) -> pd.DataFra
     if len(merged) < 150:
         raise ValueError("Not enough synchronized Gold/Silver bars")
     return merged.reset_index(drop=True)
+
+
+def _closed_timeframe_context(frame: pd.DataFrame, minutes: int, prefix: str) -> pd.DataFrame:
+    """Return higher-timeframe features that use completed candles only.
+
+    An interval such as [10:00, 10:05) is labelled 10:05. Therefore an M1
+    decision timestamped 10:05 can see that closed M5 candle, but never data
+    from the still-forming [10:05, 10:10) candle.
+    """
+    indexed = frame[["time", "open", "high", "low", "close"]].copy()
+    indexed.index = pd.to_datetime(indexed["time"], unit="s", utc=True)
+    rule = f"{minutes}min"
+    bars = indexed.resample(rule, label="right", closed="left", origin="epoch").agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last"}
+    ).dropna()
+    bars_atr = _atr(bars).replace(0.0, np.nan)
+    ema20 = bars["close"].ewm(span=20, adjust=False).mean()
+    ema50 = bars["close"].ewm(span=50, adjust=False).mean()
+    context = pd.DataFrame(index=bars.index)
+    context[f"{prefix}_ema_gap_atr"] = (ema20 - ema50) / bars_atr
+    context[f"{prefix}_ema20_slope_atr"] = ema20.diff(3) / bars_atr
+    context[f"{prefix}_rsi_14"] = _rsi(bars["close"]) / 100.0
+    context[f"{prefix}_range_atr"] = (bars["high"] - bars["low"]) / bars_atr
+    context.insert(0, "timestamp", context.index)
+    return context.reset_index(drop=True)
 
 
 def build_feature_frame(gold: pd.DataFrame, silver: pd.DataFrame) -> pd.DataFrame:
@@ -139,6 +172,18 @@ def build_feature_frame(gold: pd.DataFrame, silver: pd.DataFrame) -> pd.DataFram
     frame["hour_cos"] = np.cos(day_angle)
     frame["weekday_sin"] = np.sin(week_angle)
     frame["weekday_cos"] = np.cos(week_angle)
+    decision_times = pd.DataFrame({"timestamp": timestamp})
+    for minutes, prefix in ((5, "m5"), (15, "m15"), (60, "h1")):
+        context = _closed_timeframe_context(frame, minutes, prefix)
+        aligned = pd.merge_asof(
+            decision_times.sort_values("timestamp"),
+            context.sort_values("timestamp"),
+            on="timestamp",
+            direction="backward",
+            allow_exact_matches=True,
+        )
+        for name in context.columns.drop("timestamp"):
+            frame[name] = aligned[name].to_numpy()
     return frame
 
 
@@ -323,6 +368,11 @@ def oriented_features(frame: pd.DataFrame, direction: pd.Series | np.ndarray) ->
     values["dir_metal_return_divergence_5"] = frame["metal_return_divergence_5"] * d
     for name in ("hour_sin", "hour_cos", "weekday_sin", "weekday_cos"):
         values[name] = frame[name]
+    for prefix in ("m5", "m15", "h1"):
+        values[f"dir_{prefix}_ema_gap_atr"] = frame[f"{prefix}_ema_gap_atr"] * d
+        values[f"dir_{prefix}_ema20_slope_atr"] = frame[f"{prefix}_ema20_slope_atr"] * d
+        values[f"dir_{prefix}_rsi_bias"] = (frame[f"{prefix}_rsi_14"] - 0.50) * d
+        values[f"{prefix}_range_atr"] = frame[f"{prefix}_range_atr"]
     return pd.DataFrame(values, index=frame.index)[ORIENTED_FEATURE_COLUMNS]
 
 
@@ -341,15 +391,21 @@ def meta_training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, n
     return oriented.to_numpy(dtype=float), y, utility, usable
 
 
-def protected_training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
+def protected_training_matrix(
+    frame: pd.DataFrame,
+    required_feature_columns: list[str] | None = None,
+    output_feature_columns: list[str] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
     outcome_columns = [
         "long_protected_utility", "short_protected_utility",
         "long_protected_exit_bar", "short_protected_exit_bar",
     ]
-    usable = frame.dropna(subset=FEATURE_COLUMNS + outcome_columns).copy()
+    required = required_feature_columns or FEATURE_COLUMNS
+    selected = output_feature_columns or ORIENTED_FEATURE_COLUMNS
+    usable = frame.dropna(subset=required + outcome_columns).copy()
     usable["direction"] = candidate_direction(usable)
     usable = usable.loc[usable["direction"] != 0].copy()
-    oriented = oriented_features(usable, usable["direction"])
+    oriented = oriented_features(usable, usable["direction"])[selected]
     finite = np.isfinite(oriented.to_numpy(dtype=float)).all(axis=1)
     usable = usable.loc[finite].reset_index(drop=True)
     oriented = oriented.loc[finite].reset_index(drop=True)
@@ -436,6 +492,7 @@ class AurumProbabilityModel:
     metadata: dict[str, Any]
     feature_low: np.ndarray
     feature_high: np.ndarray
+    feature_names: list[str] | None = None
 
     def predict_success_probability(self, x: np.ndarray) -> np.ndarray:
         values = np.asarray(x, dtype=float)
@@ -448,7 +505,8 @@ class AurumProbabilityModel:
         direction = int(candidate_direction(single).iloc[0])
         if direction == 0:
             return 0, 0.0, 0.0, 1.0, "NO_CANDIDATE", 0.0
-        x = oriented_features(single, np.array([direction])).to_numpy(dtype=float)
+        names = self.feature_names or ORIENTED_FEATURE_COLUMNS
+        x = oriented_features(single, np.array([direction]))[names].to_numpy(dtype=float)
         outside_reference = (x[0] < self.feature_low) | (x[0] > self.feature_high)
         drift_share = float(outside_reference.mean())
         probability = float(self.predict_success_probability(x)[0])
@@ -464,7 +522,7 @@ class AurumProbabilityModel:
         payload = {
             "format_version": MODEL_FORMAT_VERSION,
             "model_id": self.model_id,
-            "feature_names": ORIENTED_FEATURE_COLUMNS,
+            "feature_names": self.feature_names or ORIENTED_FEATURE_COLUMNS,
             "threshold": self.threshold,
             "metadata": self.metadata,
             "estimator": self.estimator,
@@ -479,9 +537,10 @@ class AurumProbabilityModel:
     @classmethod
     def load(cls, path: Path) -> "AurumProbabilityModel":
         payload = joblib.load(path)
-        if payload.get("format_version") != MODEL_FORMAT_VERSION:
+        if payload.get("format_version") not in (5, MODEL_FORMAT_VERSION):
             raise ValueError("Unsupported Aurum Guard AI model format")
-        if payload.get("feature_names") != ORIENTED_FEATURE_COLUMNS:
+        feature_names = payload.get("feature_names")
+        if feature_names not in (LEGACY_ORIENTED_FEATURE_COLUMNS, ORIENTED_FEATURE_COLUMNS):
             raise ValueError("Model feature order does not match this AI runner")
         return cls(
             estimator=payload["estimator"],
@@ -490,4 +549,5 @@ class AurumProbabilityModel:
             metadata=dict(payload.get("metadata", {})),
             feature_low=np.asarray(payload["feature_low"], dtype=float),
             feature_high=np.asarray(payload["feature_high"], dtype=float),
+            feature_names=list(feature_names),
         )

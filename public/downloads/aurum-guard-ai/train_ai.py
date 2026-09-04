@@ -13,7 +13,11 @@ import joblib
 from sklearn.ensemble import ExtraTreesClassifier
 from threadpoolctl import threadpool_limits
 
-from aurum_guard_ai_core import AurumProbabilityModel, add_protected_trade_outcomes, build_feature_frame, evaluate_protected_trades, protected_training_matrix
+from aurum_guard_ai_core import (
+    FEATURE_COLUMNS, LEGACY_FEATURE_COLUMNS, LEGACY_ORIENTED_FEATURE_COLUMNS,
+    ORIENTED_FEATURE_COLUMNS, AurumProbabilityModel, add_protected_trade_outcomes,
+    build_feature_frame, evaluate_protected_trades, protected_training_matrix,
+)
 
 DEFAULT_THRESHOLD = 0.525
 DEFAULT_HORIZON = 60
@@ -31,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", type=Path, default=Path("aurum_guard_ai_model.joblib"))
     parser.add_argument("--report", type=Path, default=Path("aurum_guard_ai_report.json"))
     parser.add_argument("--snapshot", type=Path, default=Path("aurum_guard_ai_research_snapshot.joblib"))
+    parser.add_argument("--refresh-snapshot", action="store_true", help="Replace the frozen broker-history snapshot from MT5")
+    parser.add_argument("--multitimeframe-challenger", action="store_true", help="Research the unpromoted 45-feature M5/M15/H1 challenger")
     return parser.parse_args()
 
 
@@ -62,23 +68,28 @@ def score_slice(probability, utility, exit_bar, usable, start, end):
 
 def main() -> int:
     args = parse_args()
-    try:
-        import MetaTrader5 as mt5
-    except ImportError as exc:
-        raise SystemExit("Install requirements-ai.txt before training") from exc
-    if not mt5.initialize(path=args.terminal):
-        raise SystemExit(f"MT5 connection failed: {mt5.last_error()}")
-    try:
-        gold = fetch_rates(mt5, args.gold, args.bars)
-        silver = fetch_rates(mt5, args.silver, args.bars)
-    finally:
-        mt5.shutdown()
-
-    joblib.dump({"captured_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(), "gold": gold, "silver": silver}, args.snapshot, compress=3)
+    if args.snapshot.exists() and not args.refresh_snapshot:
+        snapshot = joblib.load(args.snapshot)
+        gold, silver = snapshot["gold"], snapshot["silver"]
+    else:
+        try:
+            import MetaTrader5 as mt5
+        except ImportError as exc:
+            raise SystemExit("Install requirements-ai.txt before refreshing broker history") from exc
+        if not mt5.initialize(path=args.terminal):
+            raise SystemExit(f"MT5 connection failed: {mt5.last_error()}")
+        try:
+            gold = fetch_rates(mt5, args.gold, args.bars)
+            silver = fetch_rates(mt5, args.silver, args.bars)
+        finally:
+            mt5.shutdown()
+        joblib.dump({"captured_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(), "gold": gold, "silver": silver}, args.snapshot, compress=3)
 
     features = build_feature_frame(gold, silver)
     labelled = add_protected_trade_outcomes(features, DEFAULT_HORIZON, DEFAULT_STOP_ATR, DEFAULT_TARGET_R, DEFAULT_COST_R)
-    x, y, utility, exit_bar, usable = protected_training_matrix(labelled)
+    feature_names = ORIENTED_FEATURE_COLUMNS if args.multitimeframe_challenger else LEGACY_ORIENTED_FEATURE_COLUMNS
+    required_names = FEATURE_COLUMNS if args.multitimeframe_challenger else LEGACY_FEATURE_COLUMNS
+    x, y, utility, exit_bar, usable = protected_training_matrix(labelled, required_names, feature_names)
     if len(x) < 3000:
         raise SystemExit(f"Only {len(x)} defended candidates; at least 3,000 are required")
 
@@ -119,8 +130,10 @@ def main() -> int:
     trained_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     model_id = datetime.now(timezone.utc).strftime("ag-protected-%Y%m%d-%H%M%S")
     metadata = {
-        "model_type": "execution-aligned protected-outcome Extra Trees classifier",
-        "trained_at_utc": trained_at, "gold_symbol": args.gold, "silver_symbol": args.silver, "timeframe": "M1",
+        "model_type": "causal multi-timeframe challenger" if args.multitimeframe_challenger else "execution-aligned protected-outcome Extra Trees classifier",
+        "trained_at_utc": trained_at, "gold_symbol": args.gold, "silver_symbol": args.silver,
+        "decision_timeframe": "M1", "context_timeframes": ["M5", "M15", "H1"] if args.multitimeframe_challenger else [],
+        "feature_count": len(feature_names),
         "horizon_bars": DEFAULT_HORIZON, "minimum_stop_atr": DEFAULT_STOP_ATR, "final_target_r": DEFAULT_TARGET_R,
         "estimated_round_trip_cost_r": DEFAULT_COST_R,
         "profit_protection_r": {"break_even_trigger": 0.40, "profit_lock_trigger": 0.80, "locked_profit": 0.20, "trailing_trigger": 4.0 / 3.0, "trailing_giveback": 0.40},
@@ -134,7 +147,7 @@ def main() -> int:
     }
     feature_low = np.quantile(x[:dev_end], 0.01, axis=0)
     feature_high = np.quantile(x[:dev_end], 0.99, axis=0)
-    AurumProbabilityModel(final_estimator, DEFAULT_THRESHOLD, model_id, metadata, feature_low, feature_high).save(args.model)
+    AurumProbabilityModel(final_estimator, DEFAULT_THRESHOLD, model_id, metadata, feature_low, feature_high, feature_names).save(args.model)
     args.report.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(json.dumps({"model": str(args.model), "model_id": model_id, **metadata}, indent=2))
     return 0

@@ -1608,6 +1608,32 @@ export default function Home() {
                   </div>
                 </div>
 
+                <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.04] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><BookOpenCheck className="size-3.5" /> Learning dataset + candle guide</p>
+                    <Badge variant="outline" className="border-cyan-300/25 text-cyan-200">CAUSAL · CLOSED BARS</Badge>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The package can now export a broker-specific learning CSV with candle anatomy, Gold/Silver context and completed M5, M15 and H1 features. H1 describes regime, M15 checks setup risk, M5 adds retest context, and M1 supplies the final trigger. Future outcome fields are marked <span className="font-mono text-cyan-100">LABEL_ONLY</span> and are blocked from live inputs.</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                    {[
+                      ['H1', 'Regime'],
+                      ['M15', 'Risk / setup'],
+                      ['M5', 'Retest context'],
+                      ['M1', 'Closed trigger'],
+                    ].map(([timeframe, role]) => (
+                      <div key={timeframe} className="rounded-lg border border-white/8 bg-black/15 p-2.5 text-center">
+                        <p className="font-heading text-sm font-semibold text-cyan-100">{timeframe}</p>
+                        <p className="mt-0.5 text-[9px] text-muted-foreground">{role}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">The 45-feature multi-timeframe challenger was tested and rejected: development −34.43R with 0.80 profit factor; newest quarantine +0.92R with 1.04 profit factor. The stronger v5 model remains the active shadow champion. More features did not create a safer edge.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a href="./downloads/aurum-guard-ai/DATASET-GUIDE.md" download className="inline-flex h-8 items-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-3 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-300/15"><Download className="size-3.5" /> Dataset & candle guide</a>
+                    <a href="./downloads/aurum-guard-ai/READING-LIST.md" download className="inline-flex h-8 items-center gap-2 rounded-lg border border-white/10 bg-white/[.035] px-3 text-[10px] font-semibold text-foreground hover:bg-white/[.07]"><BookOpenCheck className="size-3.5" /> Books & data sources</a>
+                  </div>
+                </div>
+
                 <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
                   <p className="flex items-center gap-2 text-xs font-semibold text-red-100"><LockKeyhole className="size-3.5" /> Live-account lock</p>
                   <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The EA refuses to initialize on a real-money account while <span className="font-mono text-red-200">AllowLiveTrading = false</span>. It also starts with <span className="font-mono text-red-200">EnableNewEntries = false</span>. Do not unlock either control until the exact broker symbols, volume sizing, stop distance, partial exits and news behavior have been forward-tested on demo. It has no martingale and no instant revenge re-entry.</p>

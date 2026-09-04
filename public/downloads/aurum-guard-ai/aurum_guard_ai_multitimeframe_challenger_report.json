@@ -1,0 +1,120 @@
+{
+  "model_type": "causal multi-timeframe execution-aligned protected-outcome Extra Trees classifier",
+  "trained_at_utc": "2026-09-04T02:29:06+00:00",
+  "gold_symbol": "XAUUSD",
+  "silver_symbol": "XAGUSD",
+  "decision_timeframe": "M1",
+  "context_timeframes": [
+    "M5",
+    "M15",
+    "H1"
+  ],
+  "horizon_bars": 60,
+  "minimum_stop_atr": 1.25,
+  "final_target_r": 2.6666666666666665,
+  "estimated_round_trip_cost_r": 0.1,
+  "profit_protection_r": {
+    "break_even_trigger": 0.4,
+    "profit_lock_trigger": 0.8,
+    "locked_profit": 0.2,
+    "trailing_trigger": 1.3333333333333333,
+    "trailing_giveback": 0.4
+  },
+  "threshold": 0.525,
+  "synchronized_bars": 74353,
+  "defended_candidates": 3859,
+  "development_candidates": 3275,
+  "quarantine_candidates": 579,
+  "development_period_utc": [
+    "2026-06-17T16:21:00+00:00",
+    "2026-08-24T09:58:00+00:00"
+  ],
+  "quarantine_period_utc": [
+    "2026-08-24T11:14:00+00:00",
+    "2026-09-04T03:39:00+00:00"
+  ],
+  "development_walk_forward": {
+    "probability_approvals": 544,
+    "trades": 444,
+    "wins": 161,
+    "win_rate": 0.36261261261261263,
+    "net_r": -34.4324223533345,
+    "mean_r": -0.07755050079579842,
+    "lower_confidence_r": -0.14901001576635164,
+    "profit_factor": 0.7954104435333661,
+    "max_drawdown_r": 39.12976908448134
+  },
+  "development_folds": [
+    {
+      "probability_approvals": 150,
+      "trades": 123,
+      "wins": 47,
+      "win_rate": 0.3821138211382114,
+      "net_r": -9.333307591213863,
+      "mean_r": -0.07588054952206393,
+      "lower_confidence_r": -0.21093991747285967,
+      "profit_factor": 0.7953222019470652,
+      "max_drawdown_r": 12.21979048525051,
+      "fold": 1,
+      "train_candidates": 1142,
+      "test_candidates": 532
+    },
+    {
+      "probability_approvals": 167,
+      "trades": 134,
+      "wins": 45,
+      "win_rate": 0.3358208955223881,
+      "net_r": -19.46384994579833,
+      "mean_r": -0.14525261153580843,
+      "lower_confidence_r": -0.27565356578825634,
+      "profit_factor": 0.6638367885008947,
+      "max_drawdown_r": 25.540814831316798,
+      "fold": 2,
+      "train_candidates": 1671,
+      "test_candidates": 532
+    },
+    {
+      "probability_approvals": 118,
+      "trades": 90,
+      "wins": 37,
+      "win_rate": 0.4111111111111111,
+      "net_r": 4.716113596269439,
+      "mean_r": 0.05240126218077155,
+      "lower_confidence_r": -0.10868784661135539,
+      "profit_factor": 1.1727514137827684,
+      "max_drawdown_r": 6.320305933384221,
+      "fold": 3,
+      "train_candidates": 2206,
+      "test_candidates": 532
+    },
+    {
+      "probability_approvals": 109,
+      "trades": 97,
+      "wins": 32,
+      "win_rate": 0.32989690721649484,
+      "net_r": -10.35137841259175,
+      "mean_r": -0.10671524136692526,
+      "lower_confidence_r": -0.25822773993287335,
+      "profit_factor": 0.723963242330889,
+      "max_drawdown_r": 18.319385872635312,
+      "fold": 4,
+      "train_candidates": 2739,
+      "test_candidates": 533
+    }
+  ],
+  "positive_development_folds": 1,
+  "quarantine": {
+    "probability_approvals": 103,
+    "trades": 93,
+    "wins": 40,
+    "win_rate": 0.43010752688172044,
+    "net_r": 0.9213844090288434,
+    "mean_r": 0.009907359236869284,
+    "lower_confidence_r": -0.13000664615062324,
+    "profit_factor": 1.0364183560880966,
+    "max_drawdown_r": 6.392308638080602
+  },
+  "deployment_eligible": false,
+  "deployment_status": "FAILED RESEARCH GATE - SHADOW ONLY",
+  "warning": "Positive retrospective performance is not a profit forecast; this model still requires untouched forward-demo evidence."
+}

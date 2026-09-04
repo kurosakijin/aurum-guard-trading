@@ -36,6 +36,10 @@ __pycache__/
 next-env.d.ts
 /dist/
 /github-dist/
+/.package-*/
 /.wrangler/
 /outputs/
 /work/
+public/downloads/aurum-guard-ai/aurum_guard_learning_dataset.csv
+public/downloads/aurum-guard-ai/deterministic_*.json
+public/downloads/aurum-guard-ai/replay_*.json

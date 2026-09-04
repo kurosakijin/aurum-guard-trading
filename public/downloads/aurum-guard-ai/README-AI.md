@@ -17,7 +17,8 @@ produce a different result.
 - Execution-aligned labels approximate the EA's $7.50 planned loss, $20 final
   target, break-even, profit lock and trailing give-back instead of scoring a
   different generic ATR trade.
-- 33 causal Gold/Silver, volatility, candle, trend and session features.
+- 45 causal Gold/Silver, volatility, candle, trend, session and completed
+  M5/M15/H1 context features. M1 remains the decision/trigger timeframe.
 - A shallow, regularized 300-tree Extra Trees classifier instead of the former
   gradient-boosted model.
 - Four expanding walk-forward checks with a 60-bar leakage gap.
@@ -26,6 +27,14 @@ produce a different result.
   utility in at least three walk-forward folds and in the newest test.
 - A live regime-drift lock blocks candidates when too many inputs fall outside
   the development period's 1st-to-99th-percentile feature ranges.
+
+The 45-feature M5/M15/H1 challenger is included for transparent research but was
+**rejected**, not promoted: its development replay lost 34.43R with a 0.80 profit
+factor, and its quarantine profit factor was only 1.04. The active packaged v5
+shadow model remains the less-bad 33-feature champion. You can reproduce the
+challenger with `train_ai.py --multitimeframe-challenger --model challenger.joblib
+--report challenger.json`; never overwrite a champion merely because a model has
+more inputs.
 
 ## Safe first run
 
@@ -45,6 +54,11 @@ produce a different result.
    `AIShadowMode=true`, and `EnableNewEntries=false` first.
 8. Compare at least several weeks of shadow decisions with your demo feed.
 
+Run `build_learning_dataset.cmd` to create a documented CSV from the frozen
+broker snapshot. Read `DATASET-GUIDE.md` before using it: future outcome columns
+are clearly marked `LABEL_ONLY` and must never enter a live model. `READING-LIST.md`
+contains books and authoritative dataset sources without copying copyrighted text.
+
 Only after acceptable out-of-sample and forward-demo evidence should you set
 `AIShadowMode=false`. A model that is not marked deployment-eligible remains
 fail-closed even if strict mode is selected. Keep `AllowLiveTrading=false`; the AI gate is research
@@ -61,9 +75,11 @@ The signal file is written atomically to MetaTrader's shared Common/Files
 folder. If the runner stops or its score becomes stale, strict mode blocks new
 entries rather than trading without AI approval.
 
-`train_ai.cmd` also freezes the exact Gold/Silver research window in
+The first `train_ai.cmd` run freezes the exact Gold/Silver research window in
 `aurum_guard_ai_research_snapshot.joblib`. `backtest_ai.cmd` reuses that file,
 so a later moving MT5 history window cannot silently change the published test.
+Use `train_ai.py --refresh-snapshot` only when you intentionally begin a new,
+separately documented experiment.
 
 Only load the included model or one you trained yourself. Joblib model files
 are executable Python artifacts and should never be accepted from an untrusted
