@@ -1658,7 +1658,7 @@ export default function Home() {
                     ))}
                   </div>
                   <p className="mt-3 text-[10px] leading-4 text-red-100/85">The retest improved the older −$7.73 candidate to break-even, but it still failed validation: a 1.00 profit factor shows no measured edge, and seven trades are far too few for a reliable conclusion. The built-in optimizer gate rejected it because validation requires at least 30 trades, positive net profit, profit factor of 1.20 or better, and no more than 5% equity drawdown. The 71.43% win rate is misleading by itself because several wins were tiny while two losses reached the planned stop. New entries and live trading remain off by default. No result here is a profit prediction.</p>
-                  <p className="mt-2 text-[10px] leading-4 text-sky-100/80">Version 1.60 adds the optional nonlinear AI meta-label reader described above. It compiled with zero errors and warnings. The displayed AI result is a separate chronological model check, not an EA profit backtest.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-sky-100/80">Version 1.70 keeps the optional nonlinear AI meta-label reader and adds stepped one-way profit protection. It compiled with zero errors and warnings. The displayed AI result is a separate chronological model check, not an EA profit backtest.</p>
                 </div>
 
                 <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-4">
