@@ -116,6 +116,8 @@ showTradeHealth = input.bool(true, "Show active-trade health warnings", group = 
 tp1ApproachPercent = input.float(0.75, "TP1 approach threshold", minval = 0.50, maxval = 0.95, step = 0.05, group = "Active Trade Health")
 tp1GivebackPercent = input.float(0.35, "TP1 failure giveback level", minval = 0.10, maxval = 0.60, step = 0.05, group = "Active Trade Health")
 halfStopPercent = input.float(0.50, "Half-to-SL warning level", minval = 0.25, maxval = 0.75, step = 0.05, group = "Active Trade Health")
+protectAfterTP1 = input.bool(true, "Protect remaining position after TP1", group = "Active Trade Health")
+tp1ProfitLockR = input.float(0.10, "Remaining-position profit lock (R)", minval = 0.00, maxval = 0.50, step = 0.05, group = "Active Trade Health")
 
 showBadEntryGuard = input.bool(true, "Show bad-entry warnings", group = "Bad Entry Guard")
 chaseDistanceATR = input.float(1.35, "No-chase distance from fast EMA in ATR", minval = 0.50, maxval = 5.00, step = 0.05, group = "Bad Entry Guard")
@@ -449,6 +451,7 @@ var bool tp1ApproachArmed = false
 var bool tp1Reached = false
 var bool tp1FailureWarned = false
 var bool halfStopWarned = false
+var float protectedStop = na
 var int trackedOpenTrades = 0
 var bool reentryArmed = false
 var int reentryDirection = 0
@@ -771,14 +774,15 @@ if strategy.position_size > 0 and not na(pendingLongStop)
         revLongTarget2 = strategy.position_avg_price + longRisk * 1.50
         revLongTarget = strategy.position_avg_price + longRisk * rewardRisk
         plannedEntry := strategy.position_avg_price
-        plannedStop := pendingLongStop
+        managedRevLongStop = protectAfterTP1 and tp1Reached and not na(protectedStop) ? math.max(pendingLongStop, protectedStop) : pendingLongStop
+        plannedStop := managedRevLongStop
         plannedTarget1 := revLongTarget1
         plannedTarget2 := revLongTarget2
         plannedTarget := revLongTarget
         plannedUntilBar := bar_index + planBars
         strategy.exit("REV LONG TP1", from_entry = "REV LONG", stop = pendingLongStop, limit = revLongTarget1, qty_percent = 33, comment_profit = "TP1", comment_loss = "SL")
-        strategy.exit("REV LONG TP2", from_entry = "REV LONG", stop = pendingLongStop, limit = revLongTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
-        strategy.exit("REV LONG TP3", from_entry = "REV LONG", stop = pendingLongStop, limit = revLongTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
+        strategy.exit("REV LONG TP2", from_entry = "REV LONG", stop = managedRevLongStop, limit = revLongTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
+        strategy.exit("REV LONG TP3", from_entry = "REV LONG", stop = managedRevLongStop, limit = revLongTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
     pendingLongEntry := na
     pendingLongBar := na
     pendingShortEntry := na
@@ -792,14 +796,15 @@ if strategy.position_size < 0 and not na(pendingShortStop)
         revShortTarget2 = strategy.position_avg_price - shortRisk * 1.50
         revShortTarget = strategy.position_avg_price - shortRisk * rewardRisk
         plannedEntry := strategy.position_avg_price
-        plannedStop := pendingShortStop
+        managedRevShortStop = protectAfterTP1 and tp1Reached and not na(protectedStop) ? math.min(pendingShortStop, protectedStop) : pendingShortStop
+        plannedStop := managedRevShortStop
         plannedTarget1 := revShortTarget1
         plannedTarget2 := revShortTarget2
         plannedTarget := revShortTarget
         plannedUntilBar := bar_index + planBars
         strategy.exit("REV SHORT TP1", from_entry = "REV SHORT", stop = pendingShortStop, limit = revShortTarget1, qty_percent = 33, comment_profit = "TP1", comment_loss = "SL")
-        strategy.exit("REV SHORT TP2", from_entry = "REV SHORT", stop = pendingShortStop, limit = revShortTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
-        strategy.exit("REV SHORT TP3", from_entry = "REV SHORT", stop = pendingShortStop, limit = revShortTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
+        strategy.exit("REV SHORT TP2", from_entry = "REV SHORT", stop = managedRevShortStop, limit = revShortTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
+        strategy.exit("REV SHORT TP3", from_entry = "REV SHORT", stop = managedRevShortStop, limit = revShortTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
     pendingShortEntry := na
     pendingShortBar := na
     pendingLongEntry := na
@@ -813,14 +818,15 @@ if strategy.position_size > 0 and not na(trendStopPrice)
         trendLongTarget2 = strategy.position_avg_price + activeTrendLongRisk * 1.50
         trendTargetPrice := strategy.position_avg_price + activeTrendLongRisk * rewardRisk
         plannedEntry := strategy.position_avg_price
-        plannedStop := trendStopPrice
+        managedTrendLongStop = protectAfterTP1 and tp1Reached and not na(protectedStop) ? math.max(trendStopPrice, protectedStop) : trendStopPrice
+        plannedStop := managedTrendLongStop
         plannedTarget1 := trendLongTarget1
         plannedTarget2 := trendLongTarget2
         plannedTarget := trendTargetPrice
         plannedUntilBar := bar_index + planBars
         strategy.exit("TREND LONG TP1", from_entry = "TREND LONG", stop = trendStopPrice, limit = trendLongTarget1, qty_percent = 33, comment_profit = "TP1", comment_loss = "SL")
-        strategy.exit("TREND LONG TP2", from_entry = "TREND LONG", stop = trendStopPrice, limit = trendLongTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
-        strategy.exit("TREND LONG TP3", from_entry = "TREND LONG", stop = trendStopPrice, limit = trendTargetPrice, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
+        strategy.exit("TREND LONG TP2", from_entry = "TREND LONG", stop = managedTrendLongStop, limit = trendLongTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
+        strategy.exit("TREND LONG TP3", from_entry = "TREND LONG", stop = managedTrendLongStop, limit = trendTargetPrice, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
 
 if strategy.position_size < 0 and not na(trendStopPrice)
     activeTrendShortRisk = trendStopPrice - strategy.position_avg_price
@@ -829,14 +835,15 @@ if strategy.position_size < 0 and not na(trendStopPrice)
         trendShortTarget2 = strategy.position_avg_price - activeTrendShortRisk * 1.50
         trendTargetPrice := strategy.position_avg_price - activeTrendShortRisk * rewardRisk
         plannedEntry := strategy.position_avg_price
-        plannedStop := trendStopPrice
+        managedTrendShortStop = protectAfterTP1 and tp1Reached and not na(protectedStop) ? math.min(trendStopPrice, protectedStop) : trendStopPrice
+        plannedStop := managedTrendShortStop
         plannedTarget1 := trendShortTarget1
         plannedTarget2 := trendShortTarget2
         plannedTarget := trendTargetPrice
         plannedUntilBar := bar_index + planBars
         strategy.exit("TREND SHORT TP1", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendShortTarget1, qty_percent = 33, comment_profit = "TP1", comment_loss = "SL")
-        strategy.exit("TREND SHORT TP2", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendShortTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
-        strategy.exit("TREND SHORT TP3", from_entry = "TREND SHORT", stop = trendStopPrice, limit = trendTargetPrice, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
+        strategy.exit("TREND SHORT TP2", from_entry = "TREND SHORT", stop = managedTrendShortStop, limit = trendShortTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
+        strategy.exit("TREND SHORT TP3", from_entry = "TREND SHORT", stop = managedTrendShortStop, limit = trendTargetPrice, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
 
 // Active Trade Health does not predict the next candle. It reacts only after a
 // completed candle proves that price approached TP1, gave back momentum, or
@@ -847,12 +854,19 @@ if newTradeForHealth
     tp1Reached := false
     tp1FailureWarned := false
     halfStopWarned := false
+    protectedStop := na
 trackedOpenTrades := strategy.opentrades
 
-validActivePlan = showTradeHealth and strategy.position_size != 0 and not na(plannedEntry) and not na(plannedStop) and not na(plannedTarget1)
+validActivePlan = strategy.position_size != 0 and not na(plannedEntry) and not na(plannedStop) and not na(plannedTarget1)
 activePlanRisk = validActivePlan ? math.abs(plannedEntry - plannedStop) : na
 longTP1Hit = validActivePlan and strategy.position_size > 0 and high >= plannedTarget1
 shortTP1Hit = validActivePlan and strategy.position_size < 0 and low <= plannedTarget1
+firstTP1Hit = (longTP1Hit or shortTP1Hit) and not tp1Reached
+
+if firstTP1Hit
+    protectedStop := strategy.position_size > 0 ? plannedEntry + activePlanRisk * tp1ProfitLockR : plannedEntry - activePlanRisk * tp1ProfitLockR
+    if showPriorityMarks
+        label.new(bar_index, strategy.position_size > 0 ? high : low, protectAfterTP1 ? "TP1 BANKED · 33%\nREST SL → +" + str.tostring(tp1ProfitLockR, "#.##") + "R NEXT UPDATE" : "TP1 BANKED · 33%", style = strategy.position_size > 0 ? label.style_label_down : label.style_label_up, color = color.new(color.lime, 4), textcolor = color.black, size = size.small)
 
 if longTP1Hit or shortTP1Hit
     tp1ApproachArmed := false
@@ -860,13 +874,13 @@ if longTP1Hit or shortTP1Hit
     tp1FailureWarned := false
     halfStopWarned := false
 
-longTP1Approached = validActivePlan and decisionBarReady and strategy.position_size > 0 and not tp1Reached and not longTP1Hit and high >= plannedEntry + activePlanRisk * tp1ApproachPercent
-shortTP1Approached = validActivePlan and decisionBarReady and strategy.position_size < 0 and not tp1Reached and not shortTP1Hit and low <= plannedEntry - activePlanRisk * tp1ApproachPercent
+longTP1Approached = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size > 0 and not tp1Reached and not longTP1Hit and high >= plannedEntry + activePlanRisk * tp1ApproachPercent
+shortTP1Approached = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size < 0 and not tp1Reached and not shortTP1Hit and low <= plannedEntry - activePlanRisk * tp1ApproachPercent
 if longTP1Approached or shortTP1Approached
     tp1ApproachArmed := true
 
-longTP1FailureWarning = validActivePlan and decisionBarReady and strategy.position_size > 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not longTP1Hit and close <= plannedEntry + activePlanRisk * tp1GivebackPercent and close < open and close < close[1] and (close < fastEMA or rsiValue < 50)
-shortTP1FailureWarning = validActivePlan and decisionBarReady and strategy.position_size < 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not shortTP1Hit and close >= plannedEntry - activePlanRisk * tp1GivebackPercent and close > open and close > close[1] and (close > fastEMA or rsiValue > 50)
+longTP1FailureWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size > 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not longTP1Hit and close <= plannedEntry + activePlanRisk * tp1GivebackPercent and close < open and close < close[1] and (close < fastEMA or rsiValue < 50)
+shortTP1FailureWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size < 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not shortTP1Hit and close >= plannedEntry - activePlanRisk * tp1GivebackPercent and close > open and close > close[1] and (close > fastEMA or rsiValue > 50)
 tp1FailureWarning = longTP1FailureWarning or shortTP1FailureWarning
 
 if tp1FailureWarning
@@ -874,8 +888,8 @@ if tp1FailureWarning
     tp1ApproachArmed := false
     label.new(bar_index, longTP1FailureWarning ? high : low, oneMinuteRecoveryActive ? "TP1 FAILED · FLIP WATCH\nWAIT FOR OPPOSITE CLOSE" : "TP1 FAILED · POSSIBLE REVERSE\nMOMENTUM BACK TOWARD SL", style = longTP1FailureWarning ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 4), textcolor = color.black, size = size.small)
 
-longHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size > 0 and not halfStopWarned and low <= plannedEntry - activePlanRisk * halfStopPercent and low > plannedStop
-shortHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size < 0 and not halfStopWarned and high >= plannedEntry + activePlanRisk * halfStopPercent and high < plannedStop
+longHalfToSLWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size > 0 and not halfStopWarned and low <= plannedEntry - activePlanRisk * halfStopPercent and low > plannedStop
+shortHalfToSLWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size < 0 and not halfStopWarned and high >= plannedEntry + activePlanRisk * halfStopPercent and high < plannedStop
 halfToSLWarning = longHalfToSLWarning or shortHalfToSLWarning
 
 if halfToSLWarning
@@ -934,6 +948,7 @@ if positionJustClosed
     tp1Reached := false
     tp1FailureWarned := false
     halfStopWarned := false
+    protectedStop := na
 
 // Detect whether the broker emulator closed the latest trade at TP, SL or a
 // confirmed 1m failure exit. On 1m, every stop can start another smaller reset
@@ -1130,14 +1145,15 @@ if strategy.position_size > 0 and reentryDirection == 1 and not na(reentryStop)
         reentryLongTarget2 = strategy.position_avg_price + reentryLongRisk * 1.50
         reentryTarget := strategy.position_avg_price + reentryLongRisk * rewardRisk
         plannedEntry := strategy.position_avg_price
-        plannedStop := reentryStop
+        managedReentryLongStop = protectAfterTP1 and tp1Reached and not na(protectedStop) ? math.max(reentryStop, protectedStop) : reentryStop
+        plannedStop := managedReentryLongStop
         plannedTarget1 := reentryLongTarget1
         plannedTarget2 := reentryLongTarget2
         plannedTarget := reentryTarget
         plannedUntilBar := bar_index + planBars
         strategy.exit("REENTRY LONG TP1", from_entry = "REENTRY LONG", stop = reentryStop, limit = reentryLongTarget1, qty_percent = 33, comment_profit = "TP1", comment_loss = "SL")
-        strategy.exit("REENTRY LONG TP2", from_entry = "REENTRY LONG", stop = reentryStop, limit = reentryLongTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
-        strategy.exit("REENTRY LONG TP3", from_entry = "REENTRY LONG", stop = reentryStop, limit = reentryTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
+        strategy.exit("REENTRY LONG TP2", from_entry = "REENTRY LONG", stop = managedReentryLongStop, limit = reentryLongTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
+        strategy.exit("REENTRY LONG TP3", from_entry = "REENTRY LONG", stop = managedReentryLongStop, limit = reentryTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
     reentryPendingBar := na
 
 if strategy.position_size < 0 and reentryDirection == -1 and not na(reentryStop)
@@ -1147,14 +1163,15 @@ if strategy.position_size < 0 and reentryDirection == -1 and not na(reentryStop)
         reentryShortTarget2 = strategy.position_avg_price - reentryShortRisk * 1.50
         reentryTarget := strategy.position_avg_price - reentryShortRisk * rewardRisk
         plannedEntry := strategy.position_avg_price
-        plannedStop := reentryStop
+        managedReentryShortStop = protectAfterTP1 and tp1Reached and not na(protectedStop) ? math.min(reentryStop, protectedStop) : reentryStop
+        plannedStop := managedReentryShortStop
         plannedTarget1 := reentryShortTarget1
         plannedTarget2 := reentryShortTarget2
         plannedTarget := reentryTarget
         plannedUntilBar := bar_index + planBars
         strategy.exit("REENTRY SHORT TP1", from_entry = "REENTRY SHORT", stop = reentryStop, limit = reentryShortTarget1, qty_percent = 33, comment_profit = "TP1", comment_loss = "SL")
-        strategy.exit("REENTRY SHORT TP2", from_entry = "REENTRY SHORT", stop = reentryStop, limit = reentryShortTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
-        strategy.exit("REENTRY SHORT TP3", from_entry = "REENTRY SHORT", stop = reentryStop, limit = reentryTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
+        strategy.exit("REENTRY SHORT TP2", from_entry = "REENTRY SHORT", stop = managedReentryShortStop, limit = reentryShortTarget2, qty_percent = 33, comment_profit = "TP2", comment_loss = "SL")
+        strategy.exit("REENTRY SHORT TP3", from_entry = "REENTRY SHORT", stop = managedReentryShortStop, limit = reentryTarget, qty_percent = 34, comment_profit = "TP3", comment_loss = "SL")
     reentryPendingBar := na
 
 // Keep one clean Fibonacci map on the latest confirmed swing instead of
@@ -1228,8 +1245,8 @@ plotshape(buySideManipulation, title = "15M BUY-SIDE MANIPULATION", text = "MANI
 plotshape(sellSideManipulation, title = "15M SELL-SIDE MANIPULATION", text = "MANIPULATION\nAVOID SHORT", style = shape.labelup, location = location.belowbar, color = color.orange, textcolor = color.black, size = size.small)
 plotshape(blowOffTop, title = "15M BLOW-OFF TOP", text = "BLOW-OFF TOP\nWAIT", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
 plotshape(blowOffBottom, title = "15M BLOW-OFF BOTTOM", text = "BLOW-OFF BOTTOM\nWAIT", style = shape.labelup, location = location.belowbar, color = color.aqua, textcolor = color.black, size = size.small)
-plotshape(showPriorityMarks and fibLongRejection, title = "FIBONACCI GOLDEN ZONE LONG WATCH", text = "FIB LONG\nWATCH", style = shape.labelup, location = location.belowbar, color = color.yellow, textcolor = color.black, size = size.tiny)
-plotshape(showPriorityMarks and fibShortRejection, title = "FIBONACCI GOLDEN ZONE SHORT WATCH", text = "FIB SHORT\nWATCH", style = shape.labeldown, location = location.abovebar, color = color.yellow, textcolor = color.black, size = size.tiny)
+plotshape(showPriorityMarks and not simpleChartMode and fibLongRejection, title = "FIBONACCI CONTEXT ONLY LONG", text = "FIB CONTEXT\nNOT AN ENTRY", style = shape.labelup, location = location.belowbar, color = color.yellow, textcolor = color.black, size = size.tiny)
+plotshape(showPriorityMarks and not simpleChartMode and fibShortRejection, title = "FIBONACCI CONTEXT ONLY SHORT", text = "FIB CONTEXT\nNOT AN ENTRY", style = shape.labeldown, location = location.abovebar, color = color.yellow, textcolor = color.black, size = size.tiny)
 plotshape(volatilityShock and not blowOffTop and not blowOffBottom, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
 plotshape(not simpleChartMode and shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
 plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
@@ -1246,7 +1263,7 @@ minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
 countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
-priorityText = blowOffTop ? "15M BLOW-OFF TOP" : blowOffBottom ? "15M BLOW-OFF BOTTOM" : buySideManipulation ? "15M AVOID LONG" : sellSideManipulation ? "15M AVOID SHORT" : shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED" : "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED" : "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED" : "P3 RESET BUY WATCH" : reentryShortCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED" : "P3 RESET SELL WATCH" : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY SCANNING" : oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL SCANNING" : "P3 RESET SCANNING" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : "NO CONFIRMED SETUP"
+priorityText = blowOffTop ? "15M BLOW-OFF TOP" : blowOffBottom ? "15M BLOW-OFF BOTTOM" : buySideManipulation ? "15M AVOID LONG" : sellSideManipulation ? "15M AVOID SHORT" : shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED" : "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED" : "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED" : "P3 RESET BUY WATCH" : reentryShortCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED" : "P3 RESET SELL WATCH" : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY SCANNING" : oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL SCANNING" : "P3 RESET SCANNING" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : fibLongRejection ? "FIB LONG · CONTEXT ONLY" : fibShortRejection ? "FIB SHORT · CONTEXT ONLY" : "NO CONFIRMED SETUP"
 priorityColor = blowOffTop or blowOffBottom ? color.new(color.fuchsia, 48) : buySideManipulation or sellSideManipulation ? color.new(color.orange, 52) : shockPauseActive ? color.new(color.fuchsia, 58) : trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
 entryGuardText = avoidShort ? "AVOID SHORT" : avoidLong ? "AVOID LONG" : noChaseLong ? "NO CHASE LONG" : noChaseShort ? "NO CHASE SHORT" : "CLEAR"
 entryGuardColor = avoidShort ? color.new(color.orange, 58) : avoidLong ? color.new(color.red, 58) : noChaseLong or noChaseShort ? color.new(color.yellow, 64) : color.new(color.lime, 82)
@@ -1256,7 +1273,7 @@ shockStatusColor = shockPauseActive ? color.new(color.fuchsia, 58) : shockReset 
 metalSyncText = metalsBullishSync ? "GOOD · BULLISH" : metalsBearishSync ? "GOOD · BEARISH" : "NOT SYNCED · WAIT"
 metalSyncColor = metalsBullishSync ? color.new(color.lime, 64) : metalsBearishSync ? color.new(color.red, 58) : color.new(color.orange, 62)
 metalSyncTextColor = metalsBullishSync ? color.black : color.white
-tradeHealthText = strategy.position_size == 0 ? "NO ACTIVE TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED · REVERSE RISK" : halfStopWarned ? "HALF TO SL" : tp1Reached ? "TP1 REACHED" : tp1ApproachArmed ? "TP1 APPROACHED" : "NORMAL"
+tradeHealthText = strategy.position_size == 0 ? "NO ACTIVE TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED · REVERSE RISK" : halfStopWarned ? "HALF TO SL" : tp1Reached ? protectAfterTP1 ? "TP1 BANKED · REST +" + str.tostring(tp1ProfitLockR, "#.##") + "R" : "TP1 BANKED" : tp1ApproachArmed ? "TP1 APPROACHED" : "NORMAL"
 tradeHealthColor = strategy.position_size == 0 ? color.new(color.gray, 82) : tp1FailureWarned ? color.new(color.orange, 52) : halfStopWarned ? color.new(color.red, 54) : tp1Reached ? color.new(color.lime, 62) : tp1ApproachArmed ? color.new(color.yellow, 60) : color.new(color.aqua, 82)
 tradeHealthTextColor = tp1ApproachArmed and not tp1FailureWarned and not halfStopWarned ? color.black : color.white
 buySignalNow = not fifteenMinuteRiskDetected and (trendLongSetup or reversalLongConfirmed or reentryLongConfirmed)
@@ -1341,6 +1358,7 @@ sendAurumAlert(reentryLongConfirmed, oneMinuteRecoveryActive and reentryForcedDi
 sendAurumAlert(reentryShortConfirmed, oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED: trigger filled with automatic SL and TP1/TP2/TP3" : "P3 RESET CONFIRMED: SELL trigger filled")
 sendAurumAlert(reentryScanExpired, "P3 RESET EXPIRED: no qualified post-SL entry")
 sendAurumAlert(tp1FailureWarning, "TRADE HEALTH: TP1 approached but failed; possible reversal and increased SL risk")
+sendAurumAlert(firstTP1Hit, protectAfterTP1 ? "TRADE MANAGEMENT: TP1 reached; 33% banked and remaining TP2/TP3 stop moves to protected profit on the next update" : "TRADE MANAGEMENT: TP1 reached; 33% banked")
 sendAurumAlert(halfToSLWarning, "TRADE HEALTH: price consumed half of the Entry-to-SL risk distance")
 sendAurumAlert(avoidShort, "BAD ENTRY GUARD: avoid short into bullish pullback or sell-side sweep")
 sendAurumAlert(avoidLong, "BAD ENTRY GUARD: avoid long into bearish rally or buy-side sweep")
@@ -1958,11 +1976,11 @@ export default function Home() {
               <div className="grid content-start gap-3">
                 <div className="rounded-xl border border-emerald-300/18 bg-emerald-300/[.04] p-4">
                   <p className="text-xs font-semibold text-emerald-100">Bullish markup · swing low → swing high</p>
-                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The script places 0% at the confirmed high and 100% at the confirmed low, then watches price retrace downward into the ladder. A bullish candle closing back above 61.8%, with the higher trend and Gold/Silver sync bullish, prints <span className="font-semibold text-yellow-200">FIB LONG WATCH</span>.</p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The script places 0% at the confirmed high and 100% at the confirmed low, then watches price retrace downward into the ladder. A bullish candle closing back above 61.8%, with the higher trend and Gold/Silver sync bullish, creates <span className="font-semibold text-yellow-200">FIB CONTEXT · NOT AN ENTRY</span> in detailed mode.</p>
                 </div>
                 <div className="rounded-xl border border-red-300/18 bg-red-300/[.04] p-4">
                   <p className="text-xs font-semibold text-red-100">Bearish markup · swing high → swing low</p>
-                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The ladder mirrors upward from the confirmed low. A bearish candle closing back below 61.8%, with the higher trend and metals sync bearish, prints <span className="font-semibold text-yellow-200">FIB SHORT WATCH</span>.</p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">The ladder mirrors upward from the confirmed low. A bearish candle closing back below 61.8%, with the higher trend and metals sync bearish, creates <span className="font-semibold text-yellow-200">FIB CONTEXT · NOT AN ENTRY</span> in detailed mode.</p>
                 </div>
                 <div className="rounded-xl border border-yellow-300/22 bg-yellow-300/[.055] p-4">
                   <p className="text-xs font-semibold text-yellow-100">What counts as the better setup?</p>
@@ -2226,6 +2244,11 @@ export default function Home() {
                 <p className="mt-3 border-t border-orange-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">Both thresholds are adjustable under Settings → Active Trade Health. On timeframes other than 1m they remain warnings only. A recovery flip is still conditional and can also stop out.</p>
               </div>
 
+              <div className="mb-4 rounded-xl border border-emerald-300/20 bg-emerald-300/[.04] p-4">
+                <p className="text-xs font-semibold text-emerald-100">New TP1 protection</p>
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">When TP1 is actually touched, the strategy marks <span className="font-semibold text-emerald-200">TP1 BANKED · 33%</span>. From the next strategy update, TP2 and TP3 use a protected stop at entry plus 0.10R by default. This reduces giveback on the remaining simulated position, but spread, commission, gaps and intrabar order sequence can still produce a small loss.</p>
+              </div>
+
               <div className="mb-4 rounded-xl border border-lime-300/20 bg-lime-300/[.04] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
@@ -2246,7 +2269,7 @@ export default function Home() {
                   ['Liquidity map', 'Confirmed swing highs mark buy-side liquidity; confirmed swing lows mark sell-side liquidity.'],
                   ['HH / HL structure', 'Labels higher highs, higher lows, lower highs and lower lows only after pivot confirmation.'],
                     ['Defended P1 entry', 'An EMA cross is watch-only; P1 needs a completed pullback candle and a strong reclaim through its high or low.'],
-                    ['Three-target plan', 'Yellow candidate entry, green TP1 at 1R, TP2 at 1.5R, TP3 at the final target, and one red SL.'],
+                    ['Three-target plan', 'Yellow candidate entry, green TP1 at 1R, TP2 at 1.5R, TP3 at the final target; after TP1, the remaining stop protects +0.10R by default.'],
                   ['Simple chart mode', 'Shows only confirmed BUY/SELL marks and serious safety warnings; detailed context labels stay hidden.'],
                   ['1H precision entry', 'Waits for daily alignment, a 1H pullback to the 20 EMA and a confirmed rejection instead of chasing the crossover.'],
                   ['1m auto recovery', 'Arms at half-to-SL or failed TP1, confirms an opposite close, then rebuilds a smaller fresh SL/TP bracket.'],
@@ -2271,7 +2294,7 @@ export default function Home() {
                 </div>
                 <div className="sm:border-l sm:border-white/9 sm:pl-4">
                   <p className="text-xs font-semibold">What does “2.14” mean?</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">It is the final TP3 reward-to-risk ratio. The strategy scales out approximately 33% at TP1 = 1R, 33% at TP2 = 1.5R, and 34% at TP3 = 2.14R. These are projections before spread, slippage and fees—not win probabilities.</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">It is the final TP3 reward-to-risk ratio. The strategy scales out approximately 33% at TP1 = 1R, 33% at TP2 = 1.5R, and 34% at TP3 = 2.14R. After TP1, the remaining stop protects +0.10R by default. These are projections before spread, slippage and fees—not win probabilities.</p>
                 </div>
               </div>
 
