@@ -1,0 +1,248 @@
+{
+  "model_type": "calibrated multi-timeframe Extra Trees protected-outcome classifier",
+  "model_id": "ag-v8-shadow-20260904-095331",
+  "trained_at_utc": "2026-09-04T09:53:31+00:00",
+  "decision_timeframe": "M1",
+  "context_timeframes": [
+    "M5",
+    "M15",
+    "H1"
+  ],
+  "feature_count": 52,
+  "probability_calibration": "sigmoid on later disjoint chronology",
+  "outcome": {
+    "horizon_bars": 60,
+    "stop_atr": 1.25,
+    "target_r": 2.6666666666666665,
+    "estimated_cost_r": 0.1
+  },
+  "equity_controller": {
+    "fixed_planned_risk_usd": 7.5,
+    "never_martingale": true,
+    "two_loss_cooldown_bars": 30,
+    "drawdown_threshold_increase_at_r": [
+      2.0,
+      3.0
+    ],
+    "drawdown_circuit_breaker_r": 4.0,
+    "circuit_breaker_bars": 240
+  },
+  "synchronized_bars": 74353,
+  "defended_candidates": 3859,
+  "walk_forward_folds": [
+    {
+      "fold": 1,
+      "period_utc": [
+        "2026-07-22T18:36:00+00:00",
+        "2026-08-03T02:09:00+00:00"
+      ],
+      "threshold": 0.4000000000000001,
+      "train_candidates": 1356,
+      "calibration_candidates": 212,
+      "threshold_tuning_candidates": 216,
+      "test_candidates": 492,
+      "threshold_tuning": {
+        "probability_approvals": 76,
+        "trades": 63,
+        "wins": 24,
+        "win_rate": 0.38095238095238093,
+        "net_r": 0.9159189831815531,
+        "mean_r": 0.01453839655843735,
+        "lower_confidence_r": -0.16430485720118998,
+        "profit_factor": 1.051168658278298,
+        "max_drawdown_r": 9.194367522772106,
+        "threshold": 0.4000000000000001
+      },
+      "calibration": {
+        "brier_score": 0.24957809348656645,
+        "log_loss": 0.6932298553589191,
+        "expected_calibration_error": 0.060172616234599706,
+        "mean_predicted_probability": 0.3741246917644735,
+        "observed_positive_rate": 0.43089430894308944
+      },
+      "baseline": {
+        "probability_approvals": 182,
+        "trades": 147,
+        "wins": 61,
+        "win_rate": 0.41496598639455784,
+        "net_r": 3.5131219324187115,
+        "mean_r": 0.0238987886559096,
+        "lower_confidence_r": -0.10723404554849486,
+        "profit_factor": 1.0680837583802085,
+        "max_drawdown_r": 7.651519067259288
+      },
+      "equity_aware": {
+        "trades": 24,
+        "wins": 9,
+        "win_rate": 0.375,
+        "net_r": -2.3798042736496523,
+        "mean_r": -0.09915851140206884,
+        "lower_confidence_r": -0.42657365483959275,
+        "profit_factor": 0.7494942869842423,
+        "max_drawdown_r": 5.600000000000076,
+        "average_win_r": 0.7911328584833517,
+        "average_loss_r": -0.6333333333333211,
+        "skipped_cooldown": 114,
+        "skipped_drawdown_gate": 345
+      }
+    },
+    {
+      "fold": 2,
+      "period_utc": [
+        "2026-08-03T02:37:00+00:00",
+        "2026-08-12T16:08:00+00:00"
+      ],
+      "threshold": 0.325,
+      "train_candidates": 1745,
+      "calibration_candidates": 269,
+      "threshold_tuning_candidates": 271,
+      "test_candidates": 492,
+      "threshold_tuning": {
+        "probability_approvals": 195,
+        "trades": 146,
+        "wins": 73,
+        "win_rate": 0.5,
+        "net_r": 24.7537638658791,
+        "mean_r": 0.169546327848487,
+        "lower_confidence_r": 0.03244116803500591,
+        "profit_factor": 1.5716804587962836,
+        "max_drawdown_r": 5.759934833905007,
+        "threshold": 0.325
+      },
+      "calibration": {
+        "brier_score": 0.24345638144715806,
+        "log_loss": 0.6807397657130557,
+        "expected_calibration_error": 0.0581020541989236,
+        "mean_predicted_probability": 0.35463914431408256,
+        "observed_positive_rate": 0.39227642276422764
+      },
+      "baseline": {
+        "probability_approvals": 354,
+        "trades": 248,
+        "wins": 106,
+        "win_rate": 0.4274193548387097,
+        "net_r": 0.8357405208150608,
+        "mean_r": 0.0033699214548994385,
+        "lower_confidence_r": -0.09110857305909434,
+        "profit_factor": 1.0101671596206212,
+        "max_drawdown_r": 13.37128609038317
+      },
+      "equity_aware": {
+        "trades": 40,
+        "wins": 19,
+        "win_rate": 0.475,
+        "net_r": -0.9003119872518655,
+        "mean_r": -0.022507799681296636,
+        "lower_confidence_r": -0.280395486550858,
+        "profit_factor": 0.9440800007918091,
+        "max_drawdown_r": 8.329252891668784,
+        "average_win_r": 0.7999835796183137,
+        "average_loss_r": -0.7666666666666583,
+        "skipped_cooldown": 251,
+        "skipped_drawdown_gate": 178
+      }
+    },
+    {
+      "fold": 3,
+      "period_utc": [
+        "2026-08-12T17:05:00+00:00",
+        "2026-08-24T11:11:00+00:00"
+      ],
+      "threshold": 0.4250000000000001,
+      "train_candidates": 2114,
+      "calibration_candidates": 331,
+      "threshold_tuning_candidates": 332,
+      "test_candidates": 492,
+      "threshold_tuning": {
+        "probability_approvals": 113,
+        "trades": 86,
+        "wins": 40,
+        "win_rate": 0.46511627906976744,
+        "net_r": 9.224566737814563,
+        "mean_r": 0.1072624039280763,
+        "lower_confidence_r": -0.06611513413489349,
+        "profit_factor": 1.3467882232261068,
+        "max_drawdown_r": 7.733333333334103,
+        "threshold": 0.4250000000000001
+      },
+      "calibration": {
+        "brier_score": 0.23435155569000893,
+        "log_loss": 0.6616453409288813,
+        "expected_calibration_error": 0.06288372104092793,
+        "mean_predicted_probability": 0.4226398186019035,
+        "observed_positive_rate": 0.3597560975609756
+      },
+      "baseline": {
+        "probability_approvals": 113,
+        "trades": 97,
+        "wins": 32,
+        "win_rate": 0.32989690721649484,
+        "net_r": -7.19055463024631,
+        "mean_r": -0.07412942917779701,
+        "lower_confidence_r": -0.21816621785206258,
+        "profit_factor": 0.7915781266595262,
+        "max_drawdown_r": 15.264605784741889
+      },
+      "equity_aware": {
+        "trades": 24,
+        "wins": 8,
+        "win_rate": 0.3333333333333333,
+        "net_r": 1.0154420235449226,
+        "mean_r": 0.042310084314371776,
+        "lower_confidence_r": -0.25025825186173356,
+        "profit_factor": 1.153854852052257,
+        "max_drawdown_r": 2.8400463744463584,
+        "average_win_r": 0.9519302529431373,
+        "average_loss_r": -0.41250000000001097,
+        "skipped_cooldown": 16,
+        "skipped_drawdown_gate": 314
+      }
+    }
+  ],
+  "positive_equity_aware_folds": 1,
+  "deployment_threshold": 0.4000000000000001,
+  "newest_period_diagnostic": {
+    "period_utc": [
+      "2026-08-24T11:14:00+00:00",
+      "2026-09-04T03:39:00+00:00"
+    ],
+    "candidates": 579,
+    "calibration": {
+      "brier_score": 0.25698815106427997,
+      "log_loss": 0.7086229587315603,
+      "expected_calibration_error": 0.09631480101438454,
+      "mean_predicted_probability": 0.3510081696246483,
+      "observed_positive_rate": 0.4473229706390328
+    },
+    "baseline": {
+      "probability_approvals": 19,
+      "trades": 18,
+      "wins": 12,
+      "win_rate": 0.6666666666666666,
+      "net_r": 8.258975537177745,
+      "mean_r": 0.45883197428765254,
+      "lower_confidence_r": 0.09190150175473477,
+      "profit_factor": 4.176529052760962,
+      "max_drawdown_r": 2.099999999999934
+    },
+    "equity_aware": {
+      "trades": 16,
+      "wins": 10,
+      "win_rate": 0.625,
+      "net_r": 7.300186182357519,
+      "mean_r": 0.45626163639734496,
+      "lower_confidence_r": 0.045887656938411736,
+      "profit_factor": 3.8077639162916106,
+      "max_drawdown_r": 2.099999999999934,
+      "average_win_r": 0.9900186182357281,
+      "average_loss_r": -0.43333333333329366,
+      "skipped_cooldown": 0,
+      "skipped_drawdown_gate": 69
+    }
+  },
+  "research_gate_passed": false,
+  "deployment_eligible": false,
+  "deployment_status": "FAILED RESEARCH GATE - SHADOW ONLY",
+  "data_status": "The complete snapshot was used in prior research; newest-period results are diagnostic, not a pristine final test.",
+  "warning": "Calibrated probabilities are estimates, not certainty. AI cannot predict news shocks or guarantee profit."
+}

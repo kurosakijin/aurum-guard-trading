@@ -51,6 +51,11 @@ ORIENTED_FEATURE_COLUMNS = [
     "dir_h1_ema_gap_atr", "dir_h1_ema20_slope_atr", "dir_h1_rsi_bias", "h1_range_atr",
 ]
 LEGACY_ORIENTED_FEATURE_COLUMNS = ORIENTED_FEATURE_COLUMNS[:-12]
+V8_ORIENTED_FEATURE_COLUMNS = ORIENTED_FEATURE_COLUMNS + [
+    "m5_trend_agreement", "m15_trend_agreement", "h1_trend_agreement",
+    "trend_alignment_score", "trend_strength_composite",
+    "wick_imbalance", "shock_score",
+]
 
 
 def _rsi(close: pd.Series, length: int = 14) -> pd.Series:
@@ -373,7 +378,23 @@ def oriented_features(frame: pd.DataFrame, direction: pd.Series | np.ndarray) ->
         values[f"dir_{prefix}_ema20_slope_atr"] = frame[f"{prefix}_ema20_slope_atr"] * d
         values[f"dir_{prefix}_rsi_bias"] = (frame[f"{prefix}_rsi_14"] - 0.50) * d
         values[f"{prefix}_range_atr"] = frame[f"{prefix}_range_atr"]
-    return pd.DataFrame(values, index=frame.index)[ORIENTED_FEATURE_COLUMNS]
+        values[f"{prefix}_trend_agreement"] = (
+            (frame[f"{prefix}_ema_gap_atr"] * d > 0.0)
+            & (frame[f"{prefix}_ema20_slope_atr"] * d > 0.0)
+        ).astype(float)
+    values["trend_alignment_score"] = (
+        values["m5_trend_agreement"]
+        + values["m15_trend_agreement"]
+        + values["h1_trend_agreement"]
+    ) / 3.0
+    values["trend_strength_composite"] = (
+        values["dir_m5_ema_gap_atr"]
+        + values["dir_m15_ema_gap_atr"]
+        + values["dir_h1_ema_gap_atr"]
+    ) / 3.0
+    values["wick_imbalance"] = values["favorable_wick_share"] - values["adverse_wick_share"]
+    values["shock_score"] = frame["range_atr"] * np.maximum(frame["volume_z20"], 0.0)
+    return pd.DataFrame(values, index=frame.index)[V8_ORIENTED_FEATURE_COLUMNS]
 
 
 def meta_training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
@@ -381,7 +402,7 @@ def meta_training_matrix(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, n
     usable = frame.dropna(subset=FEATURE_COLUMNS + outcome_columns).copy()
     usable["direction"] = candidate_direction(usable)
     usable = usable.loc[usable["direction"] != 0].copy()
-    oriented = oriented_features(usable, usable["direction"])
+    oriented = oriented_features(usable, usable["direction"])[ORIENTED_FEATURE_COLUMNS]
     finite = np.isfinite(oriented.to_numpy(dtype=float)).all(axis=1)
     usable = usable.loc[finite].reset_index(drop=True)
     oriented = oriented.loc[finite].reset_index(drop=True)
@@ -540,7 +561,11 @@ class AurumProbabilityModel:
         if payload.get("format_version") not in (5, MODEL_FORMAT_VERSION):
             raise ValueError("Unsupported Aurum Guard AI model format")
         feature_names = payload.get("feature_names")
-        if feature_names not in (LEGACY_ORIENTED_FEATURE_COLUMNS, ORIENTED_FEATURE_COLUMNS):
+        if feature_names not in (
+            LEGACY_ORIENTED_FEATURE_COLUMNS,
+            ORIENTED_FEATURE_COLUMNS,
+            V8_ORIENTED_FEATURE_COLUMNS,
+        ):
             raise ValueError("Model feature order does not match this AI runner")
         return cls(
             estimator=payload["estimator"],

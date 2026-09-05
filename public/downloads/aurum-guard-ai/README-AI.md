@@ -6,9 +6,10 @@ trend/pullback candidate must exist first, then a regularized Extra Trees
 classifier estimates whether that candidate deserves approval. It does not bypass
 the EA's risk controls and it does not promise profit.
 
-EA v1.80 also adds one-way profit protection for a qualifying demo position:
-near break-even at $3 open profit, an intended $1.50 lock at $6, and a $3
-give-back trail after $10. These are defaults for a 0.01-lot setup, not a
+EA v1.83 also adds one-way profit protection for a qualifying demo position:
+near break-even at $7.50 open profit, an intended $5 lock at $12, and a $5
+give-back trail after $16. The TP1 handler cannot loosen a stronger stop back to
+break-even. These are defaults for a 0.01-lot setup, not a
 guarantee; broker stop distance, gaps, slippage, commissions and latency can
 produce a different result.
 
@@ -48,6 +49,25 @@ packaged as `aurum_guard_ai_v7_shadow.joblib` with `deployment_eligible=false`.
 `run_v7_shadow.cmd` records fresh closed-bar probabilities in a separate file;
 it does not replace the EA signal and cannot authorize an order. Use that forward
 log to gather new evidence without changing the v5 champion or risking money.
+
+## V8 calibrated equity-aware shadow
+
+`train_ai_v8.py` adds seven explicit chart-regime features: completed
+M5/M15/H1 trend agreement, an aggregate alignment score, multi-timeframe trend
+strength, wick imbalance, and a volume/range shock score. Its Extra Trees output
+is sigmoid-calibrated on a later, disjoint chronological slice before thresholds
+are selected on net-R utility. This makes BUY/SELL probabilities estimates of a
+defined protected-trade outcome rather than decorative confidence numbers.
+
+Account equity is not used as a chart predictor. A separate controller raises
+the entry threshold during drawdown, pauses after consecutive losses, and uses a
+4R circuit breaker without martingale or recovery sizing. The live shadow runner
+also publishes `EQUITY_GUARD` when session equity falls 2% from its peak.
+
+V8's newest diagnostic produced 16 equity-controlled trades, 62.5% winners,
++7.30R, a 3.81 profit factor, and 2.10R maximum drawdown. It nevertheless lost
+two of three earlier walk-forward periods, so `deployment_eligible` remains
+false. Run `run_v8_shadow.cmd` only on demo to collect genuinely new evidence.
 
 ## Safe first run
 

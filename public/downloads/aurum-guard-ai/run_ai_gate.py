@@ -22,6 +22,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--signal-file", default="aurum_guard_ai_signal.csv")
     parser.add_argument("--history-file", default="", help="Optional append-only closed-bar shadow log in Common/Files")
     parser.add_argument("--poll-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--max-equity-drawdown-percent", type=float, default=2.0,
+        help="Fail closed when account equity falls this far below the runner-session peak",
+    )
     parser.add_argument("--once", action="store_true")
     return parser.parse_args()
 
@@ -54,6 +58,7 @@ def append_history(path: Path, row: list[object]) -> None:
             writer.writerow([
                 "generated_at", "bar_time", "model_id", "raw_label", "health",
                 "buy_probability", "sell_probability", "wait_probability", "drift_share",
+                "balance", "equity", "equity_drawdown_percent",
             ])
         writer.writerow(row)
         handle.flush()
@@ -77,6 +82,7 @@ def main() -> int:
     signal_path = Path(terminal.commondata_path) / "Files" / args.signal_file
     history_path = Path(terminal.commondata_path) / "Files" / args.history_file if args.history_file else None
     last_bar_time = 0
+    peak_equity = 0.0
     print(f"Aurum Guard AI connected. Publishing closed-bar scores to {signal_path}")
 
     try:
@@ -92,10 +98,27 @@ def main() -> int:
                 bar_time = int(latest["time"])
                 if bar_time != last_bar_time:
                     raw_direction, long_probability, short_probability, no_trade_probability, health_code, drift_share = model.decide_frame_row(latest)
+                    account = mt5.account_info()
+                    if account is None:
+                        raise RuntimeError(f"MT5 account equity is unavailable: {mt5.last_error()}")
+                    balance = float(account.balance)
+                    equity = float(account.equity)
+                    peak_equity = max(peak_equity, equity)
+                    equity_drawdown_percent = (
+                        100.0 * (peak_equity - equity) / peak_equity if peak_equity > 0.0 else 100.0
+                    )
+                    equity_guard = (
+                        equity <= 0.0
+                        or args.max_equity_drawdown_percent <= 0.0
+                        or equity_drawdown_percent >= args.max_equity_drawdown_percent
+                    )
+                    model_health_code = health_code
+                    if equity_guard:
+                        health_code = "EQUITY_GUARD"
                     deployment_eligible = bool(model.metadata.get("deployment_eligible", False))
                     # Failed research models remain visible for shadow review but
                     # cannot approve an automated order in strict mode.
-                    direction = raw_direction if deployment_eligible else 0
+                    direction = raw_direction if deployment_eligible and not equity_guard else 0
                     generated_at = int(time.time())
                     write_signal(
                         signal_path,
@@ -121,12 +144,15 @@ def main() -> int:
                             generated_at, bar_time, model.model_id, raw_label, health_code,
                             f"{long_probability:.6f}", f"{short_probability:.6f}",
                             f"{no_trade_probability:.6f}", f"{drift_share:.6f}",
+                            f"{balance:.2f}", f"{equity:.2f}", f"{equity_drawdown_percent:.4f}",
                         ])
                     label = raw_label if deployment_eligible else f"SHADOW {raw_label} (MODEL NOT PROMOTED)"
                     print(
                         f"{pd.to_datetime(bar_time, unit='s', utc=True)} | {label} | health={health_code} drift={drift_share:.1%} | "
                         f"buy={long_probability:.1%} sell={short_probability:.1%} "
-                        f"wait={no_trade_probability:.1%} threshold={model.threshold:.1%}"
+                        f"wait={no_trade_probability:.1%} threshold={model.threshold:.1%} | "
+                        f"equity={equity:.2f} peakDD={equity_drawdown_percent:.2f}% "
+                        f"model_health={model_health_code}"
                     )
                     last_bar_time = bar_time
                 if args.once:

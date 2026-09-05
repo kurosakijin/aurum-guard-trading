@@ -1,0 +1,48 @@
+{
+  "generated_at_utc": "2026-09-04T05:53:10+00:00",
+  "model_id": "ag-v7-rfc-shadow-20260904-052648",
+  "model_status": "FAILED CONFIRMATION FOLD - SHADOW ONLY",
+  "decision_timeframe": "M1",
+  "threshold": 0.55,
+  "candidate_count": 3878,
+  "method": "Frozen packaged model evaluated on the chronological newest 15% of the labelled snapshot; the untouched confirmation result is copied from the selection run because the packaged model was later refit on development data.",
+  "confirmation_fold_from_selection_run": {
+    "trades": 84,
+    "wins": 29,
+    "win_rate": 0.34523809523809523,
+    "net_r": -7.279643497309542,
+    "mean_r": -0.08666242258701835,
+    "lower_r": -0.23151248581295342,
+    "pf": 0.7445739123751082,
+    "dd_r": 10.550833568813662
+  },
+  "confirmation_approximate_dollars": {
+    "assumed_risk_per_trade_usd": 7.5,
+    "net_usd": -54.6,
+    "max_drawdown_usd": 79.13
+  },
+  "newest_period_diagnostic": {
+    "probability_approvals": 83,
+    "trades": 75,
+    "wins": 39,
+    "win_rate": 0.52,
+    "net_r": 8.310935160838994,
+    "mean_r": 0.11081246881118659,
+    "lower_confidence_r": -0.062283298932013925,
+    "profit_factor": 1.4240273041244385,
+    "max_drawdown_r": 5.750485904739069
+  },
+  "newest_period_approximate_dollars": {
+    "assumed_risk_per_trade_usd": 7.5,
+    "net_usd": 62.33,
+    "max_drawdown_usd": 43.13
+  },
+  "promotion_eligible": false,
+  "reason": "The pre-declared confirmation fold lost money and the newest period has already been observed. The model must remain shadow/demo-only.",
+  "limitations": [
+    "OHLC first-touch approximation, not exact MT5 tick execution.",
+    "Estimated 0.10R round-trip cost; broker spread spikes, slippage, commissions and gaps can be worse.",
+    "Dollar translation assumes $7.50 risk was achieved exactly; actual 0.01-lot risk varies with stop distance and broker contract settings.",
+    "Historical performance cannot guarantee a future profit."
+  ]
+}

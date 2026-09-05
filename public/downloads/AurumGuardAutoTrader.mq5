@@ -4,7 +4,7 @@
 //|   Educational automation. Demo-only by default.                  |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "1.80"
+#property version   "1.83"
 #property strict
 #property description "Selective Gold pullback EA with fixed 0.01 lot, hard risk controls and an optional nonlinear fail-closed AI meta-label approval layer."
 
@@ -62,7 +62,7 @@ input double MinimumStopDistanceATR            = 1.25; // skip when the fixed-mo
 input int    MinimumSetupScore                 = 85;   // confluence gate, not a guaranteed probability
 input bool   RequireTwoBarConfirmation         = true; // reduced trade count/drawdown in testing, but did not prove a profitable edge
 input bool   UseConfirmationRetestEntry         = true; // wait for a better price instead of chasing the confirmation close
-input double ConfirmationRetestFraction         = 0.50; // 0=open, 1=close; 0.50 is the candle-body midpoint
+input double ConfirmationRetestFraction         = 0.75; // 0=open, 1=close; a shallow pullback avoids chasing without demanding a full reversal
 input int    ConfirmationRetestBars             = 3;    // cancel an unfilled idea after this many signal bars
 input bool   RequireDefendedRetestClose          = true; // a touch is not an entry; require a completed reclaim candle
 input int    RetestDefenseBars                   = 2;    // completed candles allowed to prove the retest was defended
@@ -99,11 +99,11 @@ input bool   MoveStopToBreakEvenAtTP1        = true;
 input int    BreakEvenOffsetPoints           = 5;
 input bool   LockOneRAtTP2                   = true;  // protect about one planned SL of profit
 input bool   EnableEarlyProfitProtection      = true;  // one-way stop tightening; never widens risk
-input double BreakEvenTriggerMoney            = 3.00;  // move near break-even after this open profit
-input double ProfitLockTriggerMoney            = 6.00;  // then lock a small realized gain if price allows
-input double ProfitLockMoney                   = 1.50;
-input double TrailingTriggerMoney              = 10.00; // trail after a stronger scalp move
-input double TrailingGivebackMoney             = 3.00;  // maximum intended give-back, before slippage
+input double BreakEvenTriggerMoney            = 7.50;  // wait for one full planned R before removing risk
+input double ProfitLockTriggerMoney           = 12.00;  // avoid cutting ordinary M1 winners near $3-$6
+input double ProfitLockMoney                   = 5.00;
+input double TrailingTriggerMoney             = 16.00; // allow room for the $20 target before trailing
+input double TrailingGivebackMoney             = 5.00;  // one-way protection; never widens the original stop
 
 string   g_symbol = "";
 datetime g_lastSignalBar = 0;
@@ -556,23 +556,13 @@ void ClearPendingEntry()
 
 bool PendingRetestDefended(double &atrValue,string &reason)
   {
-   MqlRates bars[],dailyBars[],trendBars[];
-   double fast[],slow[],rsi[],atr[],dailyEMA[],safetyFast[],safetySlow[],trendFast[],trendSlow[],adx[],plusDI[],minusDI[];
+   MqlRates bars[];
+   double fast[],slow[],rsi[],atr[];
    if(!ReadRates(g_symbol,SignalTimeframe,4,bars) ||
-      !ReadRates(g_symbol,PERIOD_D1,4,dailyBars) ||
-      !ReadRates(g_symbol,TrendTimeframe,4,trendBars) ||
       !ReadBuffer(g_fastHandle,4,fast) ||
       !ReadBuffer(g_slowHandle,4,slow) ||
       !ReadBuffer(g_rsiHandle,4,rsi) ||
-      !ReadBuffer(g_atrHandle,4,atr) ||
-      !ReadBuffer(g_dailyEMAHandle,4,dailyEMA) ||
-      !ReadBuffer(g_safetyFastHandle,4,safetyFast) ||
-      !ReadBuffer(g_safetySlowHandle,4,safetySlow) ||
-      !ReadBuffer(g_trendFastHandle,4,trendFast) ||
-      !ReadBuffer(g_trendSlowHandle,4,trendSlow) ||
-      !ReadIndicatorBuffer(g_safetyADXHandle,0,4,adx) ||
-      !ReadIndicatorBuffer(g_safetyADXHandle,1,4,plusDI) ||
-      !ReadIndicatorBuffer(g_safetyADXHandle,2,4,minusDI))
+      !ReadBuffer(g_atrHandle,4,atr))
      {
       reason="DEFENSE DATA NOT READY";
       return false;
@@ -591,24 +581,15 @@ bool PendingRetestDefended(double &atrValue,string &reason)
       return false;
      }
 
+   // The original setup already passed D1/H1/M15/ADX and setup-score checks.
+   // Here we only require evidence that the touched level was reclaimed; duplicating
+   // every original filter on a later M1 candle made otherwise valid entries impossible.
    bool signalDefense=g_pendingDirection>0
-      ? defense.close>defense.open && defense.close>g_pendingPrice && defense.close>bars[2].close && closeLocation>=0.65 && bodyShare>=MinimumDefenseBodyShare && defense.close>fast[1] && defense.close>slow[1] && defense.close-fast[1]<=atr[1]*MaximumEntryDistanceATR && rsi[1]>=52.0 && rsi[1]<=68.0
-      : defense.close<defense.open && defense.close<g_pendingPrice && defense.close<bars[2].close && closeLocation<=0.35 && bodyShare>=MinimumDefenseBodyShare && defense.close<fast[1] && defense.close<slow[1] && fast[1]-defense.close<=atr[1]*MaximumEntryDistanceATR && rsi[1]<=48.0 && rsi[1]>=32.0;
-   bool signalTrend=g_pendingDirection>0
-      ? fast[1]>slow[1] && fast[1]>fast[2] && slow[1]>=slow[2]
-      : fast[1]<slow[1] && fast[1]<fast[2] && slow[1]<=slow[2];
-   bool dailyAligned=g_pendingDirection>0
-      ? dailyBars[1].close>dailyEMA[1] && (!RequireDailyEMASlope || dailyEMA[1]>dailyEMA[2])
-      : dailyBars[1].close<dailyEMA[1] && (!RequireDailyEMASlope || dailyEMA[1]<dailyEMA[2]);
-   bool safetyAligned=!RequireSafetyTrendAlignment || (g_pendingDirection>0
-      ? safetyFast[1]>safetySlow[1] && safetyFast[1]>=safetyFast[2]
-      : safetyFast[1]<safetySlow[1] && safetyFast[1]<=safetyFast[2]);
-   bool higherAligned=!RequireTrendTimeframeAlignment || (g_pendingDirection>0
-      ? trendBars[1].close>trendFast[1] && trendFast[1]>trendSlow[1] && trendFast[1]>trendFast[2] && trendSlow[1]>=trendSlow[2]
-      : trendBars[1].close<trendFast[1] && trendFast[1]<trendSlow[1] && trendFast[1]<trendFast[2] && trendSlow[1]<=trendSlow[2]);
-   bool strengthAligned=adx[1]>=MinimumSafetyADX && (g_pendingDirection>0 ? plusDI[1]>minusDI[1] : minusDI[1]>plusDI[1]);
+      ? defense.close>defense.open && defense.close>g_pendingPrice && closeLocation>=0.60 && bodyShare>=MinimumDefenseBodyShare && defense.close>fast[1] && defense.close>slow[1] && defense.close-fast[1]<=atr[1]*MaximumEntryDistanceATR && rsi[1]>=50.0 && rsi[1]<=70.0
+      : defense.close<defense.open && defense.close<g_pendingPrice && closeLocation<=0.40 && bodyShare>=MinimumDefenseBodyShare && defense.close<fast[1] && defense.close<slow[1] && fast[1]-defense.close<=atr[1]*MaximumEntryDistanceATR && rsi[1]<=50.0 && rsi[1]>=30.0;
+   bool signalTrend=g_pendingDirection>0 ? fast[1]>slow[1] : fast[1]<slow[1];
    bool rangeOK=range<=atr[1]*MaximumSignalRangeATR;
-   if(!signalDefense || !signalTrend || !dailyAligned || !safetyAligned || !higherAligned || !strengthAligned || !rangeOK)
+   if(!signalDefense || !signalTrend || !rangeOK)
      {
       reason=g_pendingDirection>0 ? "RETEST TOUCHED - WAIT BULLISH DEFENSE" : "RETEST TOUCHED - WAIT BEARISH DEFENSE";
       return false;
@@ -1041,10 +1022,13 @@ void ManageOpenPosition()
             SymbolInfoTick(g_symbol,latest);
             double stopLevel=(double)SymbolInfoInteger(g_symbol,SYMBOL_TRADE_STOPS_LEVEL)*point;
             bool valid=type==POSITION_TYPE_BUY ? breakEvenStop<latest.bid-stopLevel : breakEvenStop>latest.ask+stopLevel;
-            if(valid)
-               protectedStop=breakEvenStop;
+            bool improves=type==POSITION_TYPE_BUY ? (protectedStop<=0.0 || breakEvenStop>protectedStop+point) : (protectedStop<=0.0 || breakEvenStop<protectedStop-point);
+            if(valid && improves)
+              {
+               if(!trade.PositionModify(ticket,breakEvenStop,finalTarget))
+                  Print("Aurum Guard TP1 break-even modify failed: ",trade.ResultRetcodeDescription());
+              }
            }
-         trade.PositionModify(ticket,protectedStop,finalTarget);
         }
       if(EnableTerminalAlerts)
          Alert("Aurum Guard ",g_symbol,": TP1 reached; partial and break-even rules checked.");
