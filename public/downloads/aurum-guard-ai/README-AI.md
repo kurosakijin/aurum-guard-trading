@@ -6,20 +6,23 @@ trend/pullback candidate must exist first, then a regularized Extra Trees
 classifier estimates whether that candidate deserves approval. It does not bypass
 the EA's risk controls and it does not promise profit.
 
-EA v1.90 changes the entry engine to a four-stage sequence: tight consolidation
+EA v1.90 changes the entry engine to a four-stage M15/M30/H1 sequence: tight consolidation
 and tick-volume POC, liquidity sweep, directional displacement, then a defended
 return to POC. The structural stop is rejected when 0.01 lot would exceed the
 configured money-risk cap, and the final target is 2.14R. Daily profit/loss and
-trade-count quotas were removed; spread, news, M15 shock and one-position safety
+trade-count quotas were removed; spread, news, higher-timeframe shock and one-position safety
 remain. These rules are not a guarantee; broker volume, gaps, slippage,
 commissions and latency can produce a different result.
+
+The POC sequence intentionally rejects M1 as an input timeframe. M1 noise can
+make consolidation and sweep labels misleading; use M15, M30 or H1 instead.
 
 ## What is enhanced
 
 - The current EA caps planned loss in account currency and projects its final
   target at 2.14 times the accepted structural risk.
 - 45 causal Gold/Silver, volatility, candle, trend, session and completed
-  M5/M15/H1 context features. M1 remains the decision/trigger timeframe.
+  M5/M15/H1 context features. POC trade decisions use M15, M30 or H1 only.
 - A shallow, regularized 300-tree Extra Trees classifier instead of the former
   gradient-boosted model.
 - Four expanding walk-forward checks with a 60-bar leakage gap.

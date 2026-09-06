@@ -1535,8 +1535,8 @@ export default function Home() {
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
-              <CardDescription>MT5 v1.90 · consolidation/POC → sweep → displacement → POC-return entry · fixed 0.01 lot · 2.14R target</CardDescription>
-              <CardAction><Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-200">ENTRIES OFF BY DEFAULT</Badge></CardAction>
+              <CardDescription>MT5 v1.90 · M15/M30/H1 consolidation/POC → sweep → displacement → POC-return entry · fixed 0.01 lot · 2.14R target</CardDescription>
+              <CardAction><Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-200">DEMO ENTRIES ON</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
               <div>
@@ -1544,7 +1544,7 @@ export default function Home() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-2xl">
                       <p className="text-sm font-semibold text-emerald-100">A real MT5 Expert Advisor—not a browser trade button</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.90 removes daily profit, loss and trade-count quotas. It first identifies a tight range and estimates its POC from broker tick volume, then waits for a liquidity sweep, directional displacement and a defended return to POC before entering. The stop sits beyond the sweep structure but the trade is refused if 0.01 lot would exceed the configured money-risk cap. TP is projected at 2.14R. Gold/Silver agreement, spread, news and M15 shock protection remain active; there is no martingale or automatic revenge trade.</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.90 removes daily profit, loss and trade-count quotas. Its POC sequence is intentionally limited to M15, M30 or H1—M1 is blocked because micro-noise can make this setup misleading. It identifies a tight range and estimates POC from broker tick volume, then waits for a liquidity sweep, directional displacement and a defended return to POC before entering. The stop sits beyond the sweep structure, but the order is refused if 0.01 lot would exceed the configured $2 money-risk cap. TP is projected at 2.14R. Gold/Silver agreement, spread, news and higher-timeframe shock protection remain active; there is no martingale or automatic revenge trade.</p>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <a
@@ -1567,10 +1567,10 @@ export default function Home() {
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {[
-                    ['1 · Confirm', 'Requires a completed pullback, then a separate candle closing through its extreme.'],
-                    ['2 · Retest', 'Waits for the confirmation-body midpoint; touching it is only a watch, not an order.'],
-                    ['3 · Defend', 'Requires a strong close back through the retest while D1/H1/M15, metals, spread and news remain clear.'],
-                    ['4 · Execute', 'Only the defended close allows a fixed 0.01-lot order with $7.50 planned SL and final $20 TP.'],
+                    ['1 · Consolidation', 'On M15, M30 or H1, estimates the tick-volume POC inside a tight range. No trade inside the range.'],
+                    ['2 · Manipulation', 'Waits for a liquidity sweep beyond the range and a close back inside; either direction is possible.'],
+                    ['3 · Distribution', 'Requires directional displacement away from POC, then waits—no chasing the expansion candle.'],
+                    ['4 · POC entry', 'A defended return to POC permits 0.01 lot, a structural SL capped at $2, and a 2.14R TP.'],
                   ].map(([title, description]) => (
                     <div key={title} className="rounded-xl border border-white/8 bg-black/15 p-3">
                       <p className="text-[10px] font-semibold text-emerald-200">{title}</p>

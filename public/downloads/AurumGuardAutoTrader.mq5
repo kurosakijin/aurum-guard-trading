@@ -33,9 +33,9 @@ input bool   AIRequireMatchingSymbol       = true;
 // --- Symbols and timeframes
 input string TradeSymbol                   = "";       // Blank uses the chart symbol
 input string SilverConfirmationSymbol      = "XAGUSD"; // Use your broker's exact symbol
-input ENUM_TIMEFRAMES SignalTimeframe       = PERIOD_M5;
-input ENUM_TIMEFRAMES SafetyTimeframe       = PERIOD_M15;
-input ENUM_TIMEFRAMES TrendTimeframe        = PERIOD_H1;
+input ENUM_TIMEFRAMES SignalTimeframe       = PERIOD_M15; // POC sequence is designed for M15-M30-H1, never M1
+input ENUM_TIMEFRAMES SafetyTimeframe       = PERIOD_H1;
+input ENUM_TIMEFRAMES TrendTimeframe        = PERIOD_H4;
 input bool   RequireGoldSilverSync          = true;
 input int    SyncLookbackBars               = 5;
 input int    SyncCorrelationLength          = 20;
@@ -1391,14 +1391,15 @@ void UpdateChartPanel()
    Comment("AURUM GUARD AUTO TRADER\n",
            "Mode: ",modeText," | Symbol: ",g_symbol,"\n",
            "Signal decision: ",g_lastDecision,"\n",
-           "M15 safety: ",pauseText,"\n",
+           "Higher-timeframe safety: ",pauseText,"\n",
            "AI approval: ",g_aiStatus,"\n",
            "Setup score: ",IntegerToString(g_lastSetupScore),"/100 | Entry gate: ",IntegerToString(MinimumSetupScore),"\n",
             "POC sequence: ",pocStageText," | Tick-volume POC: ",DoubleToString(g_pocPrice,2),"\n",
             "Today realized: ",currency," ",DoubleToString(dayPnL,2)," | Entries: ",tradesToday," | No daily quota\n",
             "Fixed lot: 0.01 | Max risk: ",currency," ",DoubleToString(StopLossMoney,2)," | Fib target: ",DoubleToString(FibonacciRewardMultiple,2),"R\n",
            "Direction preset: ",EnableLongEntries ? (EnableShortEntries ? "LONG + SHORT" : "LONG ONLY") : (EnableShortEntries ? "SHORT ONLY" : "DISABLED"),"\n",
-            "Entries follow range -> sweep -> displacement -> POC return. No martingale or revenge re-entry.");
+            "POC decisions use M15/M30/H1 only: range -> sweep -> displacement -> POC return.\n",
+            "No M1 POC signals, martingale, or revenge re-entry.");
   }
 
 //+------------------------------------------------------------------+
@@ -1424,6 +1425,11 @@ int OnInit()
    if(ConsolidationLookbackBars<10 || VolumeProfileBins<4 || VolumeProfileBins>100 || ConsolidationMaximumRangeATR<=0.0 || SweepBufferATR<0.0 || DisplacementFromPOCATR<=0.0 || POCReturnToleranceATR<=0.0 || StructureStopBufferATR<0.0 || POCSetupExpiryBars<3)
      {
       Print("Aurum Guard: invalid POC sequence controls.");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+   if(UsePOCSweepSequence && SignalTimeframe!=PERIOD_M15 && SignalTimeframe!=PERIOD_M30 && SignalTimeframe!=PERIOD_H1)
+     {
+      Print("Aurum Guard: the POC/sweep sequence is valid only on M15, M30, or H1. M1 is intentionally blocked to avoid misleading micro-noise signals.");
       return INIT_PARAMETERS_INCORRECT;
      }
 
