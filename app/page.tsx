@@ -1135,7 +1135,9 @@ if positionJustClosed
 // Detect whether the broker emulator closed the latest trade at TP, SL or a
 // confirmed 1m failure exit. On 1m, every stop can start another smaller reset
 // scan; the strategy-wide daily-loss lock remains the final circuit breaker.
-recoveryEngineEnabled = enableReentry or oneMinuteRecoveryActive
+// M15/H1 never recycle a stopped four-stage setup through P3. Those charts
+// must discover a completely fresh range/POC cycle after the full exit.
+recoveryEngineEnabled = (enableReentry and not cycleTimeframe) or oneMinuteRecoveryActive
 if closedTradeThisBar
     lastEntryId = strategy.closedtrades.entry_id(lastClosedTradeNumber)
     lastExitPrice = strategy.closedtrades.exit_price(lastClosedTradeNumber)
@@ -2395,7 +2397,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
                     <p className="text-xs font-semibold text-purple-100">P3 post-SL direction reset</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">After an SL, the old Entry / TP / SL plan is removed immediately. The script waits one completed candle and rescans for up to 12 bars. A stopped BUY may become a fresh SELL, or return as a BUY, only when price, trend, RSI, entry guard, higher timeframe and Gold/Silver sync agree. On 1m, another stopped reset may start a new smaller scan instead of ending the sequence.</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">After an SL, the old Entry / TP / SL plan is removed immediately. Lower timeframes can wait one completed candle and rescan for up to 12 bars. M15 and H1 do not recycle the stopped setup through P3: they erase the cycle and require a completely fresh consolidation, POC, sweep, move and defended retest. On 1m, another stopped reset may start a new smaller scan instead of ending the sequence.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
                     {['SL hit', 'Wait 1 close', 'Scan each close', 'Direction resets', 'P3 trigger', 'TP1 / TP2 / TP3 + SL'].map((step, index) => (
