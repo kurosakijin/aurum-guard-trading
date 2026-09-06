@@ -1535,7 +1535,7 @@ export default function Home() {
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
-              <CardDescription>MT5 v1.83 + execution-aligned AI approval layer · fixed 0.01 lot · one-way profit protection · fail-closed gate</CardDescription>
+              <CardDescription>MT5 v1.90 · consolidation/POC → sweep → displacement → POC-return entry · fixed 0.01 lot · 2.14R target</CardDescription>
               <CardAction><Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-200">ENTRIES OFF BY DEFAULT</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
@@ -1544,7 +1544,7 @@ export default function Home() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-2xl">
                       <p className="text-sm font-semibold text-emerald-100">A real MT5 Expert Advisor—not a browser trade button</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.83 keeps the defended-retest entry, D1/H1/M15 trend checks, Gold/Silver agreement, spread, news guard and fixed-money protection. It also prevents a stronger profit-lock stop from being moved backward to a weaker break-even stop. A research-only M1 diagnostic was positive, but produced only eight trades—far too few to prove an edge. Broker stop rules, gaps and slippage still apply. The AI starts in shadow mode and cannot bypass any EA risk control. New entries and live trading remain disabled by default.</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.90 removes daily profit, loss and trade-count quotas. It first identifies a tight range and estimates its POC from broker tick volume, then waits for a liquidity sweep, directional displacement and a defended return to POC before entering. The stop sits beyond the sweep structure but the trade is refused if 0.01 lot would exceed the configured money-risk cap. TP is projected at 2.14R. Gold/Silver agreement, spread, news and M15 shock protection remain active; there is no martingale or automatic revenge trade.</p>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <a
@@ -1552,7 +1552,7 @@ export default function Home() {
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
                       >
-                        <Download className="size-4" /> Download MT5 v1.83
+                        <Download className="size-4" /> Download MT5 v1.90
                       </a>
                       <a
                         href="./downloads/AurumGuardAI.zip"

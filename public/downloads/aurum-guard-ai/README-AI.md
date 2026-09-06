@@ -6,18 +6,18 @@ trend/pullback candidate must exist first, then a regularized Extra Trees
 classifier estimates whether that candidate deserves approval. It does not bypass
 the EA's risk controls and it does not promise profit.
 
-EA v1.83 also adds one-way profit protection for a qualifying demo position:
-near break-even at $7.50 open profit, an intended $5 lock at $12, and a $5
-give-back trail after $16. The TP1 handler cannot loosen a stronger stop back to
-break-even. These are defaults for a 0.01-lot setup, not a
-guarantee; broker stop distance, gaps, slippage, commissions and latency can
-produce a different result.
+EA v1.90 changes the entry engine to a four-stage sequence: tight consolidation
+and tick-volume POC, liquidity sweep, directional displacement, then a defended
+return to POC. The structural stop is rejected when 0.01 lot would exceed the
+configured money-risk cap, and the final target is 2.14R. Daily profit/loss and
+trade-count quotas were removed; spread, news, M15 shock and one-position safety
+remain. These rules are not a guarantee; broker volume, gaps, slippage,
+commissions and latency can produce a different result.
 
 ## What is enhanced
 
-- Execution-aligned labels approximate the EA's $7.50 planned loss, $20 final
-  target, break-even, profit lock and trailing give-back instead of scoring a
-  different generic ATR trade.
+- The current EA caps planned loss in account currency and projects its final
+  target at 2.14 times the accepted structural risk.
 - 45 causal Gold/Silver, volatility, candle, trend, session and completed
   M5/M15/H1 context features. M1 remains the decision/trigger timeframe.
 - A shallow, regularized 300-tree Extra Trees classifier instead of the former

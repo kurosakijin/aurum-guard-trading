@@ -1,12 +1,12 @@
 //+------------------------------------------------------------------+
 //|                                      AurumGuardAutoTrader.mq5    |
-//|   Gold entries + M15 manipulation safety + fixed money controls|
+//|   POC sweep-return entries + M15 safety + capped money risk     |
 //|   Educational automation. Demo-only by default.                  |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "1.83"
+#property version   "1.90"
 #property strict
-#property description "Selective Gold pullback EA with fixed 0.01 lot, hard risk controls and an optional nonlinear fail-closed AI meta-label approval layer."
+#property description "Aurum Guard POC sequence EA: consolidation, liquidity sweep, displacement, POC return and 2.14R target. Demo-safe by default."
 
 #include <Trade/Trade.mqh>
 
@@ -14,12 +14,9 @@ CTrade trade;
 
 // --- Account and execution safety
 input bool   AllowLiveTrading              = false;
-input bool   EnableNewEntries              = false; // Research-safe default: explicitly enable only for a demo/tester run
+input bool   EnableNewEntries              = true;  // Demo/tester entries enabled; real accounts remain locked below
 input ulong  MagicNumber                   = 26090315;
-input double StopLossMoney                 = 7.50;  // Account currency; accepted range is 5.00-10.00
-input double TakeProfitMoney               = 20.00; // Final TP per trade in account currency
-input double DailyLossLimitMoney           = 7.50;  // One planned full SL ends new entries for the day
-input int    MaxTradesPerDay               = 0;     // 0 = no count limit; money locks still apply
+input double StopLossMoney                 = 2.00;  // Hard maximum account-currency risk at fixed 0.01 lot
 input ulong  DeviationPoints               = 30;
 input double MaxSpreadAsATR                = 0.08;
 
@@ -36,7 +33,7 @@ input bool   AIRequireMatchingSymbol       = true;
 // --- Symbols and timeframes
 input string TradeSymbol                   = "";       // Blank uses the chart symbol
 input string SilverConfirmationSymbol      = "XAGUSD"; // Use your broker's exact symbol
-input ENUM_TIMEFRAMES SignalTimeframe       = PERIOD_H1;
+input ENUM_TIMEFRAMES SignalTimeframe       = PERIOD_M5;
 input ENUM_TIMEFRAMES SafetyTimeframe       = PERIOD_M15;
 input ENUM_TIMEFRAMES TrendTimeframe        = PERIOD_H1;
 input bool   RequireGoldSilverSync          = true;
@@ -58,7 +55,7 @@ input int    ADXPeriod                        = 14;
 input double MinimumSafetyADX                 = 20.0; // require directional strength on the M15 safety chart
 input double MaximumSignalRangeATR            = 1.25; // reject oversized entry candles
 input double MinimumEntryBodyShare            = 0.40; // reject indecision candles
-input double MinimumStopDistanceATR            = 1.25; // skip when the fixed-money stop is too tight for volatility
+input double MinimumStopDistanceATR            = 0.35; // refuse stops that normal noise can reach too easily
 input int    MinimumSetupScore                 = 85;   // confluence gate, not a guaranteed probability
 input bool   RequireTwoBarConfirmation         = true; // reduced trade count/drawdown in testing, but did not prove a profitable edge
 input bool   UseConfirmationRetestEntry         = true; // wait for a better price instead of chasing the confirmation close
@@ -68,7 +65,20 @@ input bool   RequireDefendedRetestClose          = true; // a touch is not an en
 input int    RetestDefenseBars                   = 2;    // completed candles allowed to prove the retest was defended
 input double MinimumDefenseBodyShare             = 0.35; // reject weak/indecisive reclaim candles
 input bool   EnableLongEntries               = true;
-input bool   EnableShortEntries              = false; // M1 short preset failed validation; opt in on demo only
+input bool   EnableShortEntries              = true;
+
+// --- Consolidation -> sweep -> displacement -> POC return
+// MT5 POC is approximated from typical price weighted by broker tick volume.
+input bool   UsePOCSweepSequence              = true;
+input int    ConsolidationLookbackBars        = 36;
+input int    VolumeProfileBins                = 24;
+input double ConsolidationMaximumRangeATR     = 3.50;
+input double SweepBufferATR                   = 0.08;
+input double DisplacementFromPOCATR           = 0.60;
+input double POCReturnToleranceATR            = 0.18;
+input double StructureStopBufferATR           = 0.12;
+input int    POCSetupExpiryBars               = 18;
+input double FibonacciRewardMultiple          = 2.14;
 
 // --- M15 manipulation, blow-off and shock guard
 input bool   EnableM15Safety                = true;
@@ -99,11 +109,11 @@ input bool   MoveStopToBreakEvenAtTP1        = true;
 input int    BreakEvenOffsetPoints           = 5;
 input bool   LockOneRAtTP2                   = true;  // protect about one planned SL of profit
 input bool   EnableEarlyProfitProtection      = true;  // one-way stop tightening; never widens risk
-input double BreakEvenTriggerMoney            = 7.50;  // wait for one full planned R before removing risk
-input double ProfitLockTriggerMoney           = 12.00;  // avoid cutting ordinary M1 winners near $3-$6
-input double ProfitLockMoney                   = 5.00;
-input double TrailingTriggerMoney             = 16.00; // allow room for the $20 target before trailing
-input double TrailingGivebackMoney             = 5.00;  // one-way protection; never widens the original stop
+input double BreakEvenTriggerMoney            = 2.00;
+input double ProfitLockTriggerMoney           = 3.00;
+input double ProfitLockMoney                  = 1.00;
+input double TrailingTriggerMoney             = 4.00;
+input double TrailingGivebackMoney            = 1.20;
 
 string   g_symbol = "";
 datetime g_lastSignalBar = 0;
@@ -125,6 +135,14 @@ datetime g_pendingLastCheckedBar = 0;
 string   g_aiStatus = "SHADOW - WAITING FOR SCORE";
 double   g_aiProbability = 0.0;
 string   g_aiModel = "NONE";
+int      g_pocStage = 0; // 0=find range, 1=wait sweep, 2=wait displacement, 3=wait POC return
+int      g_pocDirection = 0;
+double   g_pocPrice = 0.0;
+double   g_pocRangeHigh = 0.0;
+double   g_pocRangeLow = 0.0;
+double   g_pocSweepExtreme = 0.0;
+double   g_signalStopPrice = 0.0;
+datetime g_pocExpires = 0;
 
 int g_fastHandle = INVALID_HANDLE;
 int g_slowHandle = INVALID_HANDLE;
@@ -341,31 +359,6 @@ void GetDailyStats(double &dayPnL,int &entryCount,double &dayStartBalance)
    dayPnL=closedPnL;
   }
 
-bool DailyRiskAllowsEntry(string &reason)
-  {
-   double dayPnL=0.0,dayStartBalance=0.0;
-   int entryCount=0;
-   GetDailyStats(dayPnL,entryCount,dayStartBalance);
-   if(dayPnL<=-DailyLossLimitMoney)
-     {
-      reason="DAILY $ LOSS LOCK";
-      return false;
-     }
-   // Do not allow a new planned stop to push the day's realized loss beyond
-   // the money cap. Gaps, slippage and commissions can still exceed the plan.
-   if(dayPnL<0.0 && dayPnL-StopLossMoney<-DailyLossLimitMoney)
-     {
-      reason="DAILY RISK REMAINING TOO SMALL";
-      return false;
-     }
-   if(MaxTradesPerDay>0 && entryCount>=MaxTradesPerDay)
-     {
-      reason="MAX TRADES REACHED";
-      return false;
-     }
-   return true;
-  }
-
 bool IsUSDNewsBlocked(string &reason)
   {
    if(!UseUSDHighImpactNewsFilter || (bool)MQLInfoInteger(MQL_TESTER))
@@ -541,6 +534,155 @@ bool SafetyAllowsEntry(string &reason)
    return true;
   }
 
+void ResetPOCSequence(const string status="SEARCHING CONSOLIDATION")
+  {
+   g_pocStage=0;
+   g_pocDirection=0;
+   g_pocPrice=0.0;
+   g_pocRangeHigh=0.0;
+   g_pocRangeLow=0.0;
+   g_pocSweepExtreme=0.0;
+   g_pocExpires=0;
+   g_signalStopPrice=0.0;
+   if(status!="")
+      g_lastDecision=status;
+  }
+
+bool BuildTickVolumePOC(const MqlRates &bars[],const int firstIndex,const int count,const double atrValue,double &rangeLow,double &rangeHigh,double &poc)
+  {
+   rangeLow=DBL_MAX;
+   rangeHigh=-DBL_MAX;
+   for(int i=firstIndex;i<firstIndex+count;i++)
+     {
+      rangeLow=MathMin(rangeLow,bars[i].low);
+      rangeHigh=MathMax(rangeHigh,bars[i].high);
+     }
+   double range=rangeHigh-rangeLow;
+   if(range<=0.0 || atrValue<=0.0 || range>atrValue*ConsolidationMaximumRangeATR)
+      return false;
+
+   double histogram[];
+   ArrayResize(histogram,VolumeProfileBins);
+   ArrayInitialize(histogram,0.0);
+   double binSize=range/VolumeProfileBins;
+   if(binSize<=0.0)
+      return false;
+   for(int i=firstIndex;i<firstIndex+count;i++)
+     {
+      double typical=(bars[i].high+bars[i].low+bars[i].close)/3.0;
+      int bin=(int)MathFloor((typical-rangeLow)/binSize);
+      bin=MathMax(0,MathMin(VolumeProfileBins-1,bin));
+      histogram[bin]+=(double)MathMax((long)1,bars[i].tick_volume);
+     }
+   int pocBin=0;
+   for(int i=1;i<VolumeProfileBins;i++)
+      if(histogram[i]>histogram[pocBin])
+         pocBin=i;
+   poc=NormalizePrice(rangeLow+(pocBin+0.5)*binSize);
+   return true;
+  }
+
+bool EvaluatePOCSweepEntry(int &direction,double &atrValue,string &reason)
+  {
+   direction=0;
+   g_signalStopPrice=0.0;
+   int needed=ConsolidationLookbackBars+6;
+   MqlRates bars[];
+   double atr[];
+   if(!ReadRates(g_symbol,SignalTimeframe,needed,bars) || !ReadBuffer(g_atrHandle,5,atr))
+     {
+      reason="POC DATA NOT READY";
+      return false;
+     }
+   atrValue=atr[1];
+   if(atrValue<=0.0)
+     {
+      reason="INVALID POC ATR";
+      return false;
+     }
+   datetime currentOpen=iTime(g_symbol,SignalTimeframe,0);
+   if(g_pocStage>=2 && (g_pocExpires<=0 || currentOpen>g_pocExpires))
+      ResetPOCSequence("POC SETUP EXPIRED");
+
+   if(g_pocStage<=1)
+     {
+      double rangeLow=0.0,rangeHigh=0.0,poc=0.0;
+      if(BuildTickVolumePOC(bars,3,ConsolidationLookbackBars,atrValue,rangeLow,rangeHigh,poc))
+        {
+         g_pocStage=1;
+         g_pocRangeLow=rangeLow;
+         g_pocRangeHigh=rangeHigh;
+         g_pocPrice=poc;
+        }
+      else if(g_pocStage==0)
+        {
+         reason="NO TIGHT CONSOLIDATION";
+         return false;
+        }
+
+      MqlRates sweep=bars[1];
+      double buffer=atrValue*SweepBufferATR;
+      bool sweptLow=sweep.low<g_pocRangeLow-buffer && sweep.close>g_pocRangeLow;
+      bool sweptHigh=sweep.high>g_pocRangeHigh+buffer && sweep.close<g_pocRangeHigh;
+      if(sweptLow && EnableLongEntries)
+        {
+         g_pocStage=2;
+         g_pocDirection=1;
+         g_pocSweepExtreme=sweep.low;
+        }
+      else if(sweptHigh && EnableShortEntries)
+        {
+         g_pocStage=2;
+         g_pocDirection=-1;
+         g_pocSweepExtreme=sweep.high;
+        }
+      else
+        {
+         reason=StringFormat("RANGE FOUND - NO TRADE | POC %.2f",g_pocPrice);
+         return false;
+        }
+      g_pocExpires=currentOpen+POCSetupExpiryBars*PeriodSeconds(SignalTimeframe);
+      reason=g_pocDirection>0 ? "SELL-SIDE SWEEP - WAIT BULLISH DISPLACEMENT" : "BUY-SIDE SWEEP - WAIT BEARISH DISPLACEMENT";
+      return false;
+     }
+
+   MqlRates candle=bars[1];
+   if(g_pocStage==2)
+     {
+      bool displaced=g_pocDirection>0
+         ? candle.close>=g_pocPrice+atrValue*DisplacementFromPOCATR && candle.close>candle.open
+         : candle.close<=g_pocPrice-atrValue*DisplacementFromPOCATR && candle.close<candle.open;
+      if(!displaced)
+        {
+         reason=g_pocDirection>0 ? "SWEEP CONFIRMED - WAIT BULLISH DISTRIBUTION" : "SWEEP CONFIRMED - WAIT BEARISH DISTRIBUTION";
+         return false;
+        }
+      g_pocStage=3;
+      reason=StringFormat("DISTRIBUTION CONFIRMED - WAIT POC %.2f",g_pocPrice);
+      return false;
+     }
+
+   double tolerance=atrValue*POCReturnToleranceATR;
+   bool touched=candle.low<=g_pocPrice+tolerance && candle.high>=g_pocPrice-tolerance;
+   double range=MathMax(candle.high-candle.low,SymbolInfoDouble(g_symbol,SYMBOL_POINT));
+   double closeLocation=(candle.close-candle.low)/range;
+   bool rejected=g_pocDirection>0
+      ? candle.close>candle.open && candle.close>g_pocPrice && closeLocation>=0.60
+      : candle.close<candle.open && candle.close<g_pocPrice && closeLocation<=0.40;
+   if(!touched || !rejected)
+     {
+      reason=StringFormat("WAIT POC RETURN + %s CLOSE | POC %.2f",g_pocDirection>0 ? "BULLISH" : "BEARISH",g_pocPrice);
+      return false;
+     }
+
+   direction=g_pocDirection;
+   g_signalStopPrice=NormalizePrice(direction>0 ? g_pocSweepExtreme-atrValue*StructureStopBufferATR : g_pocSweepExtreme+atrValue*StructureStopBufferATR);
+   g_lastSetupScore=90;
+   reason=direction>0 ? "POC RECLAIM BUY" : "POC REJECTION SELL";
+   g_pocStage=0;
+   return true;
+  }
+
 void ClearPendingEntry()
   {
    g_pendingEntry=false;
@@ -604,6 +746,19 @@ bool EvaluateSignal(int &direction,double &atrValue,string &reason)
   {
    direction=0;
    g_lastSetupScore=0;
+   if(UsePOCSweepSequence)
+     {
+      if(!EvaluatePOCSweepEntry(direction,atrValue,reason))
+         return false;
+      double metalCorrelation=0.0;
+      if(!MetalsConfirmDirection(direction,reason,metalCorrelation))
+        {
+         direction=0;
+         return false;
+        }
+      PrintFormat("Aurum Guard POC entry accepted: direction=%d POC=%.2f stop=%.2f metals corr=%.2f ATR=%.2f",direction,g_pocPrice,g_signalStopPrice,metalCorrelation,atrValue);
+      return true;
+     }
    int needed=60;
    MqlRates bars[],dailyBars[],trendBars[];
    double fast[],slow[],rsi[],atr[],dailyEMA[],safetyFast[],safetySlow[],trendFast[],trendSlow[],adx[],plusDI[],minusDI[];
@@ -829,7 +984,7 @@ bool AIAllowsEntry(const int direction,string &reason)
    return AIShadowMode;
   }
 
-void OpenSignalTrade(const int direction,const double signalATR)
+void OpenSignalTrade(const int direction,const double signalATR,const double structureStop=0.0)
   {
    string aiReason="";
    if(!AIAllowsEntry(direction,aiReason))
@@ -853,13 +1008,19 @@ void OpenSignalTrade(const int direction,const double signalATR)
      }
 
    double entry=direction>0 ? tick.ask : tick.bid;
-   double stopDistance=MoneyToPriceDistance(direction,entry,StopLossMoney,volume,true);
-   double targetDistance=MoneyToPriceDistance(direction,entry,TakeProfitMoney,volume,false);
-   if(stopDistance<=0.0 || targetDistance<=0.0)
+   double maximumStopDistance=MoneyToPriceDistance(direction,entry,StopLossMoney,volume,true);
+   double stopDistance=structureStop>0.0 ? (direction>0 ? entry-structureStop : structureStop-entry) : maximumStopDistance;
+   if(maximumStopDistance<=0.0 || stopDistance<=0.0)
      {
       g_lastDecision="BROKER TICK VALUE MISSING";
       return;
      }
+   if(stopDistance>maximumStopDistance)
+     {
+      g_lastDecision=StringFormat("SKIP - STRUCTURE SL EXCEEDS %.2f RISK CAP",StopLossMoney);
+      return;
+     }
+   double targetDistance=stopDistance*FibonacciRewardMultiple;
    if(signalATR<=0.0 || stopDistance<signalATR*MinimumStopDistanceATR)
      {
       g_lastDecision=StringFormat("VOLATILITY TOO HIGH FOR $ SL (stop %.2f ATR)",signalATR>0.0 ? stopDistance/signalATR : 0.0);
@@ -981,7 +1142,7 @@ void ManageOpenPosition()
    double stop=PositionGetDouble(POSITION_SL);
    double finalTarget=PositionGetDouble(POSITION_TP);
    double currentVolume=PositionGetDouble(POSITION_VOLUME);
-   double configuredRewardRisk=TakeProfitMoney/StopLossMoney;
+   double configuredRewardRisk=FibonacciRewardMultiple;
    double fallbackRisk=stop>0.0 ? MathAbs(entry-stop) : (configuredRewardRisk>0.0 ? MathAbs(finalTarget-entry)/configuredRewardRisk : 0.0);
    double risk=LoadState("RISK",fallbackRisk);
    double initialVolume=LoadState("INITIAL_VOLUME",currentVolume);
@@ -1097,7 +1258,7 @@ void EvaluateNewEntry()
      }
 
    string reason="";
-   if(!DailyRiskAllowsEntry(reason) || !SafetyAllowsEntry(reason) || IsUSDNewsBlocked(reason))
+   if(!SafetyAllowsEntry(reason) || IsUSDNewsBlocked(reason))
      {
       g_lastDecision=reason;
       return;
@@ -1110,7 +1271,7 @@ void EvaluateNewEntry()
       g_lastDecision=reason;
       return;
      }
-   if(UseConfirmationRetestEntry)
+   if(UseConfirmationRetestEntry && !UsePOCSweepSequence)
      {
       MqlRates signalBars[];
       if(!ReadRates(g_symbol,SignalTimeframe,3,signalBars))
@@ -1137,7 +1298,7 @@ void EvaluateNewEntry()
       g_lastDecision=reason;
       return;
      }
-   OpenSignalTrade(direction,atrValue);
+   OpenSignalTrade(direction,atrValue,g_signalStopPrice);
   }
 
 void EvaluatePendingEntry()
@@ -1205,15 +1366,16 @@ void EvaluatePendingEntry()
 
    string reason="";
    double correlation=0.0;
-   if(!DailyRiskAllowsEntry(reason) || !SafetyAllowsEntry(reason) || IsUSDNewsBlocked(reason) || !SpreadAllowsEntry(g_pendingATR,reason) || !MetalsConfirmDirection(g_pendingDirection,reason,correlation))
+    if(!SafetyAllowsEntry(reason) || IsUSDNewsBlocked(reason) || !SpreadAllowsEntry(g_pendingATR,reason) || !MetalsConfirmDirection(g_pendingDirection,reason,correlation))
      {
       g_lastDecision=reason;
       return;
      }
    int direction=g_pendingDirection;
    double atrValue=g_pendingATR;
+   double structureStop=g_pendingInvalidation;
    ClearPendingEntry();
-   OpenSignalTrade(direction,atrValue);
+   OpenSignalTrade(direction,atrValue,structureStop);
   }
 
 void UpdateChartPanel()
@@ -1225,18 +1387,18 @@ void UpdateChartPanel()
    GetDailyStats(dayPnL,tradesToday,dayStartBalance);
    string pauseText=TimeCurrent()<g_safetyPauseUntil ? "PAUSED UNTIL "+TimeToString(g_safetyPauseUntil,TIME_MINUTES) : g_safetyStatus;
    string currency=AccountInfoString(ACCOUNT_CURRENCY);
-   string entryLimitText=MaxTradesPerDay>0 ? IntegerToString(MaxTradesPerDay) : "MONEY LOCK";
+   string pocStageText=g_pocStage==1 ? "RANGE / WAIT SWEEP" : g_pocStage==2 ? "SWEEP / WAIT DISPLACEMENT" : g_pocStage==3 ? "DISTRIBUTION / WAIT POC RETURN" : "SEARCHING RANGE";
    Comment("AURUM GUARD AUTO TRADER\n",
            "Mode: ",modeText," | Symbol: ",g_symbol,"\n",
            "Signal decision: ",g_lastDecision,"\n",
            "M15 safety: ",pauseText,"\n",
            "AI approval: ",g_aiStatus,"\n",
            "Setup score: ",IntegerToString(g_lastSetupScore),"/100 | Entry gate: ",IntegerToString(MinimumSetupScore),"\n",
-           "Today realized: ",currency," ",DoubleToString(dayPnL,2)," | Entries: ",tradesToday,"/",entryLimitText,"\n",
-           "Fixed lot: 0.01 | Planned SL: ",currency," ",DoubleToString(StopLossMoney,2)," | TP: ",currency," ",DoubleToString(TakeProfitMoney,2),"\n",
-           "Daily loss lock: -",DoubleToString(DailyLossLimitMoney,2)," ",currency," | No profit cutoff\n",
+            "POC sequence: ",pocStageText," | Tick-volume POC: ",DoubleToString(g_pocPrice,2),"\n",
+            "Today realized: ",currency," ",DoubleToString(dayPnL,2)," | Entries: ",tradesToday," | No daily quota\n",
+            "Fixed lot: 0.01 | Max risk: ",currency," ",DoubleToString(StopLossMoney,2)," | Fib target: ",DoubleToString(FibonacciRewardMultiple,2),"R\n",
            "Direction preset: ",EnableLongEntries ? (EnableShortEntries ? "LONG + SHORT" : "LONG ONLY") : (EnableShortEntries ? "SHORT ONLY" : "DISABLED"),"\n",
-           "Research build: new entries are OFF by default. No martingale or revenge re-entry.");
+            "Entries follow range -> sweep -> displacement -> POC return. No martingale or revenge re-entry.");
   }
 
 //+------------------------------------------------------------------+
@@ -1244,9 +1406,9 @@ void UpdateChartPanel()
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   if(StopLossMoney<5.0 || StopLossMoney>10.0 || TakeProfitMoney<=StopLossMoney || DailyLossLimitMoney<StopLossMoney || MaxTradesPerDay<0 || BreakEvenTriggerMoney<=0.0 || ProfitLockTriggerMoney<BreakEvenTriggerMoney || ProfitLockMoney<0.0 || TrailingTriggerMoney<ProfitLockTriggerMoney || TrailingGivebackMoney<=0.0)
+   if(StopLossMoney<=0.0 || FibonacciRewardMultiple<=1.0 || BreakEvenTriggerMoney<=0.0 || ProfitLockTriggerMoney<BreakEvenTriggerMoney || ProfitLockMoney<0.0 || TrailingTriggerMoney<ProfitLockTriggerMoney || TrailingGivebackMoney<=0.0)
      {
-      Print("Aurum Guard: invalid money controls. SL must be 5-10 account-currency units, TP must exceed SL, and daily loss must cover one planned SL.");
+      Print("Aurum Guard: invalid risk controls. Risk must be positive and the Fibonacci reward multiple must exceed 1.0.");
       return INIT_PARAMETERS_INCORRECT;
      }
    if(MinimumAIApprovalProbability<0.50 || MinimumAIApprovalProbability>0.99 || MaximumAISignalAgeSeconds<60)
@@ -1257,6 +1419,11 @@ int OnInit()
    if(MinimumSafetyADX<0.0 || MaximumSignalRangeATR<=0.0 || MinimumEntryBodyShare<0.0 || MinimumEntryBodyShare>1.0 || MinimumStopDistanceATR<=0.0 || MinimumSetupScore<0 || MinimumSetupScore>100 || ConfirmationRetestFraction<0.0 || ConfirmationRetestFraction>1.0 || ConfirmationRetestBars<1 || RetestDefenseBars<1 || MinimumDefenseBodyShare<0.0 || MinimumDefenseBodyShare>1.0)
      {
       Print("Aurum Guard: invalid smart-entry controls. Check ADX, candle, volatility and setup-score inputs.");
+      return INIT_PARAMETERS_INCORRECT;
+     }
+   if(ConsolidationLookbackBars<10 || VolumeProfileBins<4 || VolumeProfileBins>100 || ConsolidationMaximumRangeATR<=0.0 || SweepBufferATR<0.0 || DisplacementFromPOCATR<=0.0 || POCReturnToleranceATR<=0.0 || StructureStopBufferATR<0.0 || POCSetupExpiryBars<3)
+     {
+      Print("Aurum Guard: invalid POC sequence controls.");
       return INIT_PARAMETERS_INCORRECT;
      }
 
