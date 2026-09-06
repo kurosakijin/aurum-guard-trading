@@ -165,6 +165,15 @@ blowOffVolumeMultiple = input.float(1.80, "Tick-volume multiple", minval = 1.00,
 requireBlowOffVolume = input.bool(true, "Require tick-volume spike", group = "15m Manipulation + Blow-off")
 manipulationCooldownBars = input.int(6, "Bars between warnings", minval = 1, maxval = 30, group = "15m Manipulation + Blow-off")
 
+showFourStageCycle = input.bool(true, "Show consolidation → sweep → move → entry", group = "M15 / H1 Four-stage confirmation")
+cycleRangeBars = input.int(24, "Consolidation lookback bars", minval = 12, maxval = 80, group = "M15 / H1 Four-stage confirmation")
+cycleProfileBins = input.int(20, "POC profile bins", minval = 8, maxval = 40, group = "M15 / H1 Four-stage confirmation")
+cycleMaximumRangeATR = input.float(2.40, "Maximum consolidation width in ATR", minval = 0.80, maxval = 6.00, step = 0.10, group = "M15 / H1 Four-stage confirmation")
+cycleSweepBufferATR = input.float(0.08, "Sweep distance in ATR", minval = 0.01, maxval = 0.50, step = 0.01, group = "M15 / H1 Four-stage confirmation")
+cycleDisplacementATR = input.float(0.55, "Distribution / move distance from POC in ATR", minval = 0.20, maxval = 2.00, step = 0.05, group = "M15 / H1 Four-stage confirmation")
+cyclePOCToleranceATR = input.float(0.18, "POC retest tolerance in ATR", minval = 0.05, maxval = 0.60, step = 0.01, group = "M15 / H1 Four-stage confirmation")
+cycleExpiryBars = input.int(18, "Expire unfinished cycle after bars", minval = 5, maxval = 80, group = "M15 / H1 Four-stage confirmation")
+
 fastEMA = ta.ema(close, fastLength)
 slowEMA = ta.ema(close, slowLength)
 rsiValue = ta.rsi(close, rsiLength)
@@ -379,6 +388,136 @@ if fifteenMinuteRiskDetected
 // A detected exhaustion/manipulation bar is a no-new-entry candle.
 trendLongSetup := trendLongSetup and not fifteenMinuteRiskDetected
 trendShortSetup := trendShortSetup and not fifteenMinuteRiskDetected
+
+// M15/H1 four-stage confirmation. Tick volume is distributed into price bins
+// to estimate a local POC; it is an approximation, not TradingView's paid
+// Volume Profile. A trade needs: range, sweep, displacement and a later defended
+// POC retest. This prevents a first-touch entry while continuation is unresolved.
+estimateCyclePOC(firstOffset, count, lowBound, highBound, bins) =>
+    float result = na
+    profileWidth = highBound - lowBound
+    if profileWidth > syminfo.mintick
+        profile = array.new_float(bins, 0.0)
+        for profileOffset = 0 to count - 1
+            profilePrice = (high[firstOffset + profileOffset] + low[firstOffset + profileOffset] + close[firstOffset + profileOffset]) / 3.0
+            rawBin = int(math.floor((profilePrice - lowBound) / profileWidth * bins))
+            safeBin = math.max(0, math.min(bins - 1, rawBin))
+            array.set(profile, safeBin, array.get(profile, safeBin) + nz(volume[firstOffset + profileOffset], 1))
+        strongestBin = 0
+        strongestVolume = array.get(profile, 0)
+        for profileBin = 1 to bins - 1
+            binVolume = array.get(profile, profileBin)
+            if binVolume > strongestVolume
+                strongestVolume := binVolume
+                strongestBin := profileBin
+        result := lowBound + profileWidth * (strongestBin + 0.5) / bins
+    result
+
+cycleTimeframe = fifteenMinuteChart or oneHourChart
+cycleCandidateHigh = ta.highest(high[2], cycleRangeBars)
+cycleCandidateLow = ta.lowest(low[2], cycleRangeBars)
+cycleCandidateWidth = cycleCandidateHigh - cycleCandidateLow
+cycleCandidatePOC = estimateCyclePOC(2, cycleRangeBars, cycleCandidateLow, cycleCandidateHigh, cycleProfileBins)
+cycleCandidateValid = cycleTimeframe and decisionBarReady and not na(cycleCandidatePOC) and cycleCandidateWidth > syminfo.mintick * 10 and cycleCandidateWidth <= atrValue * cycleMaximumRangeATR
+
+var int cycleStage = 0
+var int cycleDirection = 0
+var int cycleStartedBar = na
+var int cycleSweepBar = na
+var int cycleMoveBar = na
+var int cycleLastExitBar = na
+var float cycleHigh = na
+var float cycleLow = na
+var float cyclePOC = na
+var box cycleRangeBox = na
+var box cycleSweepBox = na
+var box cycleMoveBox = na
+var box cycleEntryBox = na
+var line cyclePOCLine = na
+var label cycleRangeLabel = na
+var label cycleSweepLabel = na
+var label cycleMoveLabel = na
+
+cycleMayStart = cycleCandidateValid and strategy.position_size == 0 and (na(cycleLastExitBar) or bar_index > cycleLastExitBar + 1)
+if cycleStage == 0 and cycleMayStart
+    cycleStage := 1
+    cycleDirection := 0
+    cycleStartedBar := bar_index - cycleRangeBars - 1
+    cycleHigh := cycleCandidateHigh
+    cycleLow := cycleCandidateLow
+    cyclePOC := cycleCandidatePOC
+    if showFourStageCycle
+        if not na(cycleRangeBox)
+            box.delete(cycleRangeBox)
+        if not na(cycleSweepBox)
+            box.delete(cycleSweepBox)
+        if not na(cycleMoveBox)
+            box.delete(cycleMoveBox)
+        if not na(cycleEntryBox)
+            box.delete(cycleEntryBox)
+        if not na(cyclePOCLine)
+            line.delete(cyclePOCLine)
+        if not na(cycleRangeLabel)
+            label.delete(cycleRangeLabel)
+        if not na(cycleSweepLabel)
+            label.delete(cycleSweepLabel)
+        if not na(cycleMoveLabel)
+            label.delete(cycleMoveLabel)
+        cycleRangeBox := box.new(cycleStartedBar, cycleHigh, bar_index, cycleLow, border_color = color.aqua, bgcolor = color.new(color.aqua, 92))
+        cyclePOCLine := line.new(cycleStartedBar, cyclePOC, bar_index, cyclePOC, color = color.yellow, width = 2, style = line.style_dashed)
+        cycleRangeLabel := label.new(cycleStartedBar, cycleHigh, "1 CONSOLIDATION", style = label.style_label_down, color = color.new(color.aqua, 12), textcolor = color.black, size = size.tiny)
+
+if cycleStage > 0 and showFourStageCycle
+    if not na(cycleRangeBox)
+        box.set_right(cycleRangeBox, bar_index)
+    if not na(cyclePOCLine)
+        line.set_x2(cyclePOCLine, bar_index)
+
+cycleSweptLow = cycleStage == 1 and bar_index > cycleStartedBar + cycleRangeBars and low < cycleLow - atrValue * cycleSweepBufferATR and close > cycleLow
+cycleSweptHigh = cycleStage == 1 and bar_index > cycleStartedBar + cycleRangeBars and high > cycleHigh + atrValue * cycleSweepBufferATR and close < cycleHigh
+if cycleSweptLow or cycleSweptHigh
+    cycleStage := 2
+    cycleDirection := cycleSweptLow ? 1 : -1
+    cycleSweepBar := bar_index
+    if showFourStageCycle
+        sweepTop = cycleSweptLow ? cycleLow : high
+        sweepBottom = cycleSweptLow ? low : cycleHigh
+        cycleSweepBox := box.new(bar_index, sweepTop, bar_index + 1, sweepBottom, border_color = color.orange, bgcolor = color.new(color.orange, 82))
+        cycleSweepLabel := label.new(bar_index, cycleSweptLow ? low : high, "2 MANIPULATION / SWEEP", style = cycleSweptLow ? label.style_label_up : label.style_label_down, color = color.new(color.orange, 6), textcolor = color.black, size = size.tiny)
+
+cycleLongMove = cycleStage == 2 and cycleDirection == 1 and bar_index > cycleSweepBar and close >= cyclePOC + atrValue * cycleDisplacementATR and close > open and signalBodyShare >= 0.55 and fastEMA >= fastEMA[1]
+cycleShortMove = cycleStage == 2 and cycleDirection == -1 and bar_index > cycleSweepBar and close <= cyclePOC - atrValue * cycleDisplacementATR and close < open and signalBodyShare >= 0.55 and fastEMA <= fastEMA[1]
+if cycleLongMove or cycleShortMove
+    cycleStage := 3
+    cycleMoveBar := bar_index
+    if showFourStageCycle
+        cycleMoveBox := box.new(cycleSweepBar + 1, math.max(cyclePOC, close), bar_index, math.min(cyclePOC, close), border_color = color.purple, bgcolor = color.new(color.purple, 88))
+        cycleMoveLabel := label.new(cycleSweepBar + 1, cycleLongMove ? math.max(cyclePOC, close) : math.min(cyclePOC, close), "3 DISTRIBUTION / MOVE", style = cycleLongMove ? label.style_label_down : label.style_label_up, color = color.new(color.purple, 8), textcolor = color.white, size = size.tiny)
+
+cycleRetestTouched = cycleStage == 3 and bar_index > cycleMoveBar and low[1] <= cyclePOC + atrValue[1] * cyclePOCToleranceATR and high[1] >= cyclePOC - atrValue[1] * cyclePOCToleranceATR
+cycleLongEntry = cycleRetestTouched and cycleDirection == 1 and close > high[1] and close > cyclePOC and close > fastEMA and close > slowEMA and fastEMA > slowEMA and slowSlopeUp and higherTrendUp and signalBodyShare >= trendMinimumBodyShare and rsiValue >= 52 and rsiValue <= 66 and metalSyncLongOK and not fifteenMinuteRiskDetected and not shockPauseActive
+cycleShortEntry = cycleRetestTouched and cycleDirection == -1 and close < low[1] and close < cyclePOC and close < fastEMA and close < slowEMA and fastEMA < slowEMA and slowSlopeDown and higherTrendDown and signalBodyShare >= trendMinimumBodyShare and rsiValue <= 48 and rsiValue >= 34 and metalSyncShortOK and not fifteenMinuteRiskDetected and not shockPauseActive
+cycleLongEntryConfirmed = cycleLongEntry and trendLongSetup
+cycleShortEntryConfirmed = cycleShortEntry and trendShortSetup
+if cycleLongEntryConfirmed or cycleShortEntryConfirmed
+    cycleStage := 4
+
+cycleExpired = cycleStage > 0 and cycleStage < 4 and not na(cycleStartedBar) and bar_index - cycleStartedBar > cycleRangeBars + cycleExpiryBars
+cycleInvalidated = cycleStage == 3 and ((cycleDirection == 1 and close < cycleLow) or (cycleDirection == -1 and close > cycleHigh))
+if cycleExpired or cycleInvalidated
+    cycleStage := 0
+    cycleDirection := 0
+    cycleStartedBar := na
+    cycleSweepBar := na
+    cycleMoveBar := na
+    cycleHigh := na
+    cycleLow := na
+    cyclePOC := na
+
+// M15/H1 P1 is now permitted only by the completed fourth stage. Lower chart
+// timeframes retain the existing defended-reclaim engine.
+trendLongSetup := trendLongSetup and (not cycleTimeframe or cycleLongEntryConfirmed)
+trendShortSetup := trendShortSetup and (not cycleTimeframe or cycleShortEntryConfirmed)
 
 longWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not fifteenMinuteRiskDetected and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendUp and sweptLow and close > open and lowerWick / body >= minimumWickBody and rsiRecentLow < 35 and rsiValue > 35 and rsiValue > rsiValue[1] and metalSyncLongOK
 shortWatch = enableReversal and reversalTimeframeOK and decisionBarReady and not fifteenMinuteRiskDetected and not shockPauseActive and not stopClosedThisBar and not failureClosedThisBar and strategy.position_size == 0 and not trendLongSetup and not trendShortSetup and sessionOK and reversalVolatilityOK and higherTrendDown and sweptHigh and close < open and upperWick / body >= minimumWickBody and rsiRecentHigh > 65 and rsiValue < 65 and rsiValue < rsiValue[1] and metalSyncShortOK
@@ -617,6 +756,10 @@ if trendLongSetup
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_down, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_down, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
         planStopLabel := label.new(bar_index, plannedStop, "SL", style = label.style_label_up, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+    if cycleTimeframe and cycleStage == 4 and showFourStageCycle
+        if not na(cycleEntryBox)
+            box.delete(cycleEntryBox)
+        cycleEntryBox := box.new(bar_index, plannedTarget1, bar_index + 4, plannedStop, border_color = color.lime, bgcolor = color.new(color.lime, 91), text = "4 ENTRY BUY", text_color = color.lime, text_size = size.tiny)
     strategy.entry("TREND LONG", strategy.long)
     lastTrendBar := bar_index
 
@@ -652,6 +795,10 @@ if trendShortSetup
         planTarget2Label := label.new(bar_index, plannedTarget2, "TP2 · 1.5R", style = label.style_label_up, color = color.new(color.lime, 10), textcolor = color.black, size = size.tiny)
         planTarget3Label := label.new(bar_index, plannedTarget, "TP3 · " + str.tostring(rewardRisk, "#.##") + "R", style = label.style_label_up, color = color.new(color.lime, 2), textcolor = color.black, size = size.tiny)
         planStopLabel := label.new(bar_index, plannedStop, "SL", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+    if cycleTimeframe and cycleStage == 4 and showFourStageCycle
+        if not na(cycleEntryBox)
+            box.delete(cycleEntryBox)
+        cycleEntryBox := box.new(bar_index, plannedStop, bar_index + 4, plannedTarget1, border_color = color.red, bgcolor = color.new(color.red, 91), text = "4 ENTRY SELL", text_color = color.red, text_size = size.tiny)
     strategy.entry("TREND SHORT", strategy.short)
     lastTrendBar := bar_index
 
@@ -949,6 +1096,41 @@ if positionJustClosed
     tp1FailureWarned := false
     halfStopWarned := false
     protectedStop := na
+    // A completed TP/SL retires the whole four-stage map. The next M15/H1
+    // signal must be built from a fresh consolidation after this exit.
+    if not na(cycleRangeBox)
+        box.delete(cycleRangeBox)
+    if not na(cycleSweepBox)
+        box.delete(cycleSweepBox)
+    if not na(cycleMoveBox)
+        box.delete(cycleMoveBox)
+    if not na(cycleEntryBox)
+        box.delete(cycleEntryBox)
+    if not na(cyclePOCLine)
+        line.delete(cyclePOCLine)
+    if not na(cycleRangeLabel)
+        label.delete(cycleRangeLabel)
+    if not na(cycleSweepLabel)
+        label.delete(cycleSweepLabel)
+    if not na(cycleMoveLabel)
+        label.delete(cycleMoveLabel)
+    cycleRangeBox := na
+    cycleSweepBox := na
+    cycleMoveBox := na
+    cycleEntryBox := na
+    cyclePOCLine := na
+    cycleRangeLabel := na
+    cycleSweepLabel := na
+    cycleMoveLabel := na
+    cycleStage := 0
+    cycleDirection := 0
+    cycleStartedBar := na
+    cycleSweepBar := na
+    cycleMoveBar := na
+    cycleHigh := na
+    cycleLow := na
+    cyclePOC := na
+    cycleLastExitBar := bar_index
 
 // Detect whether the broker emulator closed the latest trade at TP, SL or a
 // confirmed 1m failure exit. On 1m, every stop can start another smaller reset
@@ -1263,7 +1445,8 @@ minutesToClose = int(math.floor(secondsToClose / 60))
 remainingSeconds = secondsToClose % 60
 countdownText = str.tostring(minutesToClose, "00") + ":" + str.tostring(remainingSeconds, "00")
 updateText = decisionBarReady ? "UPDATED" : timeframe.isintraday ? "WAIT " + countdownText : "WAIT FOR CLOSE"
-priorityText = blowOffTop ? "15M BLOW-OFF TOP" : blowOffBottom ? "15M BLOW-OFF BOTTOM" : buySideManipulation ? "15M AVOID LONG" : sellSideManipulation ? "15M AVOID SHORT" : shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED" : "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED" : "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED" : "P3 RESET BUY WATCH" : reentryShortCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED" : "P3 RESET SELL WATCH" : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY SCANNING" : oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL SCANNING" : "P3 RESET SCANNING" : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : fibLongRejection ? "FIB LONG · CONTEXT ONLY" : fibShortRejection ? "FIB SHORT · CONTEXT ONLY" : "NO CONFIRMED SETUP"
+cycleStatusText = not cycleTimeframe ? "USE 15m OR 1H" : cycleStage == 1 ? "STAGE 1 · RANGE / POC" : cycleStage == 2 ? "STAGE 2 · SWEEP FOUND" : cycleStage == 3 ? "STAGE 3 · WAIT POC RETEST" : cycleStage == 4 ? "STAGE 4 · ENTRY CONFIRMED" : "SEARCHING FRESH RANGE"
+priorityText = blowOffTop ? "15M BLOW-OFF TOP" : blowOffBottom ? "15M BLOW-OFF BOTTOM" : buySideManipulation ? "15M AVOID LONG" : sellSideManipulation ? "15M AVOID SHORT" : shockPauseActive ? "SHOCK PAUSE" : trendLongSetup ? "P1 BUY CONFIRMED" : trendShortSetup ? "P1 SELL CONFIRMED" : reversalLongConfirmed ? "P2 BUY CONFIRMED" : reversalShortConfirmed ? "P2 SELL CONFIRMED" : reentryLongConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY CONFIRMED" : "P3 RESET BUY CONFIRMED" : reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL CONFIRMED" : "P3 RESET SELL CONFIRMED" : reentryLongCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY ARMED" : "P3 RESET BUY WATCH" : reentryShortCandidate ? oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL ARMED" : "P3 RESET SELL WATCH" : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection == 1 ? "1M FLIP BUY SCANNING" : oneMinuteRecoveryActive and reentryForcedDirection == -1 ? "1M FLIP SELL SCANNING" : "P3 RESET SCANNING" : cycleTimeframe and cycleStage > 0 ? cycleStatusText : longWatch ? "WATCH LONG ONLY" : shortWatch ? "WATCH SHORT ONLY" : fibLongRejection ? "FIB LONG · CONTEXT ONLY" : fibShortRejection ? "FIB SHORT · CONTEXT ONLY" : "NO CONFIRMED SETUP"
 priorityColor = blowOffTop or blowOffBottom ? color.new(color.fuchsia, 48) : buySideManipulation or sellSideManipulation ? color.new(color.orange, 52) : shockPauseActive ? color.new(color.fuchsia, 58) : trendLongSetup or trendShortSetup ? color.new(color.aqua, 72) : reversalLongConfirmed ? color.new(color.lime, 72) : reversalShortConfirmed ? color.new(color.red, 68) : reentryLongConfirmed or reentryShortConfirmed ? color.new(color.purple, 58) : reentryLongCandidate or reentryShortCandidate or reentryArmed ? color.new(color.purple, 72) : longWatch or shortWatch ? color.new(color.orange, 74) : color.new(color.gray, 82)
 entryGuardText = avoidShort ? "AVOID SHORT" : avoidLong ? "AVOID LONG" : noChaseLong ? "NO CHASE LONG" : noChaseShort ? "NO CHASE SHORT" : "CLEAR"
 entryGuardColor = avoidShort ? color.new(color.orange, 58) : avoidLong ? color.new(color.red, 58) : noChaseLong or noChaseShort ? color.new(color.yellow, 64) : color.new(color.lime, 82)
@@ -1282,7 +1465,7 @@ activeEntryId = strategy.opentrades > 0 ? strategy.opentrades.entry_id(0) : ""
 activeSignalText = str.contains(activeEntryId, "TREND") ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · DEFENDED") : str.contains(activeEntryId, "REENTRY") ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? "1M AUTO FLIP" : "P3 · RESET" : str.contains(activeEntryId, "REV") ? "P2 · REVERSAL" : "ACTIVE TRADE"
 simpleActionText = buySignalNow ? "BUY SIGNAL" : sellSignalNow ? "SELL SIGNAL" : strategy.position_size > 0 ? "LONG ACTIVE" : strategy.position_size < 0 ? "SHORT ACTIVE" : shockPauseActive or fifteenMinuteRiskDetected ? "NO TRADE" : "WAIT"
 simpleActionColor = buySignalNow ? color.new(color.lime, 44) : sellSignalNow ? color.new(color.red, 42) : strategy.position_size != 0 ? color.new(color.aqua, 68) : shockPauseActive or fifteenMinuteRiskDetected ? color.new(color.fuchsia, 48) : color.new(color.orange, 68)
-simpleSignalText = trendLongSetup or trendShortSetup ? (oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · DEFENDED") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY" : "1M FLIP SELL") : "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY · ARMED" : "1M FLIP SELL · ARMED") : (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryForcedDirection == 1 ? "1M FLIP BUY · SCAN" : "1M FLIP SELL · SCAN") : "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · WAIT DEFENSE") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · WAIT DEFENSE") : "NONE · KEEP WAITING"
+simpleSignalText = trendLongSetup or trendShortSetup ? (cycleTimeframe ? "P1 · STAGE 4 CONFIRMED" : oneHourPrecisionActive ? "P1 · 1H RETEST" : "P1 · DEFENDED") : reversalLongConfirmed or reversalShortConfirmed ? "P2 · REVERSAL" : reentryLongConfirmed or reentryShortConfirmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY" : "1M FLIP SELL") : "P3 · RESET" : strategy.position_size != 0 ? activeSignalText : not na(reentryPendingBar) ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryDirection == 1 ? "1M FLIP BUY · ARMED" : "1M FLIP SELL · ARMED") : (reentryDirection == 1 ? "P3 BUY · ARMED" : "P3 SELL · ARMED") : reentryArmed ? oneMinuteRecoveryActive and reentryForcedDirection != 0 ? (reentryForcedDirection == 1 ? "1M FLIP BUY · SCAN" : "1M FLIP SELL · SCAN") : "P3 · SCANNING" : not na(pendingLongBar) ? "P2 BUY · ARMED" : not na(pendingShortBar) ? "P2 SELL · ARMED" : cycleTimeframe ? cycleStatusText : p1LongForming ? (oneHourPrecisionActive ? "P1 BUY · WAIT RETEST" : "P1 BUY · WAIT DEFENSE") : p1ShortForming ? (oneHourPrecisionActive ? "P1 SELL · WAIT RETEST" : "P1 SELL · WAIT DEFENSE") : "NONE · KEEP WAITING"
 simpleSignalColor = buySignalNow ? color.new(color.lime, 60) : sellSignalNow ? color.new(color.red, 56) : strategy.position_size != 0 ? color.new(color.aqua, 76) : not na(reentryPendingBar) or reentryArmed ? color.new(color.purple, 68) : not na(pendingLongBar) or not na(pendingShortBar) or p1LongForming or p1ShortForming ? color.new(color.yellow, 68) : color.new(color.gray, 82)
 simpleMetalText = metalsBullishSync ? "BULLISH" : metalsBearishSync ? "BEARISH" : "WAIT · NOT SYNCED"
 simpleRiskText = blowOffTop ? "BLOW-OFF TOP" : blowOffBottom ? "BLOW-OFF BOTTOM" : buySideManipulation ? "MANIPULATION · AVOID LONG" : sellSideManipulation ? "MANIPULATION · AVOID SHORT" : shockPauseActive ? "HIGH · NO NEW TRADE" : oneMinuteFailureContext ? "1M FLIP WATCH" : tp1FailureWarned ? "TP1 FAILED" : halfStopWarned ? "HALF TO SL" : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? "BLOCKED · WAIT" : "CLEAR"
@@ -2126,7 +2309,7 @@ export default function Home() {
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
-              <CardDescription>One free-plan script slot · Gold/Silver direction sync + 15m manipulation/blow-off safety + three take-profit levels + strategy-compatible alerts</CardDescription>
+              <CardDescription>One free-plan script slot · M15/H1 four-stage POC cycle + Gold/Silver sync + three take-profit levels + strategy-compatible alerts</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
                   {scriptCopied ? <Check /> : <Clipboard />}
@@ -2152,6 +2335,24 @@ export default function Home() {
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">Daily trend filter</span>
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">No intrabar entry</span>
                 </div>
+              </div>
+
+              <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-semibold text-amber-100">M15 / H1 · four-stage POC confirmation</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The TradingView script now draws the same boxed sequence: cyan consolidation with a yellow estimated POC, orange liquidity sweep, purple distribution / displacement, then a green BUY or red SELL entry box. POC uses TradingView tick volume as an approximation. It is available only on 15m and 1H so the 1m chart cannot mislabel this slower setup.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                    {['1 Range + POC', '2 Sweep', '3 Move', 'POC retest', 'Defended close', '4 BUY / SELL'].map((step, index) => (
+                      <div key={step} className="flex items-center gap-1.5">
+                        {index > 0 && <span className="text-amber-300/60">→</span>}
+                        <span className="rounded-md border border-amber-300/15 bg-black/15 px-2 py-1.5 text-amber-100">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-3 border-t border-amber-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">The first POC touch is no longer an entry. Stage 4 needs a later candle to retest POC and the next completed candle to defend it, reclaim the prior high / low, agree with EMA slope, RSI, higher-timeframe direction and Gold/Silver. After the position fully closes at TP or SL, all four-stage boxes are deleted and the scanner waits for a fresh consolidation before drawing another plan.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.045] p-4">
