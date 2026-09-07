@@ -5,10 +5,8 @@ import {
   ArrowUpRight,
   Bot,
   BookOpenCheck,
-  Calculator,
   CandlestickChart,
   Check,
-  ChevronDown,
   Clipboard,
   Clock3,
   Code2,
@@ -1628,12 +1626,6 @@ export default function Home() {
   const [scriptCopied, setScriptCopied] = useState(false);
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
-  const [equity, setEquity] = useState(25000);
-  const [riskPct, setRiskPct] = useState(0.5);
-  const [entry, setEntry] = useState(4805.2);
-  const [stop, setStop] = useState(4742);
-  const [target, setTarget] = useState(4931.6);
-  const [planCreated, setPlanCreated] = useState(false);
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
 
   useEffect(() => {
@@ -1675,30 +1667,7 @@ export default function Home() {
 
   function selectMetal(value: LiveMarketKey) {
     setLiveMarket(value);
-    setPlanCreated(false);
-    if (value === 'gold') {
-      setEntry(4805.2);
-      setStop(4742);
-      setTarget(4931.6);
-    } else {
-      setEntry(66.8);
-      setStop(64.9);
-      setTarget(70.6);
-    }
   }
-
-  const riskBudget = Math.max(0, equity * (riskPct / 100));
-  const riskPerOunce = Math.abs(entry - stop);
-  const positionSize = riskPerOunce > 0 ? riskBudget / riskPerOunce : 0;
-  const projectedReward = Math.abs(target - entry) * positionSize;
-  const rewardRisk = riskBudget > 0 ? projectedReward / riskBudget : 0;
-  const riskFields: Array<[string, number, (next: number) => void, number]> = [
-    ['Account equity', equity, setEquity, 100],
-    ['Risk %', riskPct, setRiskPct, 0.05],
-    ['Entry', entry, setEntry, 0.1],
-    ['Stop', stop, setStop, 0.1],
-    ['Target', target, setTarget, 0.1],
-  ];
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -2943,65 +2912,7 @@ export default function Home() {
 
         </section>
 
-        <section className={workspacePanel === 'risk' ? 'mt-4 grid gap-4 xl:grid-cols-[.82fr_1.18fr]' : 'hidden'}>
-          <Card id="risk-plan" className="border-emerald-400/12 bg-card/92">
-            <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Calculator className="size-4 text-emerald-300" /> Manual risk-first position plan</CardTitle>
-              <CardDescription>Enter your intended prices, then size the trade from the loss limit—not from conviction.</CardDescription>
-              <CardAction><Badge className="bg-emerald-400/10 text-emerald-300">MAX {riskPct.toFixed(2)}%</Badge></CardAction>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 xl:grid-cols-2 2xl:grid-cols-5">
-                {riskFields.map(([label, value, setter, step]) => (
-                  <label key={String(label)} className="text-[11px] text-muted-foreground">
-                    {label}
-                    <input
-                      aria-label={String(label)}
-                      type="number"
-                      min="0"
-                      step={Number(step)}
-                      value={Number(value)}
-                      onChange={(event) => (setter as (next: number) => void)(Number(event.target.value))}
-                      className="mt-1.5 h-9 w-full min-w-0 rounded-lg border border-white/10 bg-black/15 px-2.5 py-1 font-mono text-sm text-foreground outline-none transition focus:border-primary/60 focus:ring-3 focus:ring-primary/15"
-                    />
-                  </label>
-                ))}
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/8 bg-white/8 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
-                {[
-                  ['Max loss', `$${riskBudget.toFixed(2)}`],
-                  ['Position', `${positionSize.toFixed(2)} oz`],
-                  ['Est. reward', `$${projectedReward.toFixed(2)}`],
-                  ['Reward / risk', `${rewardRisk.toFixed(2)}R`],
-                ].map(([label, value]) => (
-                  <div key={label} className="bg-card p-3">
-                    <p className="text-[10px] uppercase tracking-[.1em] text-muted-foreground">{label}</p>
-                    <p className="mt-1 font-mono text-sm font-semibold">{value}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[.025] p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-2">
-                  <LockKeyhole className="mt-0.5 size-4 shrink-0 text-emerald-300" />
-                  <div>
-                    <p className="text-xs font-medium">Hard risk rules</p>
-                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">No averaging down · one stop · daily loss cap 1.5% · paper mode only</p>
-                  </div>
-                </div>
-                <Button
-                  className="bg-emerald-300 text-emerald-950 hover:bg-emerald-200"
-                  onClick={() => setPlanCreated(true)}
-                  disabled={riskPerOunce === 0 || riskBudget === 0}
-                >
-                  {planCreated ? <Check /> : <ShieldCheck />}
-                  {planCreated ? 'Paper plan saved' : 'Save paper plan'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
+        <section className={workspacePanel === 'risk' ? 'mt-4' : 'hidden'}>
           <Card id="news" className="border-white/8 bg-card/92">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Newspaper className="size-4 text-primary" /> Metals intelligence</CardTitle>
@@ -3097,7 +3008,7 @@ export default function Home() {
 
         <div className={workspacePanel === 'desk' ? 'mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border border-white/8 bg-white/[.025] px-4 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center' : 'hidden'}>
           <span>TradingView supplies the live quote, chart and technical rating; provider latency may apply. The Pine strategy is a testable ruleset—not financial advice or a profit guarantee.</span>
-          <a href="#risk-plan" className="flex items-center gap-1 text-foreground hover:text-primary">Review risk controls <ChevronDown className="size-3" /></a>
+          <a href="#news-radar" className="flex items-center gap-1 text-foreground hover:text-primary">Open risk &amp; news <Newspaper className="size-3" /></a>
         </div>
       </div>
     </main>
