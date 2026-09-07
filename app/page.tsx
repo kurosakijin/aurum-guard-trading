@@ -165,13 +165,13 @@ const patternPlaybook: Array<{ kind: PatternKind; name: string; side: 'BUY' | 'S
 function PatternMiniChart({ kind, side }: { kind: PatternKind; side: 'BUY' | 'SELL' }) {
   const bullish = side === 'BUY';
   const accent = bullish ? '#34d399' : '#fb7185';
-  const pricePaths: Record<PatternKind, string> = {
-    'falling-wedge': '18,38 38,54 56,43 74,65 92,52 110,76 128,64 146,83 164,72 184,48 205,30 225,18',
-    'ascending-triangle': '18,82 42,40 64,70 88,40 112,59 138,40 162,50 184,36 205,18 228,8',
-    'bull-rectangle': '18,82 42,56 62,28 84,44 106,30 128,46 150,28 172,44 192,26 211,10 230,4',
-    'inverse-hs': '18,40 42,64 65,45 90,82 116,42 140,65 164,41 186,32 207,14 228,5',
-    'head-shoulders': '18,68 42,40 65,57 90,16 116,56 140,38 164,62 185,70 208,88 230,96',
-    'descending-triangle': '18,18 42,60 66,34 90,60 114,43 138,60 162,50 184,62 205,82 230,94',
+  const patternPoints: Record<PatternKind, number[]> = {
+    'falling-wedge': [38, 54, 43, 65, 52, 76, 64, 83, 72, 48, 30, 18],
+    'ascending-triangle': [82, 40, 70, 40, 59, 40, 50, 36, 18, 8],
+    'bull-rectangle': [82, 56, 28, 44, 30, 46, 28, 44, 26, 10, 4],
+    'inverse-hs': [40, 64, 45, 82, 42, 65, 41, 32, 14, 5],
+    'head-shoulders': [68, 40, 57, 16, 56, 38, 62, 70, 88, 96],
+    'descending-triangle': [18, 60, 34, 60, 43, 60, 50, 62, 82, 94],
   };
   const boundaryPaths: Record<PatternKind, string[]> = {
     'falling-wedge': ['M20 28 L168 70', 'M22 72 L168 88'],
@@ -183,13 +183,20 @@ function PatternMiniChart({ kind, side }: { kind: PatternKind; side: 'BUY' | 'SE
   };
   const entryY = bullish ? 31 : 69;
   const stopY = bullish ? 56 : 44;
+  const points = patternPoints[kind];
+  const candles: GuideCandle[] = points.map((closeY, index) => {
+    const x = 18 + index * (212 / Math.max(1, points.length - 1));
+    const previous = index === 0 ? closeY + (bullish ? 10 : -10) : points[index - 1];
+    const openY = previous + (index % 2 === 0 ? 2 : -2);
+    return [x, openY, closeY, Math.max(openY, closeY) + 7, Math.min(openY, closeY) - 7];
+  });
 
   return (
     <svg viewBox="0 0 250 110" role="img" aria-label={`${side} ${kind} confirmation diagram`} className="h-28 w-full rounded-lg bg-[#070b1c]">
       {[25, 50, 75, 100].map((x) => <line key={`px-${x}`} x1={x} y1="6" x2={x} y2="104" stroke="#26304a" opacity=".28" />)}
       {[25, 50, 75, 100].map((y) => <line key={`py-${y}`} x1="6" y1={y} x2="244" y2={y} stroke="#26304a" opacity=".28" />)}
       {boundaryPaths[kind].map((d, index) => <path key={index} d={d} fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="5 4" />)}
-      <polyline points={pricePaths[kind]} fill="none" stroke="#e2e8f0" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+      <GuideCandles candles={candles} />
       <line x1="176" y1={entryY} x2="242" y2={entryY} stroke={accent} strokeWidth="1.5" />
       <line x1="176" y1={stopY} x2="242" y2={stopY} stroke="#fb7185" strokeWidth="1.25" strokeDasharray="5 4" />
       <circle cx="205" cy={bullish ? 18 : 82} r="5" fill="#070b1c" stroke={accent} strokeWidth="2.5" />
