@@ -62,6 +62,72 @@ const timeframes = [
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
 type WorkspacePanel = 'desk' | 'charts' | 'pine' | 'mt5' | 'guides' | 'risk';
+
+function FibonacciChartGuide() {
+  const levels = [
+    { y: 54, level: '0%', name: 'SWING HIGH / ZERO', price: '4419.575', color: '#cbd5e1', dash: '' },
+    { y: 176, level: '23.6%', name: 'WEAK RETRACEMENT', price: '4416.044', color: '#d946ef', dash: '8 7' },
+    { y: 252, level: '38.2%', name: 'TREND CONTINUATION', price: '4413.891', color: '#d946ef', dash: '8 7' },
+    { y: 314, level: '50%', name: 'SMART MONEY REACTION', price: '4412.153', color: '#22d3ee', dash: '12 9' },
+    { y: 376, level: '61.8%', name: 'GOLDEN ENTRY', price: '4410.411', color: '#facc15', dash: '12 7' },
+    { y: 422, level: '70.5%', name: 'SNIPER ENTRY', price: '4409.128', color: '#facc15', dash: '12 7' },
+    { y: 464, level: '78.6%', name: 'DEEP RETRACEMENT', price: '4407.933', color: '#d946ef', dash: '8 7' },
+    { y: 576, level: '100%', name: 'SWING LOW / FULL', price: '4404.777', color: '#cbd5e1', dash: '' },
+  ];
+  const candles = [
+    [72, 548, 526, 566, 510], [102, 526, 538, 553, 500], [132, 538, 486, 552, 472],
+    [162, 486, 456, 502, 438], [192, 456, 421, 470, 400], [222, 421, 438, 447, 395],
+    [252, 438, 382, 451, 361], [282, 382, 336, 396, 320], [312, 336, 286, 350, 268],
+    [342, 286, 304, 319, 260], [372, 304, 242, 316, 220], [402, 242, 178, 255, 154],
+    [432, 178, 112, 190, 92], [462, 112, 68, 126, 52], [492, 68, 94, 111, 57],
+    [522, 94, 116, 126, 82], [552, 116, 130, 146, 103], [582, 130, 120, 142, 108],
+    [612, 120, 145, 158, 112], [642, 145, 156, 170, 132], [672, 156, 166, 184, 145],
+    [702, 166, 160, 176, 149], [732, 160, 178, 192, 154], [762, 178, 170, 188, 160],
+  ] as const;
+
+  return (
+    <svg viewBox="0 0 1200 650" role="img" aria-labelledby="fib-chart-title fib-chart-desc" className="h-full w-full bg-[#070b1c]">
+      <title id="fib-chart-title">Bullish Fibonacci retracement map</title>
+      <desc id="fib-chart-desc">A bullish move is anchored from the swing low to the swing high. Zero percent is displayed at the high and one hundred percent at the low. The 61.8 to 70.5 percent golden zone is highlighted.</desc>
+      <defs>
+        <linearGradient id="fibMarkup" x1="0" y1="1" x2="1" y2="0"><stop stopColor="#22d3ee"/><stop offset="1" stopColor="#a855f7"/></linearGradient>
+        <filter id="fibGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+
+      {Array.from({ length: 11 }).map((_, index) => <line key={`v-${index}`} x1={40 + index * 84} y1="28" x2={40 + index * 84} y2="612" stroke="#25304a" strokeWidth="1" opacity=".35" />)}
+      {Array.from({ length: 8 }).map((_, index) => <line key={`h-${index}`} x1="32" y1={54 + index * 74} x2="1168" y2={54 + index * 74} stroke="#25304a" strokeWidth="1" opacity=".28" />)}
+
+      <rect x="32" y="376" width="838" height="46" fill="#facc15" opacity=".11" stroke="#facc15" strokeWidth="2" />
+      <text x="46" y="397" fill="#fde047" fontSize="13" fontWeight="700">61.8%–70.5% GOLDEN ENTRY ZONE</text>
+      <text x="46" y="414" fill="#cbd5e1" fontSize="10">Reaction area only · wait for candle rejection and confirmation</text>
+
+      {levels.map((item) => (
+        <g key={item.level}>
+          <line x1="32" y1={item.y} x2="884" y2={item.y} stroke={item.color} strokeWidth={item.level === '61.8%' || item.level === '70.5%' ? 2 : 1.25} strokeDasharray={item.dash} opacity=".9" />
+          <rect x="884" y={item.y - 20} width="276" height="40" rx="6" fill="#11172b" stroke={item.color} strokeOpacity=".48" />
+          <text x="898" y={item.y - 3} fill={item.color} fontSize="12" fontWeight="700">{item.level} · {item.name}</text>
+          <text x="898" y={item.y + 13} fill="#94a3b8" fontSize="10">Example price {item.price}</text>
+        </g>
+      ))}
+
+      <line x1="132" y1="576" x2="462" y2="54" stroke="url(#fibMarkup)" strokeWidth="3" opacity=".9" />
+      <circle cx="132" cy="576" r="7" fill="#070b1c" stroke="#22d3ee" strokeWidth="3" filter="url(#fibGlow)" />
+      <circle cx="462" cy="54" r="7" fill="#070b1c" stroke="#a855f7" strokeWidth="3" filter="url(#fibGlow)" />
+
+      {candles.map(([x, open, close, low, high], index) => {
+        const rising = close < open;
+        const top = Math.min(open, close);
+        const height = Math.max(6, Math.abs(close - open));
+        const color = rising ? '#06b6d4' : '#e2e8f0';
+        return <g key={x}><line x1={x} y1={high} x2={x} y2={low} stroke={color} strokeWidth="2"/><rect x={x - 7} y={top} width="14" height={height} fill={color} rx="1" opacity={index > 14 ? '.96' : '1'} /></g>;
+      })}
+
+      <g transform="translate(54 590)"><rect width="230" height="36" rx="7" fill="#06263a" stroke="#22d3ee" strokeOpacity=".55"/><text x="12" y="15" fill="#67e8f9" fontSize="11" fontWeight="700">1 · START AT SWING LOW</text><text x="12" y="28" fill="#94a3b8" fontSize="9">Drag upward for a bullish markup</text></g>
+      <g transform="translate(336 12)"><rect width="250" height="36" rx="7" fill="#1b1235" stroke="#c084fc" strokeOpacity=".55"/><text x="12" y="15" fill="#d8b4fe" fontSize="11" fontWeight="700">2 · END AT SWING HIGH</text><text x="12" y="28" fill="#94a3b8" fontSize="9">0% is shown here; 100% stays below</text></g>
+    </svg>
+  );
+}
+
 const pineScript = String.raw`//@version=6
 strategy("Aurum Guard Combined v54: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
@@ -2363,25 +2429,13 @@ export default function Home() {
                   <div><p className="text-xs font-semibold text-yellow-100">Bullish Fibonacci example</p><p className="mt-1 text-[10px] text-muted-foreground">Pointers show where to anchor the tool and how to judge the pullback.</p></div>
                   <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">61.8%–70.5% FOCUS</Badge>
                 </div>
-                <div className="relative aspect-[16/9] overflow-hidden">
-                  <img src="/fibonacci-guide-v1.png" alt="Bullish Fibonacci retracement example from swing low to swing high, pulling back into the golden zone before continuing upward" width="1672" height="940" loading="lazy" className="h-full w-full object-cover" />
-
-                  <div className="pointer-events-none absolute bottom-[7%] left-[7%] hidden sm:flex sm:flex-col sm:items-center">
-                    <span className="block h-14 w-px bg-gradient-to-t from-cyan-300 to-transparent" />
-                    <div className="rounded-lg border border-cyan-300/30 bg-[#041426]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-cyan-200">1 · SWING LOW</p><p className="mt-0.5 text-[9px] text-slate-300">Start the bullish markup here</p></div>
-                  </div>
-                  <div className="pointer-events-none absolute left-[58%] top-[5%] hidden sm:block">
-                    <div className="rounded-lg border border-violet-300/30 bg-[#100d2a]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-violet-200">2 · SWING HIGH</p><p className="mt-0.5 text-[9px] text-slate-300">End the markup at the confirmed high</p></div>
-                    <span className="ml-14 block h-16 w-px bg-gradient-to-b from-violet-300 to-transparent" />
-                  </div>
-                  <div className="pointer-events-none absolute bottom-[28%] left-[58%] hidden sm:flex sm:items-center">
-                    <div className="rounded-lg border border-yellow-300/35 bg-[#28200a]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-yellow-200">3 · GOLDEN ZONE</p><p className="mt-0.5 text-[9px] text-slate-300">61.8%–70.5% · wait for rejection</p></div>
-                    <span className="block h-px w-14 bg-gradient-to-r from-yellow-300 to-transparent" />
-                  </div>
-                  <div className="pointer-events-none absolute right-[5%] top-[7%] hidden sm:block">
-                    <div className="rounded-lg border border-emerald-300/30 bg-[#06231f]/90 px-3 py-2 text-right shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-emerald-200">4 · CONTINUATION</p><p className="mt-0.5 text-[9px] text-slate-300">Only after a confirmed rejection close</p></div>
-                    <span className="ml-auto mr-10 block h-14 w-px bg-gradient-to-b from-emerald-300 to-transparent" />
-                  </div>
+                <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
+                  <FibonacciChartGuide />
+                </div>
+                <div className="grid gap-2 border-t border-yellow-200/10 bg-black/15 px-4 py-3 sm:grid-cols-3">
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-cyan-200">1 · Anchor:</span> for a bullish move, start at the confirmed swing low and finish at the confirmed swing high.</p>
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-yellow-200">2 · Watch:</span> let price retrace down through the ladder. The yellow 61.8%–70.5% band is the reaction zone.</p>
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-emerald-200">3 · Confirm:</span> buy context begins only after rejection closes upward and the other filters agree.</p>
                 </div>
               </div>
 
