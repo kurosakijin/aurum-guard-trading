@@ -99,6 +99,79 @@ const historicalReversalBars: readonly HistoricalBar[] = [
   ['06:40',4385.3,4388.8,4383.6,4388.6,301],['06:45',4389,4392.2,4388.4,4390.8,411],['06:50',4390.5,4391.2,4389.1,4390.2,142],['06:55',4389.6,4391.9,4389.6,4391.6,87],
 ];
 
+const historicalFibonacciBars: readonly HistoricalBar[] = [
+  ['Aug 26 18:45',4651.6,4653,4648.3,4648.5,791],['19:00',4648.8,4650.4,4645.7,4649.1,685],['19:15',4649.1,4653.7,4645.8,4653.1,931],['19:30',4653.2,4656.3,4649,4650.2,802],
+  ['19:45',4650.5,4651.1,4647,4648.9,1090],['20:00',4649,4651.4,4646,4646,499],['20:15',4646.4,4646.7,4638.6,4645.9,739],['20:30',4645.8,4648.4,4645,4646.4,245],
+  ['20:45',4646.6,4649.7,4646.5,4647.8,255],['22:00',4650,4660,4648.1,4656.6,254],['22:15',4657,4667.7,4656.2,4665.1,926],['22:30',4665.2,4666,4663.1,4665,376],
+  ['22:45',4665.3,4666.2,4660.7,4663.3,663],['23:00',4663.2,4669.5,4660.9,4669.5,863],['23:15',4669.1,4676.1,4668.2,4673.7,1135],['23:30',4674.1,4678.7,4672,4676.8,591],
+  ['23:45',4676.3,4678.9,4674.7,4677.5,1043],['Aug 27 00:00',4677.9,4681,4670.3,4672,1019],['00:15',4671.7,4675.3,4667.4,4673.1,853],['00:30',4673,4673,4659.4,4660.4,1772],
+  ['00:45',4660.5,4665.3,4654.5,4659.2,1182],['01:00',4658.9,4679.1,4656.2,4678.9,1911],['01:15',4679.1,4679.5,4671.2,4672.8,1349],['01:30',4672.7,4686,4672.4,4678.4,2076],
+  ['01:45',4678.4,4695.4,4678.3,4694.6,2143],['02:00',4694.6,4697.7,4692.6,4695.4,1449],['02:15',4695,4695.2,4687.4,4687.9,1234],['02:30',4687.8,4688.4,4678.1,4681.6,1891],
+  ['02:45',4681.8,4685.9,4678.9,4683.7,840],['03:00',4683.8,4689.7,4682.9,4689,737],['03:15',4688.7,4693.1,4687.4,4690,520],['03:30',4690,4690.3,4683.4,4684,586],
+];
+
+function HistoricalFibonacciStudy() {
+  const bars = historicalFibonacciBars;
+  const chartLeft = 42, chartRight = 925, chartTop = 55, chartBottom = 492, volumeTop = 515, volumeBottom = 606;
+  const rawLow = Math.min(...bars.map((bar) => bar[3]));
+  const rawHigh = Math.max(...bars.map((bar) => bar[2]));
+  const padding = (rawHigh - rawLow) * 0.07;
+  const low = rawLow - padding, high = rawHigh + padding;
+  const maxVolume = Math.max(...bars.map((bar) => bar[5]));
+  const x = (index: number) => chartLeft + index * ((chartRight - chartLeft) / (bars.length - 1));
+  const y = (price: number) => chartTop + ((high - price) / (high - low)) * (chartBottom - chartTop);
+  const swingLow = 4638.6, swingHigh = 4681.0, swingLowIndex = 6, swingHighIndex = 17, rejectionIndex = 20;
+  const range = swingHigh - swingLow;
+  const levels = [
+    [0, 'SWING HIGH'], [0.236, 'WEAK RETRACEMENT'], [0.382, 'TREND CONTINUATION'], [0.5, 'SMART MONEY REACTION'],
+    [0.618, 'GOLDEN ENTRY'], [0.705, 'SNIPER ENTRY'], [0.786, 'DEEP RETRACEMENT'], [1, 'SWING LOW / FULL'],
+  ] as const;
+  const priceAt = (level: number) => swingHigh - range * level;
+  const goldenTop = priceAt(0.618), goldenBottom = priceAt(0.705);
+
+  return (
+    <svg viewBox="0 0 1200 650" role="img" aria-label="Historical GC gold futures bullish Fibonacci pullback" className="h-full w-full bg-[#0b0e18]">
+      <rect width="1200" height="650" fill="#0b0e18" />
+      <text x="42" y="30" fill="#f8fafc" fontSize="14" fontWeight="700">GC=F · 15m · Aug 26–27, 2026</text>
+      <text x="1155" y="30" textAnchor="end" fill="#64748b" fontSize="10">HISTORICAL OHLC · UTC · YAHOO FINANCE</text>
+      {Array.from({ length: 6 }, (_, i) => high - i * ((high-low)/5)).map((price) => <line key={price} x1={chartLeft} y1={y(price)} x2={chartRight} y2={y(price)} stroke="#293247" opacity=".46"/>)}
+      {bars.map((_, index) => index % 4 === 0 ? <line key={index} x1={x(index)} y1={chartTop} x2={x(index)} y2={volumeBottom} stroke="#293247" opacity=".26"/> : null)}
+
+      <rect x={x(swingLowIndex)} y={y(goldenTop)} width={chartRight-x(swingLowIndex)} height={y(goldenBottom)-y(goldenTop)} fill="#facc15" opacity=".12" stroke="#facc15" strokeWidth="1.5" />
+      {levels.map(([level,name]) => {
+        const price = priceAt(level);
+        const golden = level === 0.618 || level === 0.705;
+        const middle = level === 0.5;
+        const anchor = level === 0 || level === 1;
+        const color = golden ? '#facc15' : middle ? '#22d3ee' : anchor ? '#cbd5e1' : '#d946ef';
+        return <g key={level}><line x1={x(swingLowIndex)} y1={y(price)} x2={chartRight} y2={y(price)} stroke={color} strokeWidth={golden||middle?1.8:1.1} strokeDasharray={anchor?'':'8 6'} opacity=".9"/><rect x="936" y={y(price)-14} width="250" height="28" rx="5" fill="#11172b" stroke={color} strokeOpacity=".5"/><text x="947" y={y(price)+3} fill={color} fontSize="9" fontWeight="700">{`${(level*100).toFixed(level===0.705?1:level===0||level===1?0:1).replace('.0','')}% · ${name} · ${price.toFixed(1)}`}</text></g>;
+      })}
+
+      {bars.map((bar,index) => {
+        const [time,open,barHigh,barLow,close,volume] = bar;
+        const up = close >= open;
+        const color = up ? '#26a69a' : '#ef5350';
+        const candleWidth = Math.max(6,((chartRight-chartLeft)/bars.length)*.62);
+        const bodyTop = y(Math.max(open,close));
+        const volumeHeight = (volume/maxVolume)*(volumeBottom-volumeTop);
+        return <g key={`${time}-${index}`}><line x1={x(index)} y1={y(barHigh)} x2={x(index)} y2={y(barLow)} stroke={color} strokeWidth="1.4"/><rect x={x(index)-candleWidth/2} y={bodyTop} width={candleWidth} height={Math.max(2,Math.abs(y(open)-y(close)))} fill={color}/><rect x={x(index)-candleWidth/2} y={volumeBottom-volumeHeight} width={candleWidth} height={volumeHeight} fill={color} opacity=".42"/></g>;
+      })}
+
+      <line x1={x(swingLowIndex)} y1={y(swingLow)} x2={x(swingHighIndex)} y2={y(swingHigh)} stroke="#60a5fa" strokeWidth="2.5" />
+      <circle cx={x(swingLowIndex)} cy={y(swingLow)} r="6" fill="#0b0e18" stroke="#22d3ee" strokeWidth="2.5"/><circle cx={x(swingHighIndex)} cy={y(swingHigh)} r="6" fill="#0b0e18" stroke="#a855f7" strokeWidth="2.5"/>
+      <text x={x(swingLowIndex)-8} y={y(swingLow)+19} textAnchor="middle" fill="#67e8f9" fontSize="9" fontWeight="700">ANCHOR LOW</text>
+      <text x={x(swingHighIndex)} y={y(swingHigh)-12} textAnchor="middle" fill="#d8b4fe" fontSize="9" fontWeight="700">CONFIRMED HIGH</text>
+      <circle cx={x(rejectionIndex)} cy={y(bars[rejectionIndex][3])} r="7" fill="#0b0e18" stroke="#facc15" strokeWidth="3"/>
+      <text x={x(rejectionIndex)+12} y={y(bars[rejectionIndex][3])+20} fill="#fde047" fontSize="9" fontWeight="700">GOLDEN-ZONE TOUCH · WAIT FOR CLOSE</text>
+      <circle cx={x(rejectionIndex+1)} cy={y(bars[rejectionIndex+1][4])} r="7" fill="#0b0e18" stroke="#34d399" strokeWidth="3"/>
+      <text x={x(rejectionIndex+1)+10} y={y(bars[rejectionIndex+1][4])-12} fill="#6ee7b7" fontSize="9" fontWeight="700">BULLISH REJECTION CONFIRMED</text>
+
+      <text x="42" y="508" fill="#64748b" fontSize="9">VOLUME</text>
+      {bars.map((bar,index) => index % 6 === 0 ? <text key={`fib-time-${index}`} x={x(index)} y="628" textAnchor="middle" fill="#64748b" fontSize="9">{bar[0].includes(' ') ? bar[0].split(' ').at(-1) : bar[0]}</text> : null)}
+    </svg>
+  );
+}
+
 function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' }) {
   const bars = mode === 'flow' ? historicalFlowBars : historicalReversalBars;
   const chartLeft = 42, chartRight = 1002, chartTop = 55, chartBottom = 482, volumeTop = 510, volumeBottom = 606;
@@ -2678,22 +2751,22 @@ export default function Home() {
           <Card className="border-yellow-300/18 bg-[linear-gradient(145deg,rgba(250,204,21,.07),rgba(168,85,247,.045)_48%,rgba(18,22,27,.97))]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="fibonacci-guide-heading" className="flex items-center gap-2 text-lg"><Crosshair className="size-5 text-yellow-300" /> Automatic Fibonacci pullback map</CardTitle>
-              <CardDescription>Drawn from the latest confirmed swing. It updates when a new pivot high or low is confirmed.</CardDescription>
+              <CardDescription>Historical GC gold-futures example anchored from a confirmed swing low to swing high. The live map redraws only after a new pivot is confirmed.</CardDescription>
               <CardAction><Badge className="border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">61.8%–70.5% GOLDEN ZONE</Badge></CardAction>
             </CardHeader>
             <CardContent className="pt-4">
               <div className="mb-4 overflow-hidden rounded-2xl border border-yellow-300/18 bg-[#041326]/65">
                 <div className="flex flex-col gap-2 border-b border-yellow-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div><p className="text-xs font-semibold text-yellow-100">Bullish Fibonacci example</p><p className="mt-1 text-[10px] text-muted-foreground">Pointers show where to anchor the tool and how to judge the pullback.</p></div>
+                  <div><p className="text-xs font-semibold text-yellow-100">Historical bullish Fibonacci pullback</p><p className="mt-1 text-[10px] text-muted-foreground">Real 15-minute GC=F candles and volume from Aug 26–27, 2026. Annotations are retrospective.</p></div>
                   <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">61.8%–70.5% FOCUS</Badge>
                 </div>
                 <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
-                  <FibonacciChartGuide />
+                  <HistoricalFibonacciStudy />
                 </div>
                 <div className="grid gap-2 border-t border-yellow-200/10 bg-black/15 px-4 py-3 sm:grid-cols-3">
                   <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-cyan-200">1 · Anchor:</span> for a bullish move, start at the confirmed swing low and finish at the confirmed swing high.</p>
-                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-yellow-200">2 · Watch:</span> let price retrace down through the ladder. The yellow 61.8%–70.5% band is the reaction zone.</p>
-                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-emerald-200">3 · Confirm:</span> buy context begins only after rejection closes upward and the other filters agree.</p>
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-yellow-200">2 · Watch:</span> this sample pulled back into the yellow 61.8%–70.5% band. A touch alone is not an entry.</p>
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-emerald-200">3 · Confirm:</span> wait for a closed rejection candle, then require trend, structure, risk and news filters to agree.</p>
                 </div>
               </div>
 
