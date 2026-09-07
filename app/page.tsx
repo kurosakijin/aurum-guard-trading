@@ -74,6 +74,97 @@ function GuideCandles({ candles }: { candles: readonly GuideCandle[] }) {
   });
 }
 
+type HistoricalBar = readonly [time: string, open: number, high: number, low: number, close: number, volume: number];
+
+const historicalFlowBars: readonly HistoricalBar[] = [
+  ['Sep 02 19:00',4420.8,4427,4418.3,4425.6,879],['19:15',4425.7,4429.7,4424.8,4427.6,804],['19:30',4427.7,4435.2,4427.6,4434.5,1200],['19:45',4434.6,4437.9,4431.4,4437.7,1955],
+  ['20:00',4437.4,4438.2,4432.5,4432.6,839],['20:15',4432.5,4434.6,4430.6,4433.2,532],['20:30',4433,4436.6,4432.5,4434.8,331],['20:45',4434.9,4437.7,4433.8,4434.3,543],
+  ['22:00',4436.4,4438.1,4434.8,4434.8,165],['22:15',4434.8,4435.9,4432.6,4434.8,413],['22:30',4434.3,4434.7,4430.3,4430.4,554],['22:45',4430.4,4430.5,4428.4,4429.8,266],
+  ['23:00',4430.2,4432.2,4429.4,4429.6,367],['23:15',4429.4,4429.6,4427.3,4427.7,282],['23:30',4427.5,4430.8,4426.7,4430.8,469],['23:45',4430.2,4434.4,4429.9,4431,577],
+  ['Sep 03 00:00',4431.2,4438,4429.9,4435.4,1191],['00:15',4435.4,4435.7,4430.3,4432.5,561],['00:30',4432.3,4435,4427.8,4433,611],['00:45',4433.1,4442.9,4431.3,4440.5,1096],
+  ['01:00',4440.8,4454.7,4432.2,4446.8,4605],['01:15',4446.3,4448.9,4439.1,4447.1,1734],['01:30',4446.8,4454.8,4445.4,4445.8,1719],['01:45',4445.5,4457.6,4445.2,4455,1160],
+  ['02:00',4455.2,4461.2,4454.5,4456.2,1836],['02:15',4456.9,4458.6,4452.2,4457.1,1106],['02:30',4457.1,4463.7,4454.8,4459,1997],['02:45',4459.4,4466.2,4457.1,4466,1038],
+  ['03:00',4466,4475.8,4464.9,4474.6,1899],['03:15',4474.4,4477.1,4470.3,4475.1,1243],['03:30',4475.2,4477.9,4472.4,4472.4,1325],['03:45',4472.2,4478.2,4471,4477.1,1704],
+];
+
+const historicalReversalBars: readonly HistoricalBar[] = [
+  ['Aug 14 04:00',4379.2,4380.5,4378.4,4378.6,176],['04:05',4378.4,4380.4,4378.3,4379.4,150],['04:10',4379.6,4382.7,4378.8,4381.7,237],['04:15',4381.2,4383,4380.9,4382,107],
+  ['04:20',4382.2,4384.6,4381.3,4382.4,262],['04:25',4382.2,4382.7,4380.2,4380.2,103],['04:30',4380.7,4381.2,4378.4,4379.6,309],['04:35',4379.5,4380.6,4379.1,4380.1,82],
+  ['04:40',4380.1,4381.2,4379.7,4380.4,80],['04:45',4380.1,4380.1,4378.9,4379.3,55],['04:50',4379.2,4380,4378.3,4379.8,86],['04:55',4379.7,4382,4379.4,4382,153],
+  ['05:00',4382.2,4382.2,4378.8,4380,140],['05:05',4380.1,4380.3,4374.7,4374.7,230],['05:10',4374.5,4376.9,4374.3,4374.8,153],['05:15',4374.9,4375.1,4372.4,4373.6,195],
+  ['05:20',4373.3,4374.1,4371.9,4373.3,147],['05:25',4373,4374.3,4372,4373.3,139],['05:30',4372.9,4373,4365.6,4371.5,972],['05:35',4371.8,4379.8,4371.5,4377.4,468],
+  ['05:40',4377.3,4379.3,4372.4,4372.7,280],['05:45',4372.5,4379.3,4372.5,4379.2,281],['05:50',4378.6,4385.4,4378.1,4385,728],['05:55',4385.7,4389.5,4384.8,4389.5,598],
+  ['06:00',4389.6,4392,4387.9,4391.4,537],['06:05',4391.5,4392.6,4385.6,4386.5,431],['06:10',4386.7,4390,4385.5,4388.3,227],['06:15',4388.2,4389.1,4387.2,4387.7,179],
+  ['06:20',4387.6,4388.2,4384.2,4387,335],['06:25',4387.6,4388,4385,4385.3,149],['06:30',4385.1,4386.3,4384.2,4384.2,142],['06:35',4385.1,4386.4,4383.9,4385.3,125],
+  ['06:40',4385.3,4388.8,4383.6,4388.6,301],['06:45',4389,4392.2,4388.4,4390.8,411],['06:50',4390.5,4391.2,4389.1,4390.2,142],['06:55',4389.6,4391.9,4389.6,4391.6,87],
+];
+
+function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' }) {
+  const bars = mode === 'flow' ? historicalFlowBars : historicalReversalBars;
+  const chartLeft = 42, chartRight = 1002, chartTop = 55, chartBottom = 482, volumeTop = 510, volumeBottom = 606;
+  const rawLow = Math.min(...bars.map((bar) => bar[3]));
+  const rawHigh = Math.max(...bars.map((bar) => bar[2]));
+  const padding = (rawHigh - rawLow) * 0.08;
+  const low = rawLow - padding, high = rawHigh + padding;
+  const maxVolume = Math.max(...bars.map((bar) => bar[5]));
+  const x = (index: number) => chartLeft + index * ((chartRight - chartLeft) / (bars.length - 1));
+  const y = (price: number) => chartTop + ((high - price) / (high - low)) * (chartBottom - chartTop);
+  const tickPrices = Array.from({ length: 6 }, (_, i) => high - i * ((high - low) / 5));
+  const rangeStart = mode === 'flow' ? 4 : 6;
+  const rangeEnd = mode === 'flow' ? 13 : 17;
+  const sweepIndex = mode === 'flow' ? 14 : 18;
+  const confirmationIndex = mode === 'flow' ? 20 : 22;
+  const rangeHigh = mode === 'flow' ? 4438.2 : 4382.2;
+  const rangeLow = mode === 'flow' ? 4427.3 : 4371.9;
+  const poc = mode === 'flow' ? 4433.7 : 4379.4;
+  const entry = mode === 'flow' ? 4438.2 : 4380.0;
+  const stop = mode === 'flow' ? 4426.2 : 4364.8;
+  const target = mode === 'flow' ? 4461.2 : 4392.0;
+  const label = mode === 'flow' ? 'GC=F · 15m · Sep 02–03, 2026' : 'GC=F · 5m · Aug 14, 2026';
+
+  return (
+    <svg viewBox="0 0 1200 650" role="img" aria-label={`${label} historical gold futures setup`} className="h-full w-full bg-[#0b0e18]">
+      <rect width="1200" height="650" fill="#0b0e18" />
+      <text x="42" y="30" fill="#f8fafc" fontSize="14" fontWeight="700">{label}</text>
+      <text x="1155" y="30" textAnchor="end" fill="#64748b" fontSize="10">HISTORICAL OHLC · UTC · YAHOO FINANCE</text>
+      {tickPrices.map((price) => <g key={price}><line x1={chartLeft} y1={y(price)} x2={chartRight} y2={y(price)} stroke="#293247" strokeWidth="1" opacity=".55"/><text x="1018" y={y(price)+4} fill="#94a3b8" fontSize="10">{price.toFixed(1)}</text></g>)}
+      {bars.map((bar, index) => index % 4 === 0 ? <line key={`time-${index}`} x1={x(index)} y1={chartTop} x2={x(index)} y2={volumeBottom} stroke="#293247" opacity=".28"/> : null)}
+
+      <rect x={x(rangeStart)-12} y={y(rangeHigh)} width={x(rangeEnd)-x(rangeStart)+24} height={Math.max(3,y(rangeLow)-y(rangeHigh))} fill="#38bdf8" opacity=".07" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="7 5" />
+      <line x1={x(rangeStart)-12} y1={y(poc)} x2={x(confirmationIndex)+22} y2={y(poc)} stroke="#facc15" strokeWidth="2" strokeDasharray="10 6" />
+      <text x={x(rangeStart)} y={y(rangeHigh)-9} fill="#7dd3fc" fontSize="10" fontWeight="700">1 · RANGE / NO TRADE</text>
+      <text x={x(rangeStart)} y={y(poc)-7} fill="#fde047" fontSize="9" fontWeight="700">POC PROXY {poc.toFixed(1)}</text>
+
+      {bars.map((bar, index) => {
+        const [time, open, barHigh, barLow, close, volume] = bar;
+        const up = close >= open;
+        const color = up ? '#26a69a' : '#ef5350';
+        const candleWidth = Math.max(6, ((chartRight-chartLeft)/bars.length)*.62);
+        const bodyTop = y(Math.max(open,close));
+        const bodyHeight = Math.max(2,Math.abs(y(open)-y(close)));
+        const volumeHeight = (volume/maxVolume)*(volumeBottom-volumeTop);
+        return <g key={`${time}-${index}`}><line x1={x(index)} y1={y(barHigh)} x2={x(index)} y2={y(barLow)} stroke={color} strokeWidth="1.4"/><rect x={x(index)-candleWidth/2} y={bodyTop} width={candleWidth} height={bodyHeight} fill={color}/><rect x={x(index)-candleWidth/2} y={volumeBottom-volumeHeight} width={candleWidth} height={volumeHeight} fill={color} opacity=".42"/></g>;
+      })}
+
+      <line x1={x(sweepIndex)} y1={y(bars[sweepIndex][3])} x2={x(sweepIndex)} y2={volumeTop-8} stroke="#fb923c" strokeWidth="1.5" strokeDasharray="5 4" />
+      <circle cx={x(sweepIndex)} cy={y(bars[sweepIndex][3])} r="5" fill="#0b0e18" stroke="#fb923c" strokeWidth="2.5" />
+      <text x={x(sweepIndex)-8} y={volumeTop-14} textAnchor="middle" fill="#fdba74" fontSize="10" fontWeight="700">2 · LIQUIDITY SWEEP</text>
+      <circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][4])} r="5" fill="#0b0e18" stroke="#34d399" strokeWidth="2.5" />
+      <text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][4])-12} fill="#6ee7b7" fontSize="10" fontWeight="700">3 · CLOSED CONFIRMATION</text>
+
+      <line x1={x(confirmationIndex)} y1={y(entry)} x2={chartRight} y2={y(entry)} stroke="#34d399" strokeWidth="1.5" />
+      <line x1={x(confirmationIndex)} y1={y(stop)} x2={chartRight} y2={y(stop)} stroke="#fb7185" strokeWidth="1.5" strokeDasharray="7 5" />
+      <line x1={x(confirmationIndex)} y1={y(target)} x2={chartRight} y2={y(target)} stroke="#34d399" strokeWidth="1.5" strokeDasharray="7 5" />
+      <text x="1018" y={y(entry)+4} fill="#6ee7b7" fontSize="10" fontWeight="700">ENTRY {entry.toFixed(1)}</text>
+      <text x="1018" y={y(stop)+4} fill="#fda4af" fontSize="10" fontWeight="700">SL {stop.toFixed(1)}</text>
+      <text x="1018" y={y(target)+4} fill="#6ee7b7" fontSize="10" fontWeight="700">TP {target.toFixed(1)}</text>
+
+      <text x="42" y="503" fill="#64748b" fontSize="9">VOLUME</text>
+      {bars.map((bar,index) => index % 6 === 0 ? <text key={`label-${index}`} x={x(index)} y="628" textAnchor="middle" fill="#64748b" fontSize="9">{bar[0].includes(' ') ? bar[0].split(' ').at(-1) : bar[0]}</text> : null)}
+    </svg>
+  );
+}
+
 function SetupFlowChartGuide() {
   const candles: readonly GuideCandle[] = [
     [70, 318, 286, 336, 270], [100, 286, 304, 319, 272], [130, 304, 278, 322, 262], [160, 278, 296, 312, 266],
@@ -2503,14 +2594,14 @@ export default function Home() {
               <div className="overflow-hidden rounded-2xl border border-cyan-300/18 bg-[#041326]/65">
                 <div className="flex flex-col gap-2 border-b border-cyan-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-cyan-100">Visual setup map</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Follow the numbered pointers from left to right. This is an educational example—not live market data.</p>
+                    <p className="text-xs font-semibold text-cyan-100">Historical range → sweep → confirmation study</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Real GC gold-futures 15-minute OHLC and volume from Sep 2–3, 2026. Labels are our retrospective study.</p>
                   </div>
                   <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">15M–1H SETUP</Badge>
                 </div>
 
                 <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
-                  <SetupFlowChartGuide />
+                  <HistoricalGoldStudy mode="flow" />
                 </div>
               </div>
 
@@ -3075,11 +3166,11 @@ export default function Home() {
             <CardContent className="pt-4">
               <div className="mb-4 overflow-hidden rounded-2xl border border-fuchsia-300/18 bg-[#041326]/65">
                 <div className="flex flex-col gap-2 border-b border-fuchsia-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div><p className="text-xs font-semibold text-fuchsia-100">Confirmed reversal example</p><p className="mt-1 text-[10px] text-muted-foreground">A sweep creates the watch; the later confirmation break creates the possible entry.</p></div>
+                  <div><p className="text-xs font-semibold text-fuchsia-100">Historical sell-side sweep reversal study</p><p className="mt-1 text-[10px] text-muted-foreground">Real GC gold-futures 5-minute OHLC and volume from Aug 14, 2026. The sweep creates the watch; a later close confirms.</p></div>
                   <Badge className="w-fit border border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200">1M–5M PLAYBOOK</Badge>
                 </div>
                 <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
-                  <GoldReversalChartGuide />
+                  <HistoricalGoldStudy mode="reversal" />
                 </div>
               </div>
 
