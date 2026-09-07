@@ -63,6 +63,94 @@ const timeframes = [
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
 type WorkspacePanel = 'desk' | 'charts' | 'pine' | 'mt5' | 'guides' | 'risk';
 
+type GuideCandle = readonly [x: number, openY: number, closeY: number, lowY: number, highY: number];
+
+function GuideCandles({ candles }: { candles: readonly GuideCandle[] }) {
+  return candles.map(([x, open, close, low, high]) => {
+    const rising = close < open;
+    const top = Math.min(open, close);
+    const color = rising ? '#22d3ee' : '#e2e8f0';
+    return <g key={x}><line x1={x} y1={high} x2={x} y2={low} stroke={color} strokeWidth="2"/><rect x={x - 7} y={top} width="14" height={Math.max(6, Math.abs(close - open))} fill={color} rx="1" /></g>;
+  });
+}
+
+function SetupFlowChartGuide() {
+  const candles: readonly GuideCandle[] = [
+    [70, 318, 286, 336, 270], [100, 286, 304, 319, 272], [130, 304, 278, 322, 262], [160, 278, 296, 312, 266],
+    [190, 296, 272, 310, 258], [220, 272, 314, 326, 263], [250, 314, 292, 330, 280], [280, 292, 310, 322, 279],
+    [310, 310, 284, 326, 270], [340, 284, 306, 320, 275], [370, 306, 292, 325, 281], [410, 292, 318, 334, 280],
+    [450, 318, 286, 470, 275], [490, 286, 248, 302, 230], [530, 248, 190, 263, 174], [570, 190, 132, 206, 116],
+    [610, 132, 102, 148, 88], [650, 102, 146, 160, 92], [690, 146, 188, 201, 133], [730, 188, 230, 246, 176],
+    [770, 230, 274, 287, 216], [810, 274, 304, 320, 262], [850, 304, 278, 318, 266], [890, 278, 244, 292, 228],
+    [930, 244, 210, 258, 196], [970, 210, 176, 225, 160],
+  ];
+  return (
+    <svg viewBox="0 0 1200 650" role="img" aria-labelledby="flow-title flow-desc" className="h-full w-full bg-[#070b1c]">
+      <title id="flow-title">Consolidation, manipulation, displacement and entry setup map</title>
+      <desc id="flow-desc">Price consolidates around a point of control, sweeps below the range, reclaims it with displacement, then retests and defends the point of control before a possible long entry.</desc>
+      {Array.from({ length: 12 }).map((_, i) => <line key={`fv-${i}`} x1={36 + i * 96} y1="32" x2={36 + i * 96} y2="612" stroke="#26304a" opacity=".3" />)}
+      {Array.from({ length: 8 }).map((_, i) => <line key={`fh-${i}`} x1="32" y1={58 + i * 72} x2="1168" y2={58 + i * 72} stroke="#26304a" opacity=".28" />)}
+      <GuideCandles candles={candles} />
+
+      <rect x="48" y="244" width="350" height="100" rx="8" fill="#22d3ee" opacity=".07" stroke="#22d3ee" strokeWidth="2" strokeDasharray="8 6" />
+      <line x1="48" y1="294" x2="1040" y2="294" stroke="#facc15" strokeWidth="2" strokeDasharray="12 7" />
+      <rect x="56" y="250" width="205" height="42" rx="6" fill="#082535" stroke="#22d3ee" strokeOpacity=".55"/><text x="70" y="267" fill="#67e8f9" fontSize="12" fontWeight="700">1 · CONSOLIDATION</text><text x="70" y="283" fill="#94a3b8" fontSize="10">Wait inside the range · no trade</text>
+      <rect x="62" y="302" width="154" height="28" rx="5" fill="#2b2308" stroke="#facc15" strokeOpacity=".65"/><text x="74" y="320" fill="#fde047" fontSize="11" fontWeight="700">POC · MOST ACTIVITY</text>
+
+      <path d="M410 348 C430 390 436 442 450 470 C462 430 474 350 490 286" fill="none" stroke="#fb923c" strokeWidth="3" />
+      <rect x="350" y="484" width="235" height="44" rx="7" fill="#2a1608" stroke="#fb923c" strokeOpacity=".65"/><text x="365" y="502" fill="#fdba74" fontSize="12" fontWeight="700">2 · MANIPULATION / SWEEP</text><text x="365" y="518" fill="#94a3b8" fontSize="10">Liquidity taken, then range reclaimed</text>
+
+      <path d="M505 270 C555 210 584 132 624 104" fill="none" stroke="#c084fc" strokeWidth="3" markerEnd="url(#flowArrow)" />
+      <defs><marker id="flowArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#c084fc"/></marker></defs>
+      <rect x="536" y="44" width="244" height="44" rx="7" fill="#17102d" stroke="#c084fc" strokeOpacity=".6"/><text x="551" y="62" fill="#d8b4fe" fontSize="12" fontWeight="700">3 · DISPLACEMENT / MOVE</text><text x="551" y="78" fill="#94a3b8" fontSize="10">Direction appears · do not chase</text>
+
+      <circle cx="850" cy="294" r="9" fill="#070b1c" stroke="#34d399" strokeWidth="3" />
+      <line x1="850" y1="294" x2="1080" y2="294" stroke="#34d399" strokeWidth="2" />
+      <line x1="850" y1="360" x2="1080" y2="360" stroke="#fb7185" strokeWidth="2" />
+      <line x1="850" y1="150" x2="1080" y2="150" stroke="#34d399" strokeWidth="2" strokeDasharray="9 6" />
+      <rect x="900" y="238" width="260" height="44" rx="7" fill="#06251f" stroke="#34d399" strokeOpacity=".65"/><text x="915" y="256" fill="#6ee7b7" fontSize="12" fontWeight="700">4 · RETEST + DEFENDED ENTRY</text><text x="915" y="272" fill="#94a3b8" fontSize="10">Completed candle holds above POC</text>
+      <text x="1088" y="153" fill="#6ee7b7" fontSize="11" fontWeight="700">TP</text><text x="1088" y="298" fill="#6ee7b7" fontSize="11" fontWeight="700">ENTRY</text><text x="1088" y="364" fill="#fda4af" fontSize="11" fontWeight="700">SL</text>
+    </svg>
+  );
+}
+
+function GoldReversalChartGuide() {
+  const candles: readonly GuideCandle[] = [
+    [70, 122, 150, 166, 108], [105, 150, 176, 190, 136], [140, 176, 160, 192, 146], [175, 160, 206, 220, 149],
+    [210, 206, 232, 248, 192], [245, 232, 270, 286, 220], [280, 270, 298, 316, 258], [315, 298, 326, 342, 285],
+    [350, 326, 356, 372, 313], [385, 356, 380, 394, 342], [425, 380, 352, 414, 338], [465, 352, 326, 494, 308],
+    [505, 326, 292, 342, 278], [545, 292, 268, 307, 252], [585, 268, 238, 282, 222], [625, 238, 198, 252, 182],
+    [665, 198, 176, 214, 161], [705, 176, 148, 192, 132], [745, 148, 164, 181, 136], [785, 164, 134, 178, 118],
+    [825, 134, 108, 150, 92], [865, 108, 120, 137, 96], [905, 120, 94, 134, 78],
+  ];
+  return (
+    <svg viewBox="0 0 1200 650" role="img" aria-labelledby="reversal-title reversal-desc" className="h-full w-full bg-[#070b1c]">
+      <title id="reversal-title">Confirmed bullish gold reversal setup</title>
+      <desc id="reversal-desc">A bearish approach reaches sell-side liquidity, a candle sweeps below it and closes back above, then price breaks the rejection high. Entry follows the completed break with stop below the sweep and staged take profits above.</desc>
+      {Array.from({ length: 12 }).map((_, i) => <line key={`rv-${i}`} x1={36 + i * 96} y1="32" x2={36 + i * 96} y2="612" stroke="#26304a" opacity=".3" />)}
+      {Array.from({ length: 8 }).map((_, i) => <line key={`rh-${i}`} x1="32" y1={58 + i * 72} x2="1168" y2={58 + i * 72} stroke="#26304a" opacity=".28" />)}
+      <GuideCandles candles={candles} />
+
+      <rect x="48" y="62" width="285" height="44" rx="7" fill="#2a1018" stroke="#fb7185" strokeOpacity=".55"/><text x="63" y="80" fill="#fda4af" fontSize="12" fontWeight="700">1 · BEARISH APPROACH</text><text x="63" y="96" fill="#94a3b8" fontSize="10">No long while sellers still control</text>
+      <line x1="48" y1="370" x2="590" y2="370" stroke="#fb923c" strokeWidth="2" strokeDasharray="10 7" />
+      <text x="58" y="362" fill="#fdba74" fontSize="11" fontWeight="700">PRIOR LOW / SELL-SIDE LIQUIDITY</text>
+      <circle cx="465" cy="494" r="9" fill="#070b1c" stroke="#fb923c" strokeWidth="3" />
+      <rect x="335" y="510" width="265" height="44" rx="7" fill="#2a1608" stroke="#fb923c" strokeOpacity=".65"/><text x="350" y="528" fill="#fdba74" fontSize="12" fontWeight="700">2 · SWEEP + REJECTION</text><text x="350" y="544" fill="#94a3b8" fontSize="10">Watch only until the high breaks</text>
+
+      <line x1="465" y1="308" x2="695" y2="308" stroke="#facc15" strokeWidth="2" strokeDasharray="9 6" />
+      <circle cx="625" cy="238" r="9" fill="#070b1c" stroke="#facc15" strokeWidth="3" />
+      <rect x="548" y="328" width="260" height="44" rx="7" fill="#292208" stroke="#facc15" strokeOpacity=".65"/><text x="563" y="346" fill="#fde047" fontSize="12" fontWeight="700">3 · CONFIRMATION BREAK</text><text x="563" y="362" fill="#94a3b8" fontSize="10">Completed close above rejection high</text>
+
+      <line x1="625" y1="238" x2="1082" y2="238" stroke="#34d399" strokeWidth="2" />
+      <line x1="625" y1="494" x2="1082" y2="494" stroke="#fb7185" strokeWidth="2" />
+      <line x1="625" y1="166" x2="1082" y2="166" stroke="#34d399" strokeWidth="1.5" strokeDasharray="9 6" />
+      <line x1="625" y1="94" x2="1082" y2="94" stroke="#34d399" strokeWidth="1.5" strokeDasharray="9 6" />
+      <rect x="850" y="265" width="285" height="44" rx="7" fill="#06251f" stroke="#34d399" strokeOpacity=".65"/><text x="865" y="283" fill="#6ee7b7" fontSize="12" fontWeight="700">4 · MANAGED LONG ENTRY</text><text x="865" y="299" fill="#94a3b8" fontSize="10">SL below sweep · profits staged above</text>
+      <text x="1090" y="98" fill="#6ee7b7" fontSize="11" fontWeight="700">TP2</text><text x="1090" y="170" fill="#6ee7b7" fontSize="11" fontWeight="700">TP1</text><text x="1090" y="242" fill="#6ee7b7" fontSize="11" fontWeight="700">ENTRY</text><text x="1090" y="498" fill="#fda4af" fontSize="11" fontWeight="700">SL</text>
+    </svg>
+  );
+}
+
 function FibonacciChartGuide() {
   const levels = [
     { y: 54, level: '0%', name: 'SWING HIGH / ZERO', price: '4419.575', color: '#cbd5e1', dash: '' },
@@ -2348,47 +2436,8 @@ export default function Home() {
                   <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">15M–1H SETUP</Badge>
                 </div>
 
-                <div className="relative aspect-[16/9] overflow-hidden">
-                  <img
-                    src="/chart-guide-flow-v1.png"
-                    alt="Illustrated candlestick setup showing consolidation and POC, a liquidity sweep, bullish displacement, a POC retest, entry, stop loss and take profit"
-                    width="1672"
-                    height="940"
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
-
-                  <div className="pointer-events-none absolute left-[8%] top-[9%] hidden sm:block">
-                    <div className="rounded-lg border border-cyan-300/30 bg-[#041426]/90 px-3 py-2 shadow-xl backdrop-blur-md">
-                      <p className="text-[10px] font-bold text-cyan-200">1 · CONSOLIDATION + POC</p>
-                      <p className="mt-0.5 text-[9px] text-slate-300">No trade inside the range</p>
-                    </div>
-                    <span className="ml-9 block h-24 w-px bg-gradient-to-b from-cyan-300 to-transparent" />
-                  </div>
-
-                  <div className="pointer-events-none absolute bottom-[7%] left-[48%] hidden sm:flex sm:flex-col sm:items-center">
-                    <span className="block h-16 w-px bg-gradient-to-t from-orange-300 to-transparent" />
-                    <div className="rounded-lg border border-orange-300/30 bg-[#1d1220]/90 px-3 py-2 text-center shadow-xl backdrop-blur-md">
-                      <p className="text-[10px] font-bold text-orange-200">2 · MANIPULATION SWEEP</p>
-                      <p className="mt-0.5 text-[9px] text-slate-300">Wait for price to reclaim the range</p>
-                    </div>
-                  </div>
-
-                  <div className="pointer-events-none absolute left-[57%] top-[7%] hidden sm:block">
-                    <div className="rounded-lg border border-violet-300/30 bg-[#100d2a]/90 px-3 py-2 shadow-xl backdrop-blur-md">
-                      <p className="text-[10px] font-bold text-violet-200">3 · DISTRIBUTION / MOVE</p>
-                      <p className="mt-0.5 text-[9px] text-slate-300">Strong displacement—do not chase</p>
-                    </div>
-                    <span className="ml-12 block h-20 w-px bg-gradient-to-b from-violet-300 to-transparent" />
-                  </div>
-
-                  <div className="pointer-events-none absolute right-[7%] top-[38%] hidden sm:flex sm:items-center">
-                    <div className="rounded-lg border border-emerald-300/30 bg-[#06231f]/90 px-3 py-2 text-right shadow-xl backdrop-blur-md">
-                      <p className="text-[10px] font-bold text-emerald-200">4 · CONFIRMED ENTRY</p>
-                      <p className="mt-0.5 text-[9px] text-slate-300">POC retest defended · SL below · TP above</p>
-                    </div>
-                    <span className="block h-px w-12 bg-gradient-to-r from-emerald-300 to-transparent" />
-                  </div>
+                <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
+                  <SetupFlowChartGuide />
                 </div>
               </div>
 
@@ -2911,25 +2960,8 @@ export default function Home() {
                   <div><p className="text-xs font-semibold text-fuchsia-100">Confirmed reversal example</p><p className="mt-1 text-[10px] text-muted-foreground">A sweep creates the watch; the later confirmation break creates the possible entry.</p></div>
                   <Badge className="w-fit border border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200">1M–5M PLAYBOOK</Badge>
                 </div>
-                <div className="relative aspect-[16/9] overflow-hidden">
-                  <img src="/reversal-guide-v1.png" alt="Bullish reversal setup with a downside liquidity sweep, rejection candle, confirmation break, stop loss and take profit zones" width="1672" height="940" loading="lazy" className="h-full w-full object-cover" />
-
-                  <div className="pointer-events-none absolute left-[8%] top-[9%] hidden sm:block">
-                    <div className="rounded-lg border border-red-300/30 bg-[#281017]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-red-200">1 · BEARISH APPROACH</p><p className="mt-0.5 text-[9px] text-slate-300">No long entry while sellers control</p></div>
-                    <span className="ml-12 block h-20 w-px bg-gradient-to-b from-red-300 to-transparent" />
-                  </div>
-                  <div className="pointer-events-none absolute bottom-[6%] left-[47%] hidden sm:flex sm:flex-col sm:items-center">
-                    <span className="block h-20 w-px bg-gradient-to-t from-orange-300 to-transparent" />
-                    <div className="rounded-lg border border-orange-300/30 bg-[#281607]/90 px-3 py-2 text-center shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-orange-200">2 · LIQUIDITY SWEEP</p><p className="mt-0.5 text-[9px] text-slate-300">Watch only—wait for rejection</p></div>
-                  </div>
-                  <div className="pointer-events-none absolute left-[57%] top-[9%] hidden sm:block">
-                    <div className="rounded-lg border border-yellow-300/30 bg-[#28200a]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-yellow-200">3 · CONFIRMATION BREAK</p><p className="mt-0.5 text-[9px] text-slate-300">Break above rejection high</p></div>
-                    <span className="ml-14 block h-24 w-px bg-gradient-to-b from-yellow-300 to-transparent" />
-                  </div>
-                  <div className="pointer-events-none absolute right-[8%] top-[38%] hidden sm:flex sm:items-center">
-                    <div className="rounded-lg border border-emerald-300/30 bg-[#06231f]/90 px-3 py-2 text-right shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-emerald-200">4 · MANAGED ENTRY</p><p className="mt-0.5 text-[9px] text-slate-300">SL below sweep · TP above</p></div>
-                    <span className="block h-px w-12 bg-gradient-to-r from-emerald-300 to-transparent" />
-                  </div>
+                <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
+                  <GoldReversalChartGuide />
                 </div>
               </div>
 
