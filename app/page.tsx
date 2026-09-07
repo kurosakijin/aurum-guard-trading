@@ -2388,7 +2388,35 @@ export default function Home() {
               <CardDescription>Drawn from the latest confirmed swing. It updates when a new pivot high or low is confirmed.</CardDescription>
               <CardAction><Badge className="border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">61.8%–70.5% GOLDEN ZONE</Badge></CardAction>
             </CardHeader>
-            <CardContent className="grid gap-4 pt-4 xl:grid-cols-[1.05fr_.95fr]">
+            <CardContent className="pt-4">
+              <div className="mb-4 overflow-hidden rounded-2xl border border-yellow-300/18 bg-[#041326]/65">
+                <div className="flex flex-col gap-2 border-b border-yellow-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div><p className="text-xs font-semibold text-yellow-100">Bullish Fibonacci example</p><p className="mt-1 text-[10px] text-muted-foreground">Pointers show where to anchor the tool and how to judge the pullback.</p></div>
+                  <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">61.8%–70.5% FOCUS</Badge>
+                </div>
+                <div className="relative aspect-[16/9] overflow-hidden">
+                  <img src="/fibonacci-guide-v1.png" alt="Bullish Fibonacci retracement example from swing low to swing high, pulling back into the golden zone before continuing upward" width="1672" height="940" loading="lazy" className="h-full w-full object-cover" />
+
+                  <div className="pointer-events-none absolute bottom-[7%] left-[7%] hidden sm:flex sm:flex-col sm:items-center">
+                    <span className="block h-14 w-px bg-gradient-to-t from-cyan-300 to-transparent" />
+                    <div className="rounded-lg border border-cyan-300/30 bg-[#041426]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-cyan-200">1 · SWING LOW</p><p className="mt-0.5 text-[9px] text-slate-300">Start the bullish markup here</p></div>
+                  </div>
+                  <div className="pointer-events-none absolute left-[58%] top-[5%] hidden sm:block">
+                    <div className="rounded-lg border border-violet-300/30 bg-[#100d2a]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-violet-200">2 · SWING HIGH</p><p className="mt-0.5 text-[9px] text-slate-300">End the markup at the confirmed high</p></div>
+                    <span className="ml-14 block h-16 w-px bg-gradient-to-b from-violet-300 to-transparent" />
+                  </div>
+                  <div className="pointer-events-none absolute bottom-[28%] left-[58%] hidden sm:flex sm:items-center">
+                    <div className="rounded-lg border border-yellow-300/35 bg-[#28200a]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-yellow-200">3 · GOLDEN ZONE</p><p className="mt-0.5 text-[9px] text-slate-300">61.8%–70.5% · wait for rejection</p></div>
+                    <span className="block h-px w-14 bg-gradient-to-r from-yellow-300 to-transparent" />
+                  </div>
+                  <div className="pointer-events-none absolute right-[5%] top-[7%] hidden sm:block">
+                    <div className="rounded-lg border border-emerald-300/30 bg-[#06231f]/90 px-3 py-2 text-right shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-emerald-200">4 · CONTINUATION</p><p className="mt-0.5 text-[9px] text-slate-300">Only after a confirmed rejection close</p></div>
+                    <span className="ml-auto mr-10 block h-14 w-px bg-gradient-to-b from-emerald-300 to-transparent" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[1.05fr_.95fr]">
               <div className="overflow-hidden rounded-xl border border-white/8 bg-black/15 p-3">
                 <div className="mb-3 flex items-center justify-between gap-3 px-1">
                   <p className="text-[10px] font-semibold uppercase tracking-[.13em] text-muted-foreground">Automatic level ladder</p>
@@ -2427,6 +2455,7 @@ export default function Home() {
                   <p className="mt-2 text-[11px] leading-5 text-muted-foreground">61.8%–70.5% plus candle rejection is confluence, not an entry by itself. Prioritize it only when the panel also shows the correct metals direction, no shock pause, and a completed <span className="font-semibold text-foreground">BUY/SELL P1, P2 or P3</span>. If ACTION still says WAIT, keep waiting.</p>
                 </div>
                 <p className="rounded-xl border border-orange-300/15 bg-orange-300/[.035] p-3 text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-orange-200">Important:</span> the middle/golden zone is a possible reaction area—not proof that price cannot continue down or up. Confirmed pivots appear after the selected pivot length, so the newest swing map deliberately arrives with confirmation delay.</p>
+              </div>
               </div>
             </CardContent>
           </Card>
@@ -2854,6 +2883,33 @@ export default function Home() {
               <CardAction><Badge className="border border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200">POSSIBLE REVERSAL</Badge></CardAction>
             </CardHeader>
             <CardContent className="pt-4">
+              <div className="mb-4 overflow-hidden rounded-2xl border border-fuchsia-300/18 bg-[#041326]/65">
+                <div className="flex flex-col gap-2 border-b border-fuchsia-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div><p className="text-xs font-semibold text-fuchsia-100">Confirmed reversal example</p><p className="mt-1 text-[10px] text-muted-foreground">A sweep creates the watch; the later confirmation break creates the possible entry.</p></div>
+                  <Badge className="w-fit border border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-200">1M–5M PLAYBOOK</Badge>
+                </div>
+                <div className="relative aspect-[16/9] overflow-hidden">
+                  <img src="/reversal-guide-v1.png" alt="Bullish reversal setup with a downside liquidity sweep, rejection candle, confirmation break, stop loss and take profit zones" width="1672" height="940" loading="lazy" className="h-full w-full object-cover" />
+
+                  <div className="pointer-events-none absolute left-[8%] top-[9%] hidden sm:block">
+                    <div className="rounded-lg border border-red-300/30 bg-[#281017]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-red-200">1 · BEARISH APPROACH</p><p className="mt-0.5 text-[9px] text-slate-300">No long entry while sellers control</p></div>
+                    <span className="ml-12 block h-20 w-px bg-gradient-to-b from-red-300 to-transparent" />
+                  </div>
+                  <div className="pointer-events-none absolute bottom-[6%] left-[47%] hidden sm:flex sm:flex-col sm:items-center">
+                    <span className="block h-20 w-px bg-gradient-to-t from-orange-300 to-transparent" />
+                    <div className="rounded-lg border border-orange-300/30 bg-[#281607]/90 px-3 py-2 text-center shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-orange-200">2 · LIQUIDITY SWEEP</p><p className="mt-0.5 text-[9px] text-slate-300">Watch only—wait for rejection</p></div>
+                  </div>
+                  <div className="pointer-events-none absolute left-[57%] top-[9%] hidden sm:block">
+                    <div className="rounded-lg border border-yellow-300/30 bg-[#28200a]/90 px-3 py-2 shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-yellow-200">3 · CONFIRMATION BREAK</p><p className="mt-0.5 text-[9px] text-slate-300">Break above rejection high</p></div>
+                    <span className="ml-14 block h-24 w-px bg-gradient-to-b from-yellow-300 to-transparent" />
+                  </div>
+                  <div className="pointer-events-none absolute right-[8%] top-[38%] hidden sm:flex sm:items-center">
+                    <div className="rounded-lg border border-emerald-300/30 bg-[#06231f]/90 px-3 py-2 text-right shadow-xl backdrop-blur-md"><p className="text-[10px] font-bold text-emerald-200">4 · MANAGED ENTRY</p><p className="mt-0.5 text-[9px] text-slate-300">SL below sweep · TP above</p></div>
+                    <span className="block h-px w-12 bg-gradient-to-r from-emerald-300 to-transparent" />
+                  </div>
+                </div>
+              </div>
+
               <div className="grid gap-2 sm:grid-cols-2">
                 {[
                   ['1 · Context', 'Use a 1m, 3m or 5m chart. The previous completed 15m close must remain on the correct side of its EMA 50.'],
