@@ -61,7 +61,7 @@ const timeframes = [
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
 const pineScript = String.raw`//@version=6
-strategy("Aurum Guard Combined: Trend + Reversal", overlay = true, pyramiding = 0,
+strategy("Aurum Guard Combined v53: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 0.5,
@@ -250,7 +250,10 @@ if volatilityShock
 shockPauseActive = enableShockGuard and not na(lastShockBar) and bar_index - lastShockBar <= shockPauseBars
 shockReset = enableShockGuard and decisionBarReady and not shockPauseActive and shockPauseActive[1]
 
-closedTradeThisBar = ta.change(strategy.closedtrades) > 0
+// Evaluate this history-dependent series on every calculation. Reusing the
+// result inside the exit block avoids TradingView's consistency warning.
+closedTradesChange = ta.change(strategy.closedtrades)
+closedTradeThisBar = closedTradesChange > 0
 lastClosedTradeNumber = strategy.closedtrades - 1
 lastExitComment = strategy.closedtrades > 0 ? strategy.closedtrades.exit_comment(lastClosedTradeNumber) : ""
 stopClosedThisBar = closedTradeThisBar and lastExitComment == "SL"
@@ -1141,7 +1144,7 @@ recoveryEngineEnabled = (enableReentry and not cycleTimeframe) or oneMinuteRecov
 if closedTradeThisBar
     lastEntryId = strategy.closedtrades.entry_id(lastClosedTradeNumber)
     lastExitPrice = strategy.closedtrades.exit_price(lastClosedTradeNumber)
-    closedCountThisBar = int(ta.change(strategy.closedtrades))
+    closedCountThisBar = int(closedTradesChange)
     float stoppedQtyThisBar = 0.0
     float exitedQtyThisBar = 0.0
     bool forcedFlipExit = false
@@ -2310,7 +2313,7 @@ export default function Home() {
 
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v53</CardTitle>
               <CardDescription>One free-plan script slot · M15/H1 four-stage POC cycle + Gold/Silver sync + three take-profit levels + strategy-compatible alerts</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
@@ -2337,6 +2340,11 @@ export default function Home() {
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">Daily trend filter</span>
                   <span className="rounded-md border border-white/9 bg-black/15 px-2 py-1">No intrabar entry</span>
                 </div>
+              </div>
+
+              <div className="mb-4 rounded-xl border border-orange-300/20 bg-orange-300/[.045] p-4 text-[10px] leading-5 text-muted-foreground">
+                <p className="font-semibold text-orange-100">Important: TradingView does not automatically sync website updates.</p>
+                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v53</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
