@@ -151,6 +151,54 @@ function GoldReversalChartGuide() {
   );
 }
 
+type PatternKind = 'falling-wedge' | 'ascending-triangle' | 'bull-rectangle' | 'inverse-hs' | 'head-shoulders' | 'descending-triangle';
+
+const patternPlaybook: Array<{ kind: PatternKind; name: string; side: 'BUY' | 'SELL'; trigger: string; invalidation: string }> = [
+  { kind: 'falling-wedge', name: 'Falling wedge', side: 'BUY', trigger: 'Close above the upper wedge, then hold the retest.', invalidation: 'Below the last compression low.' },
+  { kind: 'ascending-triangle', name: 'Ascending triangle', side: 'BUY', trigger: 'Close above resistance; enter on hold or clean retest.', invalidation: 'Below the latest higher low.' },
+  { kind: 'bull-rectangle', name: 'Bullish rectangle', side: 'BUY', trigger: 'Range high breaks after an established upward impulse.', invalidation: 'Back inside the range or below its low.' },
+  { kind: 'inverse-hs', name: 'Inverse head & shoulders', side: 'BUY', trigger: 'Neckline closes above after the right shoulder forms.', invalidation: 'Below the right shoulder.' },
+  { kind: 'head-shoulders', name: 'Head & shoulders', side: 'SELL', trigger: 'Neckline closes below after the right shoulder forms.', invalidation: 'Above the right shoulder.' },
+  { kind: 'descending-triangle', name: 'Descending triangle', side: 'SELL', trigger: 'Support closes below; enter after rejection on retest.', invalidation: 'Above the latest lower high.' },
+];
+
+function PatternMiniChart({ kind, side }: { kind: PatternKind; side: 'BUY' | 'SELL' }) {
+  const bullish = side === 'BUY';
+  const accent = bullish ? '#34d399' : '#fb7185';
+  const pricePaths: Record<PatternKind, string> = {
+    'falling-wedge': '18,38 38,54 56,43 74,65 92,52 110,76 128,64 146,83 164,72 184,48 205,30 225,18',
+    'ascending-triangle': '18,82 42,40 64,70 88,40 112,59 138,40 162,50 184,36 205,18 228,8',
+    'bull-rectangle': '18,82 42,56 62,28 84,44 106,30 128,46 150,28 172,44 192,26 211,10 230,4',
+    'inverse-hs': '18,40 42,64 65,45 90,82 116,42 140,65 164,41 186,32 207,14 228,5',
+    'head-shoulders': '18,68 42,40 65,57 90,16 116,56 140,38 164,62 185,70 208,88 230,96',
+    'descending-triangle': '18,18 42,60 66,34 90,60 114,43 138,60 162,50 184,62 205,82 230,94',
+  };
+  const boundaryPaths: Record<PatternKind, string[]> = {
+    'falling-wedge': ['M20 28 L168 70', 'M22 72 L168 88'],
+    'ascending-triangle': ['M38 40 L188 40', 'M22 88 L184 47'],
+    'bull-rectangle': ['M58 25 L190 25', 'M58 50 L190 50'],
+    'inverse-hs': ['M20 38 L180 38'],
+    'head-shoulders': ['M18 66 L180 66'],
+    'descending-triangle': ['M18 62 L188 62', 'M20 12 L184 54'],
+  };
+  const entryY = bullish ? 31 : 69;
+  const stopY = bullish ? 56 : 44;
+
+  return (
+    <svg viewBox="0 0 250 110" role="img" aria-label={`${side} ${kind} confirmation diagram`} className="h-28 w-full rounded-lg bg-[#070b1c]">
+      {[25, 50, 75, 100].map((x) => <line key={`px-${x}`} x1={x} y1="6" x2={x} y2="104" stroke="#26304a" opacity=".28" />)}
+      {[25, 50, 75, 100].map((y) => <line key={`py-${y}`} x1="6" y1={y} x2="244" y2={y} stroke="#26304a" opacity=".28" />)}
+      {boundaryPaths[kind].map((d, index) => <path key={index} d={d} fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="5 4" />)}
+      <polyline points={pricePaths[kind]} fill="none" stroke="#e2e8f0" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+      <line x1="176" y1={entryY} x2="242" y2={entryY} stroke={accent} strokeWidth="1.5" />
+      <line x1="176" y1={stopY} x2="242" y2={stopY} stroke="#fb7185" strokeWidth="1.25" strokeDasharray="5 4" />
+      <circle cx="205" cy={bullish ? 18 : 82} r="5" fill="#070b1c" stroke={accent} strokeWidth="2.5" />
+      <text x="181" y={entryY - 4} fill={accent} fontSize="8" fontWeight="700">CLOSE + RETEST</text>
+      <text x="213" y={stopY - 4} fill="#fda4af" fontSize="8" fontWeight="700">SL</text>
+    </svg>
+  );
+}
+
 function FibonacciChartGuide() {
   const levels = [
     { y: 54, level: '0%', name: 'SWING HIGH / ZERO', price: '4419.575', color: '#cbd5e1', dash: '' },
@@ -1788,7 +1836,7 @@ export default function Home() {
       if (hash === '#live-chart') setWorkspacePanel('charts');
       else if (hash === '#pine-script') setWorkspacePanel('pine');
       else if (hash === '#mt5-bot') setWorkspacePanel('mt5');
-      else if (hash === '#chart-guide' || hash === '#fibonacci-guide' || hash === '#reversal-playbook') setWorkspacePanel('guides');
+      else if (hash === '#chart-guide' || hash === '#pattern-playbook' || hash === '#fibonacci-guide' || hash === '#reversal-playbook') setWorkspacePanel('guides');
       else if (hash === '#risk-plan' || hash === '#news' || hash === '#news-radar') setWorkspacePanel('risk');
     };
     syncPanelFromHash();
@@ -2460,6 +2508,51 @@ export default function Home() {
                 <div className="rounded-xl border border-amber-300/18 bg-amber-300/[.045] p-3"><p className="text-[10px] font-semibold text-amber-200">WAIT</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Inside consolidation, during the sweep, or while price is moving away without a retest.</p></div>
                 <div className="rounded-xl border border-emerald-300/18 bg-emerald-300/[.045] p-3"><p className="text-[10px] font-semibold text-emerald-200">ENTRY POSSIBLE</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Only after the retest is defended and the completed candle agrees with the direction filters.</p></div>
                 <div className="rounded-xl border border-red-300/18 bg-red-300/[.045] p-3"><p className="text-[10px] font-semibold text-red-200">INVALID</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Price closes back through the defended structure, volatility shocks, or Gold/Silver confirmation fails.</p></div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section id="pattern-playbook" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="pattern-playbook-heading">
+          <Card className="border-sky-300/16 bg-[linear-gradient(145deg,rgba(14,165,233,.065),rgba(18,22,27,.97)_42%)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle id="pattern-playbook-heading" className="flex items-center gap-2 text-lg"><LineChart className="size-5 text-sky-300" /> Confirmed chart-pattern playbook</CardTitle>
+              <CardDescription>Use patterns as structure—not prediction. The setup becomes actionable only after a completed breakout and preferably a defended retest.</CardDescription>
+              <CardAction><Badge className="border border-sky-300/20 bg-sky-300/10 text-sky-200">15M–1H CONTEXT</Badge></CardAction>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {patternPlaybook.map((pattern) => (
+                  <div key={pattern.kind} className="overflow-hidden rounded-xl border border-white/8 bg-black/15 p-3">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-foreground">{pattern.name}</p>
+                      <Badge className={pattern.side === 'BUY' ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-200' : 'border border-red-300/20 bg-red-300/10 text-red-200'}>{pattern.side} BIAS</Badge>
+                    </div>
+                    <PatternMiniChart kind={pattern.kind} side={pattern.side} />
+                    <div className="mt-3 grid gap-2 text-[10px] leading-4">
+                      <p className="text-muted-foreground"><span className="font-semibold text-sky-200">Trigger:</span> {pattern.trigger}</p>
+                      <p className="text-muted-foreground"><span className="font-semibold text-red-200">Invalidation:</span> {pattern.invalidation}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr_.8fr]">
+                <div className="rounded-xl border border-sky-300/16 bg-sky-300/[.04] p-4">
+                  <p className="text-xs font-semibold text-sky-100">How Aurum Guard should use these patterns</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                    {[
+                      ['1 · STRUCTURE', 'Pattern must be visible on 15m or 1H—not imagined from two candles.'],
+                      ['2 · BREAK', 'Require a completed candle outside the boundary. Wick-only breaks are sweeps.'],
+                      ['3 · RETEST', 'Prefer price to revisit and defend the broken level before entry.'],
+                      ['4 · ALIGN', 'Direction must agree with EMA trend, Gold/Silver sync and the news-risk gate.'],
+                    ].map(([title, text]) => <div key={title} className="rounded-lg border border-white/8 bg-black/15 p-3"><p className="text-[9px] font-bold text-sky-200">{title}</p><p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{text}</p></div>)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-300/18 bg-amber-300/[.045] p-4">
+                  <p className="text-xs font-semibold text-amber-100">Do not enter from the shape alone</p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">A pattern can fail or break in either direction. WAIT if the candle has not closed, the breakout runs directly into nearby liquidity, the retest fails, or high-impact US news is close. Project the target from the pattern height, but keep the structural stop and required reward/risk valid.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
