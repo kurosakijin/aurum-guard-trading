@@ -76,8 +76,8 @@ export function TradingViewChart({
       interval,
       timezone: 'exchange',
       theme: 'dark',
-      backgroundColor: '#171b20',
-      gridColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundColor: '#071525',
+      gridColor: 'rgba(125, 211, 252, 0.055)',
       style: '1',
       locale: 'en',
       withdateranges: !isMobile,
@@ -108,7 +108,7 @@ export function TradingViewChart({
   return (
     <div
       aria-label={`Interactive ${label} TradingView chart`}
-      className="relative h-[620px] w-full sm:h-[950px] lg:h-[1200px] xl:h-[1600px]"
+      className="relative h-[420px] w-full sm:h-[520px] xl:h-[620px]"
     >
       <div className="absolute inset-0 grid place-items-center px-6 text-center text-xs text-muted-foreground">
         Loading the live {label.toLowerCase()} chart…

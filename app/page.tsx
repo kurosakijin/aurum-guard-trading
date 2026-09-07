@@ -13,18 +13,21 @@ import {
   Clock3,
   Code2,
   Crosshair,
+  Database,
   Download,
   ExternalLink,
   Landmark,
   LineChart,
   LockKeyhole,
   Newspaper,
+  PlugZap,
   RadioTower,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
   Sparkles,
   TriangleAlert,
+  UserRound,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -1699,7 +1702,7 @@ export default function Home() {
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <header className="z-30 shrink-0 border-b border-white/8 bg-background/92 backdrop-blur-xl">
+      <header className="glass-chrome z-30 shrink-0 border-b border-sky-200/10">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between px-3 sm:px-5 lg:px-6">
           <div className="flex items-center gap-3">
             <div className="grid size-9 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-primary shadow-[0_0_32px_rgba(225,177,78,.12)]">
@@ -1750,7 +1753,7 @@ export default function Home() {
         </div>
       </header>
 
-      <nav className="shrink-0 border-b border-white/8 bg-black/20 px-2 py-2" aria-label="Trader workspace">
+      <nav className="glass-chrome shrink-0 border-b border-sky-200/10 px-2 py-2" aria-label="Trader workspace">
         <div className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto">
           {([
             ['desk', 'Desk', LineChart],
@@ -1775,12 +1778,79 @@ export default function Home() {
 
       <div id="workspace-scroll" className="mx-auto min-h-0 w-full max-w-[1800px] flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 lg:px-6">
         <section className={workspacePanel === 'desk' ? 'mb-5' : 'hidden'}>
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-primary">
-              <Sparkles className="size-3.5" /> Probability-weighted setup
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-primary">
+                <Sparkles className="size-3.5" /> Live decision workspace
+              </div>
+              <h1 className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Gold and silver trading desk</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Chart context, guarded setups and account-aware analytics in one blue-glass workspace.</p>
             </div>
-            <h1 className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Protect capital. Trade only the clearest setup.</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Live TradingView market context, a transparent rules-based strategy and strict manual risk sizing in one workspace.</p>
+            <div className="flex items-center gap-2 rounded-xl border border-sky-200/15 bg-sky-300/[.055] px-3 py-2 text-[11px] text-sky-100">
+              <span className="size-2 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(253,224,71,.7)]" />
+              MT5 account not connected
+            </div>
+          </div>
+        </section>
+
+        <section className={workspacePanel === 'desk' ? 'mb-4 grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]' : 'hidden'} aria-label="Trading desk overview">
+          <Card className="min-w-0 border-sky-300/20">
+            <CardHeader className="border-b border-sky-200/10 pb-3">
+              <CardTitle className="flex items-center gap-2"><CandlestickChart className="size-4 text-cyan-300" /> XAUUSD live chart</CardTitle>
+              <CardDescription>Account-independent market view · H1 by default</CardDescription>
+              <CardAction>
+                <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-200"><RadioTower className="size-3" /> LIVE</Badge>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="p-2 sm:p-3">
+              <div className="overflow-hidden rounded-xl border border-sky-200/12 bg-[#071525]/85">
+                <TradingViewChart
+                  key={`desk-${widgetRefresh}`}
+                  symbol="OANDA:XAUUSD"
+                  interval="60"
+                  label="Gold"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid content-start gap-4">
+            <Card className="border-cyan-300/20">
+              <CardHeader className="border-b border-sky-200/10 pb-3">
+                <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> MT5 account</CardTitle>
+                <CardDescription>Session-bound broker data</CardDescription>
+                <CardAction><Badge variant="outline" className="border-amber-300/25 text-amber-200">OFFLINE</Badge></CardAction>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
+                  <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> Account data waiting</div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">When the secure MT5 bridge is added, this panel will load only the account belonging to the signed-in session.</p>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {['Balance', 'Equity', 'Free margin', 'Open P/L'].map((label) => (
+                    <div key={label} className="rounded-lg border border-sky-200/10 bg-white/[.025] p-2.5">
+                      <p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">{label}</p>
+                      <p className="mt-1 font-mono text-sm text-sky-100">—</p>
+                    </div>
+                  ))}
+                </div>
+                <Button disabled className="mt-3 w-full border border-sky-300/15 bg-sky-300/10 text-sky-200 opacity-70">
+                  <PlugZap className="size-4" /> Connect after backend setup
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-sky-300/18" size="sm">
+              <CardContent>
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-300" />
+                  <div>
+                    <p className="text-xs font-medium text-sky-100">Prepared for account isolation</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Future balances, orders and history will be scoped by the authenticated account—not shared globally or stored in this browser UI.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </section>
 
