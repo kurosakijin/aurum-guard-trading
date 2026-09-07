@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowUpRight,
   Bot,
@@ -60,6 +60,7 @@ const timeframes = [
 ] as const;
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
+type WorkspacePanel = 'desk' | 'charts' | 'pine' | 'mt5' | 'guides' | 'risk';
 const pineScript = String.raw`//@version=6
 strategy("Aurum Guard Combined v54: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
@@ -1617,6 +1618,7 @@ sendAurumAlert(blowOffTop, "15M BLOW-OFF TOP: extended exhaustion candle confirm
 sendAurumAlert(blowOffBottom, "15M BLOW-OFF BOTTOM: extended exhaustion candle confirmed; wait, this is not an automatic long")`;
 
 export default function Home() {
+  const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>('desk');
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
   const [widgetRefresh, setWidgetRefresh] = useState(0);
@@ -1630,6 +1632,28 @@ export default function Home() {
   const [target, setTarget] = useState(4931.6);
   const [planCreated, setPlanCreated] = useState(false);
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
+
+  useEffect(() => {
+    const syncPanelFromHash = () => {
+      const hash = window.location.hash;
+      if (hash === '#live-chart') setWorkspacePanel('charts');
+      else if (hash === '#pine-script') setWorkspacePanel('pine');
+      else if (hash === '#mt5-bot') setWorkspacePanel('mt5');
+      else if (hash === '#chart-guide' || hash === '#fibonacci-guide' || hash === '#reversal-playbook') setWorkspacePanel('guides');
+      else if (hash === '#risk-plan' || hash === '#news' || hash === '#news-radar') setWorkspacePanel('risk');
+    };
+    syncPanelFromHash();
+    window.addEventListener('hashchange', syncPanelFromHash);
+    return () => window.removeEventListener('hashchange', syncPanelFromHash);
+  }, []);
+
+  function openWorkspace(panel: WorkspacePanel, hash = panel) {
+    setWorkspacePanel(panel);
+    window.history.replaceState(null, '', `#${hash}`);
+    window.requestAnimationFrame(() => {
+      document.getElementById('workspace-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
 
   function runScan() {
     setScanning(true);
@@ -1674,9 +1698,9 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
-      <header className="sticky top-0 z-30 border-b border-white/8 bg-background/88 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[1800px] items-center justify-between px-4 sm:px-6 lg:px-8">
+    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+      <header className="z-30 shrink-0 border-b border-white/8 bg-background/92 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between px-3 sm:px-5 lg:px-6">
           <div className="flex items-center gap-3">
             <div className="grid size-9 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-primary shadow-[0_0_32px_rgba(225,177,78,.12)]">
               <Bot className="size-5" />
@@ -1694,26 +1718,29 @@ export default function Home() {
             <span className="flex items-center gap-2"><Clock3 className="size-3.5" /> Live charts · paper signals</span>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href="#mt5-bot"
+            <button
+              type="button"
+              onClick={() => openWorkspace('mt5', 'mt5-bot')}
               className="hidden h-9 items-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/[.07] px-3 text-xs font-medium text-emerald-200 transition hover:bg-emerald-300/10 lg:inline-flex"
             >
               <Bot className="size-4" /> MT5 bot
-            </a>
-            <a
-              href="#news-radar"
+            </button>
+            <button
+              type="button"
+              onClick={() => openWorkspace('risk', 'news-radar')}
               className="hidden h-9 items-center gap-2 rounded-lg border border-red-300/25 bg-red-300/[.07] px-3 text-xs font-medium text-red-200 transition hover:bg-red-300/10 sm:inline-flex"
             >
               <Newspaper className="size-4" /> News radar
-            </a>
-            <a
-              href="#pine-script"
+            </button>
+            <button
+              type="button"
+              onClick={() => openWorkspace('pine', 'pine-script')}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-medium text-primary transition hover:bg-primary/15"
             >
               <Code2 className="size-4" />
               <span className="hidden sm:inline">One Pine Script</span>
               <span className="sm:hidden">Script</span>
-            </a>
+            </button>
             <Button variant="outline" className="border-white/10 bg-white/[.03] text-xs" onClick={runScan} disabled={scanning}>
               <RefreshCw className={scanning ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">{scanning ? 'Refreshing' : 'Refresh live data'}</span>
@@ -1723,8 +1750,31 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mb-5">
+      <nav className="shrink-0 border-b border-white/8 bg-black/20 px-2 py-2" aria-label="Trader workspace">
+        <div className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto">
+          {([
+            ['desk', 'Desk', LineChart],
+            ['charts', 'Charts', CandlestickChart],
+            ['pine', 'Pine strategy', Code2],
+            ['mt5', 'MT5', Bot],
+            ['guides', 'Guides', BookOpenCheck],
+            ['risk', 'Risk & news', ShieldCheck],
+          ] as const).map(([panel, label, Icon]) => (
+            <button
+              key={panel}
+              type="button"
+              onClick={() => openWorkspace(panel, panel === 'charts' ? 'live-chart' : panel === 'pine' ? 'pine-script' : panel === 'mt5' ? 'mt5-bot' : panel === 'guides' ? 'chart-guide' : panel === 'risk' ? 'news-radar' : 'desk')}
+              className={`flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition ${workspacePanel === panel ? 'border-primary/35 bg-primary/12 text-primary shadow-[0_0_24px_rgba(225,177,78,.08)]' : 'border-transparent text-muted-foreground hover:border-white/10 hover:bg-white/[.04] hover:text-foreground'}`}
+              aria-pressed={workspacePanel === panel}
+            >
+              <Icon className="size-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      <div id="workspace-scroll" className="mx-auto min-h-0 w-full max-w-[1800px] flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 lg:px-6">
+        <section className={workspacePanel === 'desk' ? 'mb-5' : 'hidden'}>
           <div>
             <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-primary">
               <Sparkles className="size-3.5" /> Probability-weighted setup
@@ -1734,9 +1784,11 @@ export default function Home() {
           </div>
         </section>
 
-        <NewsSpikeRadar />
+        <div className={workspacePanel === 'risk' ? 'block' : 'hidden'}>
+          <NewsSpikeRadar />
+        </div>
 
-        <section className="mb-4" aria-labelledby="combined-script-heading">
+        <section className={workspacePanel === 'desk' ? 'mb-4' : 'hidden'} aria-labelledby="combined-script-heading">
           <Card className="overflow-hidden border-fuchsia-300/25 bg-[linear-gradient(110deg,rgba(192,132,252,.12),rgba(225,177,78,.08)_52%,rgba(18,22,27,.96))] shadow-[0_20px_70px_rgba(0,0,0,.22)]">
             <CardContent className="flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="max-w-4xl">
@@ -1771,7 +1823,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section id="mt5-bot" className="mb-4 scroll-mt-20" aria-labelledby="mt5-bot-heading">
+        <section id="mt5-bot" className={workspacePanel === 'mt5' ? 'mb-4' : 'hidden'} aria-labelledby="mt5-bot-heading">
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
@@ -1967,7 +2019,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section id="chart-guide" className="mb-4" aria-labelledby="chart-guide-heading">
+        <section id="chart-guide" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="chart-guide-heading">
           <Card className="overflow-hidden border-cyan-300/15 bg-[linear-gradient(145deg,rgba(34,211,238,.055),rgba(18,22,27,.96)_42%)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="chart-guide-heading" className="flex items-center gap-2 text-lg"><BookOpenCheck className="size-5 text-cyan-300" /> How to read the chart</CardTitle>
@@ -2181,7 +2233,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section id="fibonacci-guide" className="mb-4" aria-labelledby="fibonacci-guide-heading">
+        <section id="fibonacci-guide" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="fibonacci-guide-heading">
           <Card className="border-yellow-300/18 bg-[linear-gradient(145deg,rgba(250,204,21,.07),rgba(168,85,247,.045)_48%,rgba(18,22,27,.97))]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="fibonacci-guide-heading" className="flex items-center gap-2 text-lg"><Crosshair className="size-5 text-yellow-300" /> Automatic Fibonacci pullback map</CardTitle>
@@ -2232,7 +2284,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section id="live-chart" className="mb-4">
+        <section id="live-chart" className={workspacePanel === 'charts' ? 'mb-4' : 'hidden'}>
           <Card className="border-primary/15 bg-card/95 shadow-[0_30px_100px_rgba(0,0,0,.28)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -2309,7 +2361,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(360px,.72fr)_minmax(0,1.28fr)]">
+        <section className={workspacePanel === 'pine' ? 'grid gap-4 xl:grid-cols-[minmax(360px,.72fr)_minmax(0,1.28fr)]' : 'hidden'}>
           <div className="grid content-start gap-4">
             <Card className="border-emerald-400/15 bg-card/92">
               <CardHeader className="border-b border-white/7 pb-4">
@@ -2584,7 +2636,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section id="reversal-playbook" className="mt-4">
+        <section id="reversal-playbook" className={workspacePanel === 'guides' ? 'mt-4' : 'hidden'}>
           <Card className="border-fuchsia-400/15 bg-[linear-gradient(145deg,rgba(192,132,252,.08),rgba(18,22,27,.95)_45%)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><RotateCcw className="size-4 text-fuchsia-300" /> Gold reversal scalping playbook</CardTitle>
@@ -2625,7 +2677,7 @@ export default function Home() {
 
         </section>
 
-        <section className="mt-4 grid gap-4 xl:grid-cols-[.82fr_1.18fr]">
+        <section className={workspacePanel === 'risk' ? 'mt-4 grid gap-4 xl:grid-cols-[.82fr_1.18fr]' : 'hidden'}>
           <Card id="risk-plan" className="border-emerald-400/12 bg-card/92">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Calculator className="size-4 text-emerald-300" /> Manual risk-first position plan</CardTitle>
@@ -2743,7 +2795,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section className="mt-4 grid gap-4 lg:grid-cols-3">
+        <section className={workspacePanel === 'desk' ? 'mt-4 grid gap-4 lg:grid-cols-3' : 'hidden'}>
           {[
             {
               icon: LineChart,
@@ -2777,7 +2829,7 @@ export default function Home() {
           ))}
         </section>
 
-        <div className="mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border border-white/8 bg-white/[.025] px-4 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center">
+        <div className={workspacePanel === 'desk' ? 'mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border border-white/8 bg-white/[.025] px-4 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center' : 'hidden'}>
           <span>TradingView supplies the live quote, chart and technical rating; provider latency may apply. The Pine strategy is a testable ruleset—not financial advice or a profit guarantee.</span>
           <a href="#risk-plan" className="flex items-center gap-1 text-foreground hover:text-primary">Review risk controls <ChevronDown className="size-3" /></a>
         </div>
