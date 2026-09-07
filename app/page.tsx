@@ -98,6 +98,60 @@ const historicalPoc30mBars: readonly HistoricalBar[] = [
   ['03:00',4466.0,4477.1,4464.9,4475.1,3142],['03:30',4475.2,4478.2,4471.0,4477.1,3029],
 ];
 
+const historicalSilverConfirmCloses = [
+  65.780,65.765,65.885,65.960,65.900,65.905,65.915,65.925,65.965,66.015,65.940,65.885,65.865,65.860,65.950,65.930,
+  65.885,65.920,65.890,65.935,66.230,66.275,66.180,66.295,66.300,66.310,66.270,66.315,66.585,66.455,66.520,66.675,
+] as const;
+
+function MetalsSyncStudy() {
+  const gold = historicalFlowBars;
+  const silver = historicalSilverConfirmCloses;
+  const left = 50, right = 1145, top = 58, goldBottom = 342, syncTop = 395, syncBottom = 520;
+  const x = (index: number) => left + index * ((right-left)/(gold.length-1));
+  const goldLow = Math.min(...gold.map((bar) => bar[3]));
+  const goldHigh = Math.max(...gold.map((bar) => bar[2]));
+  const goldPad = (goldHigh-goldLow)*0.08;
+  const gy = (price: number) => top + ((goldHigh+goldPad-price)/(goldHigh-goldLow+goldPad*2))*(goldBottom-top);
+  const goldReturns = gold.map((bar) => (bar[4]/gold[0][4]-1)*100);
+  const silverReturns = silver.map((close) => (close/silver[0]-1)*100);
+  const returnLow = Math.min(...goldReturns,...silverReturns)-0.08;
+  const returnHigh = Math.max(...goldReturns,...silverReturns)+0.08;
+  const ry = (value: number) => syncTop + ((returnHigh-value)/(returnHigh-returnLow))*(syncBottom-syncTop);
+  const goldPoints = goldReturns.map((value,index) => `${x(index)},${ry(value)}`).join(' ');
+  const silverPoints = silverReturns.map((value,index) => `${x(index)},${ry(value)}`).join(' ');
+  const syncStart = 20;
+
+  return (
+    <svg viewBox="0 0 1200 575" role="img" aria-label="Historical gold chart with silver directional confirmation" className="h-full w-full bg-[#0b0e18]">
+      <rect width="1200" height="575" fill="#0b0e18" />
+      <text x="50" y="28" fill="#f8fafc" fontSize="14" fontWeight="700">PRIMARY · GC GOLD FUTURES · 15m</text>
+      <text x="1145" y="28" textAnchor="end" fill="#64748b" fontSize="10">SILVER CONFIRMS ONLY · HISTORICAL SEP 02–03, 2026 UTC</text>
+      {Array.from({length:5},(_,index)=>goldLow-goldPad+index*((goldHigh-goldLow+goldPad*2)/4)).map((price)=><line key={price} x1={left} y1={gy(price)} x2={right} y2={gy(price)} stroke="#293247" opacity=".48"/>)}
+      <rect x={x(syncStart)-12} y={top} width={right-x(syncStart)+12} height={goldBottom-top} fill="#10b981" opacity=".055" />
+      {gold.map((bar,index)=>{
+        const [,open,high,low,close]=bar;
+        const up=close>=open;
+        const color=up?'#26a69a':'#ef5350';
+        const candleWidth=Math.max(5,((right-left)/gold.length)*.58);
+        return <g key={`sync-candle-${index}`}><line x1={x(index)} y1={gy(high)} x2={x(index)} y2={gy(low)} stroke={color} strokeWidth="1.3"/><rect x={x(index)-candleWidth/2} y={gy(Math.max(open,close))} width={candleWidth} height={Math.max(2,Math.abs(gy(open)-gy(close)))} fill={color}/></g>;
+      })}
+      <line x1={x(syncStart)} y1={top+8} x2={x(syncStart)} y2={syncBottom} stroke="#34d399" strokeDasharray="6 5" opacity=".8" />
+      <rect x={x(syncStart)+10} y="70" width="210" height="42" rx="6" fill="#06251f" stroke="#34d399" strokeOpacity=".65" />
+      <text x={x(syncStart)+22} y="88" fill="#6ee7b7" fontSize="10" fontWeight="700">SYNCED BULLISH</text>
+      <text x={x(syncStart)+22} y="103" fill="#94a3b8" fontSize="9">Gold leads · silver agrees after close</text>
+
+      <rect x={left} y={syncTop-22} width={right-left} height={syncBottom-syncTop+34} rx="7" fill="#080c16" stroke="#293247" />
+      <line x1={left} y1={ry(0)} x2={right} y2={ry(0)} stroke="#475569" strokeDasharray="5 5" />
+      <polyline points={goldPoints} fill="none" stroke="#facc15" strokeWidth="2.5" />
+      <polyline points={silverPoints} fill="none" stroke="#94a3b8" strokeWidth="2" />
+      <text x={left+10} y={syncTop-5} fill="#facc15" fontSize="10" fontWeight="700">GOLD % MOVE</text>
+      <text x={left+105} y={syncTop-5} fill="#cbd5e1" fontSize="10" fontWeight="700">SILVER % MOVE</text>
+      <text x={right-8} y={syncTop-5} textAnchor="end" fill="#6ee7b7" fontSize="10" fontWeight="700">SAME DIRECTION = CONFIRM · DIVERGENCE = WAIT</text>
+      {[0,8,16,24,31].map((index)=><text key={`sync-time-${index}`} x={x(index)} y="553" textAnchor={index===0?'start':index===31?'end':'middle'} fill="#64748b" fontSize="9">{gold[index][0]}</text>)}
+    </svg>
+  );
+}
+
 const historicalReversalBars: readonly HistoricalBar[] = [
   ['Aug 14 04:00',4379.2,4380.5,4378.4,4378.6,176],['04:05',4378.4,4380.4,4378.3,4379.4,150],['04:10',4379.6,4382.7,4378.8,4381.7,237],['04:15',4381.2,4383,4380.9,4382,107],
   ['04:20',4382.2,4384.6,4381.3,4382.4,262],['04:25',4382.2,4382.7,4380.2,4380.2,103],['04:30',4380.7,4381.2,4378.4,4379.6,309],['04:35',4379.5,4380.6,4379.1,4380.1,82],
@@ -2696,6 +2750,24 @@ export default function Home() {
                 </div>
               </div>
               </div>
+              </div>
+
+              <div className="mb-6 overflow-hidden rounded-2xl border border-yellow-300/18 bg-[linear-gradient(145deg,rgba(250,204,21,.055),rgba(148,163,184,.035),rgba(4,19,38,.72))]">
+                <div className="flex flex-col gap-2 border-b border-yellow-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-yellow-100">Gold + Silver directional confirmation</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Gold is always the primary setup chart. Silver is a secondary confirmation and never creates the entry by itself.</p>
+                  </div>
+                  <Badge className="w-fit border border-emerald-300/25 bg-emerald-300/10 text-emerald-200">CLOSED-CANDLE SYNC</Badge>
+                </div>
+                <div className="aspect-[2.08/1] min-h-[300px] overflow-hidden">
+                  <MetalsSyncStudy />
+                </div>
+                <div className="grid gap-2 border-t border-yellow-200/10 bg-black/15 px-4 py-3 md:grid-cols-3">
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-emerald-200">BULLISH SYNC:</span> gold confirms the long structure and silver also closes with bullish direction/momentum.</p>
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-red-200">BEARISH SYNC:</span> gold confirms the short structure and silver also closes with bearish direction/momentum.</p>
+                  <p className="text-[10px] leading-4 text-muted-foreground"><span className="font-semibold text-amber-200">NOT SYNCED:</span> opposite direction, flat confirmation, stale data or an unfinished candle means wait—never force a trade.</p>
+                </div>
               </div>
 
               <div className="overflow-hidden rounded-2xl border border-cyan-300/18 bg-[#041326]/65">
