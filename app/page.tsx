@@ -2096,7 +2096,9 @@ export default function Home() {
               <CardDescription>Read ACTION first. If it says WAIT, do not treat anything else as an entry.</CardDescription>
               <CardAction><Badge className="border border-lime-300/20 bg-lime-300/10 text-lime-200">SIMPLE MODE</Badge></CardAction>
             </CardHeader>
-            <CardContent className="grid gap-4 pt-4 xl:grid-cols-[1.15fr_.85fr]">
+            <CardContent className="pt-4">
+              <div className="hidden" aria-hidden="true">
+              <div className="grid gap-4 xl:grid-cols-[1.15fr_.85fr]">
               <div className="rounded-xl border border-lime-300/20 bg-lime-300/[.045] p-4 xl:col-span-2">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
@@ -2298,6 +2300,82 @@ export default function Home() {
                 <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] p-3 text-[10px] leading-4 text-muted-foreground">
                   <p><span className="font-semibold text-amber-200">Important:</span> HH/HL/LH/LL and liquidity levels use confirmed pivots, so they appear after the swing is confirmed. Blue circles disappear when you click empty chart space or press Esc.</p>
                 </div>
+              </div>
+              </div>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-cyan-300/18 bg-[#041326]/65">
+                <div className="flex flex-col gap-2 border-b border-cyan-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-cyan-100">Visual setup map</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Follow the numbered pointers from left to right. This is an educational example—not live market data.</p>
+                  </div>
+                  <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">15M–1H SETUP</Badge>
+                </div>
+
+                <div className="relative aspect-[16/9] overflow-hidden">
+                  <img
+                    src="/chart-guide-flow-v1.png"
+                    alt="Illustrated candlestick setup showing consolidation and POC, a liquidity sweep, bullish displacement, a POC retest, entry, stop loss and take profit"
+                    width="1672"
+                    height="940"
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+
+                  <div className="pointer-events-none absolute left-[8%] top-[9%] hidden sm:block">
+                    <div className="rounded-lg border border-cyan-300/30 bg-[#041426]/90 px-3 py-2 shadow-xl backdrop-blur-md">
+                      <p className="text-[10px] font-bold text-cyan-200">1 · CONSOLIDATION + POC</p>
+                      <p className="mt-0.5 text-[9px] text-slate-300">No trade inside the range</p>
+                    </div>
+                    <span className="ml-9 block h-24 w-px bg-gradient-to-b from-cyan-300 to-transparent" />
+                  </div>
+
+                  <div className="pointer-events-none absolute bottom-[7%] left-[48%] hidden sm:flex sm:flex-col sm:items-center">
+                    <span className="block h-16 w-px bg-gradient-to-t from-orange-300 to-transparent" />
+                    <div className="rounded-lg border border-orange-300/30 bg-[#1d1220]/90 px-3 py-2 text-center shadow-xl backdrop-blur-md">
+                      <p className="text-[10px] font-bold text-orange-200">2 · MANIPULATION SWEEP</p>
+                      <p className="mt-0.5 text-[9px] text-slate-300">Wait for price to reclaim the range</p>
+                    </div>
+                  </div>
+
+                  <div className="pointer-events-none absolute left-[57%] top-[7%] hidden sm:block">
+                    <div className="rounded-lg border border-violet-300/30 bg-[#100d2a]/90 px-3 py-2 shadow-xl backdrop-blur-md">
+                      <p className="text-[10px] font-bold text-violet-200">3 · DISTRIBUTION / MOVE</p>
+                      <p className="mt-0.5 text-[9px] text-slate-300">Strong displacement—do not chase</p>
+                    </div>
+                    <span className="ml-12 block h-20 w-px bg-gradient-to-b from-violet-300 to-transparent" />
+                  </div>
+
+                  <div className="pointer-events-none absolute right-[7%] top-[38%] hidden sm:flex sm:items-center">
+                    <div className="rounded-lg border border-emerald-300/30 bg-[#06231f]/90 px-3 py-2 text-right shadow-xl backdrop-blur-md">
+                      <p className="text-[10px] font-bold text-emerald-200">4 · CONFIRMED ENTRY</p>
+                      <p className="mt-0.5 text-[9px] text-slate-300">POC retest defended · SL below · TP above</p>
+                    </div>
+                    <span className="block h-px w-12 bg-gradient-to-r from-emerald-300 to-transparent" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ['1', 'Mark the range', 'Find sideways price action and the POC—the level where the most activity is concentrated. Wait while price remains inside.'],
+                  ['2', 'Watch the sweep', 'Price briefly takes liquidity outside the range. The sweep alone is not an entry; require a close back and directional evidence.'],
+                  ['3', 'Let the move develop', 'A strong displacement shows which side gained control. Do not chase the expansion candle; wait for the return.'],
+                  ['4', 'Enter after defense', 'Trade only after the POC/retest area is defended on a completed candle. Place SL beyond structure and project TP from risk.'],
+                ].map(([number, title, description]) => (
+                  <div key={number} className="rounded-xl border border-sky-200/12 bg-[#06182b]/42 p-4">
+                    <div className="grid size-7 place-items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 text-[10px] font-bold text-cyan-100">{number}</div>
+                    <p className="mt-3 text-xs font-semibold text-sky-100">{title}</p>
+                    <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-amber-300/18 bg-amber-300/[.045] p-3"><p className="text-[10px] font-semibold text-amber-200">WAIT</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Inside consolidation, during the sweep, or while price is moving away without a retest.</p></div>
+                <div className="rounded-xl border border-emerald-300/18 bg-emerald-300/[.045] p-3"><p className="text-[10px] font-semibold text-emerald-200">ENTRY POSSIBLE</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Only after the retest is defended and the completed candle agrees with the direction filters.</p></div>
+                <div className="rounded-xl border border-red-300/18 bg-red-300/[.045] p-3"><p className="text-[10px] font-semibold text-red-200">INVALID</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Price closes back through the defended structure, volatility shocks, or Gold/Silver confirmation fails.</p></div>
               </div>
             </CardContent>
           </Card>
