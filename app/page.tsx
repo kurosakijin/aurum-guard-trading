@@ -2497,6 +2497,7 @@ export default function Home() {
               </CardAction>
             </CardHeader>
             <CardContent className="pt-4">
+              <div className="hidden" aria-hidden="true">
               <div className="mb-4 flex flex-col gap-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[.045] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex gap-3">
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-cyan-300/15 bg-cyan-300/10 text-cyan-200">
@@ -2702,6 +2703,67 @@ export default function Home() {
               </div>
 
               <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Gold/Silver sync, shock, failure flips and bad-entry warnings are reactive rules—not forecasts. In this Pine section, “automatic” means simulated strategy orders and alerts inside TradingView. The separate MT5 EA above is the executable version and remains demo-locked by default. Fast markets can gap through SL, create slippage and stop the replacement trade too.</p>
+              </div>
+
+              <div className="rounded-xl border border-sky-300/18 bg-sky-300/[.045] p-4 sm:p-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="max-w-3xl">
+                    <p className="text-xs font-semibold uppercase tracking-[.12em] text-cyan-200">What the combined strategy does</p>
+                    <h3 className="mt-2 font-heading text-lg font-semibold text-sky-50">Waits for agreement, confirms the entry, then manages three profit targets</h3>
+                    <p className="mt-2 text-[11px] leading-5 text-muted-foreground">Aurum Guard combines trend, reversal, liquidity and risk rules. It does not buy or sell from one indicator alone. Every signal is evaluated after the candle closes, then rejected if market direction, Gold/Silver agreement, volatility or available price room is unsuitable.</p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.07em]">
+                    <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Pine v6</Badge>
+                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v54</Badge>
+                    <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">Paper strategy</Badge>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
+                  {['Read trend', 'Check liquidity', 'Wait for pullback', 'Confirm candle', 'Place SL + TP1–TP3', 'Monitor trade'].map((step, index) => (
+                    <div key={step} className="flex items-center gap-1.5">
+                      {index > 0 && <span className="text-cyan-300/55">→</span>}
+                      <span className="rounded-md border border-cyan-300/15 bg-[#06182b]/55 px-2 py-1.5 text-cyan-50">{step}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {[
+                  ['1 · Market direction', 'Uses EMA structure, RSI and confirmed higher-timeframe candles. Gold and Silver must agree before a directional setup is allowed.'],
+                  ['2 · Entry confirmation', 'P1 waits for a defended trend pullback. Reversal setups require a liquidity sweep and rejection. M15/H1 can use the range → POC → sweep → displacement → retest sequence.'],
+                  ['3 · Trade plan', 'A confirmed signal draws Entry, structural Stop Loss, TP1 at 1R, TP2 at 1.5R and TP3 at 2.14R. TP1 banks 50%; TP2 and TP3 retain 25% each.'],
+                  ['4 · Safety response', 'Shock candles, opening gaps, crowded liquidity or unsynced metals produce WAIT. A stopped or completed plan is cleared before the strategy scans for a genuinely fresh setup.'],
+                ].map(([title, description]) => (
+                  <div key={title} className="rounded-xl border border-sky-200/12 bg-[#06182b]/38 p-4">
+                    <p className="text-xs font-semibold text-sky-100">{title}</p>
+                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">{description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div className="rounded-xl border border-white/8 bg-white/[.025] p-4">
+                  <p className="text-xs font-semibold text-foreground">How to read its output</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div><span className="text-[10px] font-semibold text-emerald-300">BUY / SELL</span><p className="mt-1 text-[10px] leading-4 text-muted-foreground">All required conditions confirmed on a completed candle.</p></div>
+                    <div><span className="text-[10px] font-semibold text-amber-200">WATCH / WAIT</span><p className="mt-1 text-[10px] leading-4 text-muted-foreground">A setup may be forming, but entry is not approved.</p></div>
+                    <div><span className="text-[10px] font-semibold text-fuchsia-300">SHOCK / AVOID</span><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Volatility or bad-entry protection is blocking new trades.</p></div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
+                    {scriptCopied ? <Check /> : <Clipboard />}
+                    {scriptCopied ? 'Script copied' : 'Copy full Pine script'}
+                  </Button>
+                  <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
+                    <Button variant="outline" className="w-full border-sky-300/15 bg-sky-300/[.05]">Open TradingView <ExternalLink /></Button>
+                  </a>
+                </div>
+              </div>
+
+              <p className="mt-4 text-[10px] leading-4 text-muted-foreground">Use 1m–5m for lower-timeframe pullback and recovery logic; use 15m or 1H for the slower consolidation/POC sequence. Signals are conditional and cannot guarantee a profitable outcome. The complete source stays available through “Copy full Pine script” without filling this page with thousands of lines.</p>
             </CardContent>
           </Card>
         </section>
