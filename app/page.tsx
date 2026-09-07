@@ -151,38 +151,56 @@ function GoldReversalChartGuide() {
   );
 }
 
-type PatternKind = 'falling-wedge' | 'ascending-triangle' | 'bull-rectangle' | 'inverse-hs' | 'head-shoulders' | 'descending-triangle';
+type PatternKind = 'staircase' | 'ascending-triangle' | 'descending-triangle' | 'symmetrical-triangle' | 'flag' | 'wedge' | 'double-top' | 'double-bottom' | 'head-shoulders' | 'rounded' | 'cup-handle';
+type PatternBias = 'BUY' | 'SELL' | 'BOTH';
 
-const patternPlaybook: Array<{ kind: PatternKind; name: string; side: 'BUY' | 'SELL'; trigger: string; invalidation: string }> = [
-  { kind: 'falling-wedge', name: 'Falling wedge', side: 'BUY', trigger: 'Close above the upper wedge, then hold the retest.', invalidation: 'Below the last compression low.' },
-  { kind: 'ascending-triangle', name: 'Ascending triangle', side: 'BUY', trigger: 'Close above resistance; enter on hold or clean retest.', invalidation: 'Below the latest higher low.' },
-  { kind: 'bull-rectangle', name: 'Bullish rectangle', side: 'BUY', trigger: 'Range high breaks after an established upward impulse.', invalidation: 'Back inside the range or below its low.' },
-  { kind: 'inverse-hs', name: 'Inverse head & shoulders', side: 'BUY', trigger: 'Neckline closes above after the right shoulder forms.', invalidation: 'Below the right shoulder.' },
-  { kind: 'head-shoulders', name: 'Head & shoulders', side: 'SELL', trigger: 'Neckline closes below after the right shoulder forms.', invalidation: 'Above the right shoulder.' },
-  { kind: 'descending-triangle', name: 'Descending triangle', side: 'SELL', trigger: 'Support closes below; enter after rejection on retest.', invalidation: 'Above the latest lower high.' },
+const patternPlaybook: Array<{ kind: PatternKind; name: string; family: string; side: PatternBias; trigger: string; invalidation: string }> = [
+  { kind: 'staircase', name: '1 · Ascending / descending staircase', family: 'Trend structure', side: 'BOTH', trigger: 'Trade pullbacks only while higher-high/higher-low or lower-high/lower-low structure remains intact.', invalidation: 'The latest protected swing breaks.' },
+  { kind: 'ascending-triangle', name: '2 · Ascending triangle', family: 'Continuation', side: 'BUY', trigger: 'A candle closes above horizontal resistance; prefer a hold or retest.', invalidation: 'Below the latest higher low.' },
+  { kind: 'descending-triangle', name: '3 · Descending triangle', family: 'Continuation', side: 'SELL', trigger: 'A candle closes below horizontal support; prefer a rejected retest.', invalidation: 'Above the latest lower high.' },
+  { kind: 'symmetrical-triangle', name: '4 · Symmetrical triangle', family: 'Bilateral / continuation', side: 'BOTH', trigger: 'Wait for either converging boundary to break on a completed candle.', invalidation: 'Price closes back through the opposite side.' },
+  { kind: 'flag', name: '5 · Flag', family: 'Continuation', side: 'BOTH', trigger: 'After a strong impulse and slow countertrend channel, trade the breakout with the original trend.', invalidation: 'Beyond the far side of the flag.' },
+  { kind: 'wedge', name: '6 · Wedge', family: 'Breakout / reversal', side: 'BOTH', trigger: 'Trade only after price closes outside the tightening wedge; falling favors up, rising favors down.', invalidation: 'Beyond the latest internal swing.' },
+  { kind: 'double-top', name: '7 · Double top', family: 'Bearish reversal', side: 'SELL', trigger: 'The neckline between the two peaks closes below.', invalidation: 'Above the second peak.' },
+  { kind: 'double-bottom', name: '8 · Double bottom', family: 'Bullish reversal', side: 'BUY', trigger: 'The resistance between the two lows closes above.', invalidation: 'Below the second low.' },
+  { kind: 'head-shoulders', name: '9 · Head & shoulders', family: 'Bearish reversal', side: 'SELL', trigger: 'The neckline closes below after the lower right shoulder forms.', invalidation: 'Above the right shoulder.' },
+  { kind: 'rounded', name: '10 · Rounded top / bottom', family: 'Slow reversal', side: 'BOTH', trigger: 'Wait for the curved transition to complete and its rim level to break.', invalidation: 'Beyond the final structural swing.' },
+  { kind: 'cup-handle', name: '11 · Cup and handle', family: 'Bullish reversal', side: 'BUY', trigger: 'The handle completes and price closes above the cup rim.', invalidation: 'Below the handle low.' },
 ];
 
-function PatternMiniChart({ kind, side }: { kind: PatternKind; side: 'BUY' | 'SELL' }) {
-  const bullish = side === 'BUY';
-  const accent = bullish ? '#34d399' : '#fb7185';
+function PatternMiniChart({ kind, side }: { kind: PatternKind; side: PatternBias }) {
+  const bullish = side !== 'SELL';
+  const accent = side === 'BOTH' ? '#60a5fa' : bullish ? '#34d399' : '#fb7185';
   const patternPoints: Record<PatternKind, number[]> = {
-    'falling-wedge': [38, 54, 43, 65, 52, 76, 64, 83, 72, 48, 30, 18],
+    'staircase': [92, 72, 82, 60, 70, 48, 58, 36, 46, 24, 32, 12],
     'ascending-triangle': [82, 40, 70, 40, 59, 40, 50, 36, 18, 8],
-    'bull-rectangle': [82, 56, 28, 44, 30, 46, 28, 44, 26, 10, 4],
-    'inverse-hs': [40, 64, 45, 82, 42, 65, 41, 32, 14, 5],
-    'head-shoulders': [68, 40, 57, 16, 56, 38, 62, 70, 88, 96],
     'descending-triangle': [18, 60, 34, 60, 43, 60, 50, 62, 82, 94],
+    'symmetrical-triangle': [18, 88, 30, 76, 42, 66, 50, 60, 54, 34, 14, 6],
+    'flag': [94, 54, 18, 30, 26, 42, 36, 50, 44, 22, 8],
+    'wedge': [24, 52, 34, 68, 48, 78, 62, 84, 70, 48, 24, 10],
+    'double-top': [86, 58, 24, 48, 68, 42, 28, 52, 70, 86, 98],
+    'double-bottom': [18, 44, 82, 54, 34, 58, 78, 52, 30, 14, 6],
+    'head-shoulders': [76, 42, 58, 18, 56, 38, 62, 74, 90, 100],
+    'rounded': [20, 34, 52, 70, 84, 91, 88, 74, 54, 30, 12, 5],
+    'cup-handle': [22, 48, 72, 86, 82, 68, 44, 22, 34, 46, 30, 10],
   };
   const boundaryPaths: Record<PatternKind, string[]> = {
-    'falling-wedge': ['M20 28 L168 70', 'M22 72 L168 88'],
+    'staircase': ['M16 96 L202 20', 'M32 84 L218 8'],
     'ascending-triangle': ['M38 40 L188 40', 'M22 88 L184 47'],
-    'bull-rectangle': ['M58 25 L190 25', 'M58 50 L190 50'],
-    'inverse-hs': ['M20 38 L180 38'],
-    'head-shoulders': ['M18 66 L180 66'],
     'descending-triangle': ['M18 62 L188 62', 'M20 12 L184 54'],
+    'symmetrical-triangle': ['M18 12 L182 58', 'M18 96 L182 58'],
+    'flag': ['M70 20 L184 44', 'M70 42 L184 66'],
+    'wedge': ['M18 14 L178 68', 'M18 82 L178 88'],
+    'double-top': ['M18 70 L180 70'],
+    'double-bottom': ['M18 34 L180 34'],
+    'head-shoulders': ['M18 70 L180 70'],
+    'rounded': ['M18 22 L190 22'],
+    'cup-handle': ['M18 22 L202 22'],
   };
-  const entryY = bullish ? 31 : 69;
-  const stopY = bullish ? 56 : 44;
+  const entryLevels: Record<PatternKind, number> = { staircase: 32, 'ascending-triangle': 36, 'descending-triangle': 66, 'symmetrical-triangle': 34, flag: 28, wedge: 44, 'double-top': 74, 'double-bottom': 30, 'head-shoulders': 74, rounded: 22, 'cup-handle': 22 };
+  const stopLevels: Record<PatternKind, number> = { staircase: 58, 'ascending-triangle': 62, 'descending-triangle': 42, 'symmetrical-triangle': 62, flag: 52, wedge: 70, 'double-top': 48, 'double-bottom': 58, 'head-shoulders': 46, rounded: 54, 'cup-handle': 50 };
+  const entryY = entryLevels[kind];
+  const stopY = stopLevels[kind];
   const points = patternPoints[kind];
   const candles: GuideCandle[] = points.map((closeY, index) => {
     const x = 18 + index * (212 / Math.max(1, points.length - 1));
@@ -199,8 +217,8 @@ function PatternMiniChart({ kind, side }: { kind: PatternKind; side: 'BUY' | 'SE
       <GuideCandles candles={candles} />
       <line x1="176" y1={entryY} x2="242" y2={entryY} stroke={accent} strokeWidth="1.5" />
       <line x1="176" y1={stopY} x2="242" y2={stopY} stroke="#fb7185" strokeWidth="1.25" strokeDasharray="5 4" />
-      <circle cx="205" cy={bullish ? 18 : 82} r="5" fill="#070b1c" stroke={accent} strokeWidth="2.5" />
-      <text x="181" y={entryY - 4} fill={accent} fontSize="8" fontWeight="700">CLOSE + RETEST</text>
+      <circle cx="205" cy={points[points.length - 2]} r="5" fill="#070b1c" stroke={accent} strokeWidth="2.5" />
+      <text x="178" y={entryY - 4} fill={accent} fontSize="8" fontWeight="700">BREAK + RETEST</text>
       <text x="213" y={stopY - 4} fill="#fda4af" fontSize="8" fontWeight="700">SL</text>
     </svg>
   );
@@ -2523,17 +2541,17 @@ export default function Home() {
         <section id="pattern-playbook" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="pattern-playbook-heading">
           <Card className="border-sky-300/16 bg-[linear-gradient(145deg,rgba(14,165,233,.065),rgba(18,22,27,.97)_42%)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle id="pattern-playbook-heading" className="flex items-center gap-2 text-lg"><LineChart className="size-5 text-sky-300" /> Confirmed chart-pattern playbook</CardTitle>
-              <CardDescription>Use patterns as structure—not prediction. The setup becomes actionable only after a completed breakout and preferably a defended retest.</CardDescription>
-              <CardAction><Badge className="border border-sky-300/20 bg-sky-300/10 text-sky-200">15M–1H CONTEXT</Badge></CardAction>
+              <CardTitle id="pattern-playbook-heading" className="flex items-center gap-2 text-lg"><LineChart className="size-5 text-sky-300" /> 11 chart patterns · candlestick playbook</CardTitle>
+              <CardDescription>Eleven sourced pattern categories, redrawn as candles. Use them as structure—not prediction—and wait for a completed breakout.</CardDescription>
+              <CardAction><a href="https://www.forex.com/en/learn-trading/11-chart-patterns-you-should-know/" target="_blank" rel="noreferrer"><Badge className="border border-sky-300/20 bg-sky-300/10 text-sky-200">FOREX.COM SOURCE <ExternalLink className="size-3" /></Badge></a></CardAction>
             </CardHeader>
             <CardContent className="pt-4">
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {patternPlaybook.map((pattern) => (
                   <div key={pattern.kind} className="overflow-hidden rounded-xl border border-white/8 bg-black/15 p-3">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-foreground">{pattern.name}</p>
-                      <Badge className={pattern.side === 'BUY' ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-200' : 'border border-red-300/20 bg-red-300/10 text-red-200'}>{pattern.side} BIAS</Badge>
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                      <div><p className="text-xs font-semibold text-foreground">{pattern.name}</p><p className="mt-1 text-[9px] uppercase tracking-[.1em] text-muted-foreground">{pattern.family}</p></div>
+                      <Badge className={pattern.side === 'BUY' ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-200' : pattern.side === 'SELL' ? 'border border-red-300/20 bg-red-300/10 text-red-200' : 'border border-blue-300/20 bg-blue-300/10 text-blue-200'}>{pattern.side} BIAS</Badge>
                     </div>
                     <PatternMiniChart kind={pattern.kind} side={pattern.side} />
                     <div className="mt-3 grid gap-2 text-[10px] leading-4">
