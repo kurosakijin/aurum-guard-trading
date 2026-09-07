@@ -2306,41 +2306,6 @@ export default function Home() {
           <NewsSpikeRadar />
         </div>
 
-        <section className={workspacePanel === 'desk' ? 'mb-4' : 'hidden'} aria-labelledby="combined-script-heading">
-          <Card className="overflow-hidden border-fuchsia-300/25 bg-[linear-gradient(110deg,rgba(192,132,252,.12),rgba(225,177,78,.08)_52%,rgba(18,22,27,.96))] shadow-[0_20px_70px_rgba(0,0,0,.22)]">
-            <CardContent className="flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-4xl">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="border border-fuchsia-300/25 bg-fuchsia-300/10 text-fuchsia-200">FREE PLAN READY</Badge>
-                  <Badge variant="outline" className="border-primary/25 text-primary">1 SCRIPT SLOT</Badge>
-                  <Badge variant="outline" className="border-lime-300/25 text-lime-200">SIMPLE MODE DEFAULT</Badge>
-                  <Badge variant="outline" className="border-cyan-300/25 text-cyan-200">1H PRECISION ENTRY</Badge>
-                  <Badge variant="outline" className="border-purple-300/25 text-purple-200">1M AUTO RECOVERY</Badge>
-                  <Badge variant="outline" className="border-emerald-300/25 text-emerald-300">TP1 / TP2 / TP3 + SL</Badge>
-                  <Badge variant="outline" className="border-orange-300/25 text-orange-200">BAD ENTRY GUARD</Badge>
-                  <Badge variant="outline" className="border-sky-300/25 text-sky-200">DEFENDED PULLBACK ENTRY</Badge>
-                  <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">SHOCK CIRCUIT BREAKER</Badge>
-                  <Badge variant="outline" className="border-lime-300/25 text-lime-200">GOLD + SILVER SYNC</Badge>
-                  <Badge variant="outline" className="border-red-300/25 text-red-200">SMART TRADE HEALTH</Badge>
-                  <Badge variant="outline" className="border-yellow-300/25 text-yellow-200">AUTO FIB GOLDEN ZONE</Badge>
-                  <Badge variant="outline" className="border-fuchsia-300/25 text-fuchsia-200">15M MANIPULATION + BLOW-OFF</Badge>
-                </div>
-                <h2 id="combined-script-heading" className="mt-3 font-heading text-lg font-semibold tracking-tight sm:text-xl">One script ranks confirmed setups and checks both metals</h2>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">A moving-average cross is now watch-only. P1 requires a completed pullback followed by a strong reclaim candle; P2–P3 remain reversal and controlled-reset setups. Gold and Silver must still agree before any direction becomes actionable.</p>
-              </div>
-              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
-                  {scriptCopied ? <Check /> : <Clipboard />}
-                  {scriptCopied ? 'Combined script copied' : 'Copy combined script'}
-                </Button>
-                <a href="#pine-script" className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[.035] px-4 text-xs font-medium text-foreground transition hover:bg-white/[.07]">
-                  View full script <ArrowUpRight className="size-3.5" />
-                </a>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
         <section id="mt5-bot" className={workspacePanel === 'mt5' ? 'mb-4' : 'hidden'} aria-labelledby="mt5-bot-heading">
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
@@ -3351,11 +3316,7 @@ export default function Home() {
                     <div><span className="text-[10px] font-semibold text-fuchsia-300">SHOCK / AVOID</span><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Volatility or bad-entry protection is blocking new trades.</p></div>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={copyStrategy}>
-                    {scriptCopied ? <Check /> : <Clipboard />}
-                    {scriptCopied ? 'Script copied' : 'Copy full Pine script'}
-                  </Button>
+                <div>
                   <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                     <Button variant="outline" className="w-full border-sky-300/15 bg-sky-300/[.05]">Open TradingView <ExternalLink /></Button>
                   </a>

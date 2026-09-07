@@ -70,6 +70,8 @@ export function TradingViewChart({
       'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.type = 'text/javascript';
     script.async = true;
+    const isGoldChart = symbol === 'OANDA:XAUUSD';
+
     script.text = JSON.stringify({
       autosize: true,
       symbol,
@@ -84,7 +86,8 @@ export function TradingViewChart({
       hide_side_toolbar: isMobile,
       hide_top_toolbar: isMobile,
       hide_legend: isMobile,
-      hide_volume: isMobile,
+      hide_volume: isGoldChart || isMobile,
+      studies: isGoldChart ? ['STD;RSI'] : [],
       allow_symbol_change: !isMobile,
       save_image: false,
       calendar: false,
