@@ -183,30 +183,31 @@ function HistoricalFibonacciStudy() {
   );
 }
 
-function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' }) {
-  const bars = mode === 'flow' ? historicalPoc30mBars : historicalReversalBars;
-  const chartLeft = mode === 'flow' ? 170 : 42, chartRight = 1002, chartTop = 55, chartBottom = 482, volumeTop = 510, volumeBottom = 606;
+function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuation' }) {
+  const isContinuation = mode === 'continuation';
+  const bars = isContinuation ? historicalPoc30mBars : mode === 'flow' ? historicalFlowBars : historicalReversalBars;
+  const chartLeft = isContinuation ? 170 : 42, chartRight = 1002, chartTop = 55, chartBottom = 482, volumeTop = 510, volumeBottom = 606;
   const flowTarget = 4479.8;
   const rawLow = Math.min(...bars.map((bar) => bar[3]));
-  const rawHigh = Math.max(...bars.map((bar) => bar[2]), mode === 'flow' ? flowTarget : -Infinity);
+  const rawHigh = Math.max(...bars.map((bar) => bar[2]), isContinuation ? flowTarget : -Infinity);
   const padding = (rawHigh - rawLow) * 0.08;
   const low = rawLow - padding, high = rawHigh + padding;
   const maxVolume = Math.max(...bars.map((bar) => bar[5]));
   const x = (index: number) => chartLeft + index * ((chartRight - chartLeft) / (bars.length - 1));
   const y = (price: number) => chartTop + ((high - price) / (high - low)) * (chartBottom - chartTop);
   const tickPrices = Array.from({ length: 6 }, (_, i) => high - i * ((high - low) / 5));
-  const rangeStart = mode === 'flow' ? 2 : 6;
-  const rangeEnd = mode === 'flow' ? 8 : 17;
-  const sweepIndex = mode === 'flow' ? 9 : 18;
-  const confirmationIndex = mode === 'flow' ? 10 : 22;
-  const rangeHigh = mode === 'flow' ? 4438.2 : 4382.2;
-  const rangeLow = mode === 'flow' ? 4427.3 : 4371.9;
-  const poc = mode === 'flow' ? 4433.7 : 4379.4;
-  const entry = mode === 'flow' ? 4447.1 : 4380.0;
-  const stop = mode === 'flow' ? 4431.8 : 4364.8;
-  const target = mode === 'flow' ? flowTarget : 4392.0;
-  const label = mode === 'flow' ? 'GC=F · 30m · Sep 02–03, 2026' : 'GC=F · 5m · Aug 14, 2026';
-  const profileBins = mode === 'flow' ? Array.from({ length: 11 }, (_, index) => {
+  const rangeStart = isContinuation ? 2 : mode === 'flow' ? 4 : 6;
+  const rangeEnd = isContinuation ? 8 : mode === 'flow' ? 13 : 17;
+  const sweepIndex = isContinuation ? 9 : mode === 'flow' ? 14 : 18;
+  const confirmationIndex = isContinuation ? 10 : mode === 'flow' ? 20 : 22;
+  const rangeHigh = mode === 'reversal' ? 4382.2 : 4438.2;
+  const rangeLow = mode === 'reversal' ? 4371.9 : 4427.3;
+  const poc = mode === 'reversal' ? 4379.4 : 4433.7;
+  const entry = isContinuation ? 4447.1 : mode === 'flow' ? 4438.2 : 4380.0;
+  const stop = isContinuation ? 4431.8 : mode === 'flow' ? 4426.2 : 4364.8;
+  const target = isContinuation ? flowTarget : mode === 'flow' ? 4461.2 : 4392.0;
+  const label = isContinuation ? 'GC=F · 30m · Sep 02–03, 2026' : mode === 'flow' ? 'GC=F · 15m · Sep 02–03, 2026' : 'GC=F · 5m · Aug 14, 2026';
+  const profileBins = isContinuation ? Array.from({ length: 11 }, (_, index) => {
     const binLow = rangeLow + index * ((rangeHigh - rangeLow) / 11);
     const binHigh = rangeLow + (index + 1) * ((rangeHigh - rangeLow) / 11);
     const activity = bars.slice(rangeStart, rangeEnd + 1).reduce((total, bar) => {
@@ -225,7 +226,7 @@ function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' }) {
       {tickPrices.map((price) => <g key={price}><line x1={chartLeft} y1={y(price)} x2={chartRight} y2={y(price)} stroke="#293247" strokeWidth="1" opacity=".55"/><text x="1018" y={y(price)+4} fill="#94a3b8" fontSize="10">{price.toFixed(1)}</text></g>)}
       {bars.map((bar, index) => index % 4 === 0 ? <line key={`time-${index}`} x1={x(index)} y1={chartTop} x2={x(index)} y2={volumeBottom} stroke="#293247" opacity=".28"/> : null)}
 
-      {mode === 'flow' && <g aria-label="Consolidation volume profile">
+      {isContinuation && <g aria-label="Consolidation volume profile">
         <text x="32" y={y(rangeHigh)-12} fill="#94a3b8" fontSize="9" fontWeight="700">RANGE VOLUME PROFILE</text>
         {profileBins.map((bin, index) => {
           const width = 112 * (bin.activity / maxProfileActivity);
@@ -251,12 +252,12 @@ function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' }) {
         return <g key={`${time}-${index}`}><line x1={x(index)} y1={y(barHigh)} x2={x(index)} y2={y(barLow)} stroke={color} strokeWidth="1.4"/><rect x={x(index)-candleWidth/2} y={bodyTop} width={candleWidth} height={bodyHeight} fill={color}/><rect x={x(index)-candleWidth/2} y={volumeBottom-volumeHeight} width={candleWidth} height={volumeHeight} fill={color} opacity=".42"/></g>;
       })}
 
-      <line x1={x(sweepIndex)} y1={y(mode === 'flow' ? bars[sweepIndex][4] : bars[sweepIndex][3])} x2={x(sweepIndex)} y2={volumeTop-8} stroke="#fb923c" strokeWidth="1.5" strokeDasharray="5 4" />
-      <circle cx={x(sweepIndex)} cy={y(mode === 'flow' ? bars[sweepIndex][4] : bars[sweepIndex][3])} r="5" fill="#0b0e18" stroke="#fb923c" strokeWidth="2.5" />
-      <text x={x(sweepIndex)-8} y={volumeTop-14} textAnchor="middle" fill="#fdba74" fontSize="10" fontWeight="700">{mode === 'flow' ? '2 · BREAKOUT CLOSE' : '2 · LIQUIDITY SWEEP'}</text>
-      {mode === 'flow' && <><circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][3])} r="6" fill="#0b0e18" stroke="#facc15" strokeWidth="2.5"/><text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][3])+18} fill="#fde047" fontSize="9" fontWeight="700">3 · PULLBACK TESTS POC</text></>}
+      <line x1={x(sweepIndex)} y1={y(isContinuation ? bars[sweepIndex][4] : bars[sweepIndex][3])} x2={x(sweepIndex)} y2={volumeTop-8} stroke="#fb923c" strokeWidth="1.5" strokeDasharray="5 4" />
+      <circle cx={x(sweepIndex)} cy={y(isContinuation ? bars[sweepIndex][4] : bars[sweepIndex][3])} r="5" fill="#0b0e18" stroke="#fb923c" strokeWidth="2.5" />
+      <text x={x(sweepIndex)-8} y={volumeTop-14} textAnchor="middle" fill="#fdba74" fontSize="10" fontWeight="700">{isContinuation ? '2 · BREAKOUT CLOSE' : '2 · LIQUIDITY SWEEP'}</text>
+      {isContinuation && <><circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][3])} r="6" fill="#0b0e18" stroke="#facc15" strokeWidth="2.5"/><text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][3])+18} fill="#fde047" fontSize="9" fontWeight="700">3 · PULLBACK TESTS POC</text></>}
       <circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][4])} r="5" fill="#0b0e18" stroke="#34d399" strokeWidth="2.5" />
-      <text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][4])-12} fill="#6ee7b7" fontSize="10" fontWeight="700">{mode === 'flow' ? '4 · CONTINUATION ENTRY' : '3 · CLOSED CONFIRMATION'}</text>
+      <text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][4])-12} fill="#6ee7b7" fontSize="10" fontWeight="700">{isContinuation ? '4 · CONTINUATION ENTRY' : '3 · CLOSED CONFIRMATION'}</text>
 
       <line x1={x(confirmationIndex)} y1={y(entry)} x2={chartRight} y2={y(entry)} stroke="#34d399" strokeWidth="1.5" />
       <line x1={x(confirmationIndex)} y1={y(stop)} x2={chartRight} y2={y(stop)} stroke="#fb7185" strokeWidth="1.5" strokeDasharray="7 5" />
@@ -2700,10 +2701,10 @@ export default function Home() {
               <div className="overflow-hidden rounded-2xl border border-cyan-300/18 bg-[#041326]/65">
                 <div className="flex flex-col gap-2 border-b border-cyan-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-cyan-100">30-minute consolidation → POC → breakout → pullback → continuation</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Real GC gold-futures 30-minute candles aggregated from historical 15-minute OHLC and volume. The left profile estimates where the range traded most actively.</p>
+                    <p className="text-xs font-semibold text-cyan-100">Historical range → sweep → confirmation study</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Real GC gold-futures 15-minute OHLC and volume from Sep 2–3, 2026. Labels are our retrospective study.</p>
                   </div>
-                  <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">30M CONTINUATION</Badge>
+                  <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">15M–1H SETUP</Badge>
                 </div>
 
                 <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
@@ -2713,10 +2714,10 @@ export default function Home() {
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                  ['1', 'Build the 30m range', 'Mark the consolidation and estimate its volume-profile POC—the price with the most activity. Do not trade while price remains inside.'],
-                  ['2', 'Require a breakout close', 'A wick outside the range is not enough. Price must close beyond the boundary with convincing displacement.'],
-                  ['3', 'Wait for the pullback', 'Do not chase the breakout candle. Let price revisit the broken boundary or POC area and watch whether it is defended.'],
-                  ['4', 'Enter continuation', 'Entry becomes possible only after a completed rejection candle resumes the breakout direction. SL belongs beyond the pullback structure; TP is risk-based.'],
+                  ['1', 'Mark the range', 'Find sideways price action and the POC—the level where the most activity is concentrated. Wait while price remains inside.'],
+                  ['2', 'Watch the sweep', 'Price briefly takes liquidity outside the range. The sweep alone is not an entry; require a close back and directional evidence.'],
+                  ['3', 'Let the move develop', 'A strong displacement shows which side gained control. Do not chase the expansion candle; wait for the return.'],
+                  ['4', 'Enter after defense', 'Trade only after the POC/retest area is defended on a completed candle. Place SL beyond structure and project TP from risk.'],
                 ].map(([number, title, description]) => (
                   <div key={number} className="rounded-xl border border-sky-200/12 bg-[#06182b]/42 p-4">
                     <div className="grid size-7 place-items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 text-[10px] font-bold text-cyan-100">{number}</div>
@@ -2727,9 +2728,41 @@ export default function Home() {
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-amber-300/18 bg-amber-300/[.045] p-3"><p className="text-[10px] font-semibold text-amber-200">WAIT</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Inside the range, on a wick-only breakout, or while price is moving away without a pullback.</p></div>
-                <div className="rounded-xl border border-emerald-300/18 bg-emerald-300/[.045] p-3"><p className="text-[10px] font-semibold text-emerald-200">ENTRY POSSIBLE</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Only after breakout, pullback and a completed continuation candle agree with the higher-timeframe direction.</p></div>
-                <div className="rounded-xl border border-red-300/18 bg-red-300/[.045] p-3"><p className="text-[10px] font-semibold text-red-200">INVALID</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Price closes back through the range/POC, the pullback structure fails, or high-impact news distorts the setup.</p></div>
+                <div className="rounded-xl border border-amber-300/18 bg-amber-300/[.045] p-3"><p className="text-[10px] font-semibold text-amber-200">WAIT</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Inside consolidation, during the sweep, or while price is moving away without a retest.</p></div>
+                <div className="rounded-xl border border-emerald-300/18 bg-emerald-300/[.045] p-3"><p className="text-[10px] font-semibold text-emerald-200">ENTRY POSSIBLE</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Only after the retest is defended and the completed candle agrees with the direction filters.</p></div>
+                <div className="rounded-xl border border-red-300/18 bg-red-300/[.045] p-3"><p className="text-[10px] font-semibold text-red-200">INVALID</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Price closes back through the defended structure, volatility shocks, or Gold/Silver confirmation fails.</p></div>
+              </div>
+
+              <div className="mt-6 overflow-hidden rounded-2xl border border-yellow-300/18 bg-[#041326]/65">
+                <div className="flex flex-col gap-2 border-b border-yellow-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-yellow-100">30-minute consolidation → POC → breakout → pullback → continuation</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Additional setup using real GC gold-futures 30-minute candles aggregated from historical 15-minute OHLC and volume. The left profile estimates the range POC.</p>
+                  </div>
+                  <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">30M CONTINUATION</Badge>
+                </div>
+                <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
+                  <HistoricalGoldStudy mode="continuation" />
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ['1', 'Build the 30m range', 'Mark consolidation and its estimated volume-profile POC. No trade while candles remain inside the range.'],
+                  ['2', 'Require a breakout close', 'A wick outside is insufficient. Require a completed candle beyond the range with convincing displacement.'],
+                  ['3', 'Wait for the pullback', 'Do not chase. Let price revisit the broken boundary or POC and show that the level is defended.'],
+                  ['4', 'Enter continuation', 'Entry becomes possible after a completed rejection candle resumes the breakout direction. Put SL beyond pullback structure and use a risk-based TP.'],
+                ].map(([number, title, description]) => (
+                  <div key={`continuation-${number}`} className="rounded-xl border border-yellow-200/12 bg-yellow-300/[.025] p-4">
+                    <div className="grid size-7 place-items-center rounded-full border border-yellow-300/25 bg-yellow-300/10 text-[10px] font-bold text-yellow-100">{number}</div>
+                    <p className="mt-3 text-xs font-semibold text-yellow-100">{title}</p>
+                    <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-amber-300/18 bg-amber-300/[.04] p-3 text-[10px] leading-4 text-muted-foreground">
+                <span className="font-semibold text-amber-200">Continuation rule:</span> stay out during the range, the first breakout candle and an unconfirmed pullback. If price closes back inside the range or through the POC instead of defending it, the setup is invalid—not an automatic reverse trade.
               </div>
             </CardContent>
           </Card>
