@@ -542,7 +542,7 @@ function FibonacciChartGuide() {
 }
 
 const pineScript = String.raw`//@version=6
-strategy("Aurum Guard Combined v56: Trend + Reversal", overlay = true, pyramiding = 0,
+strategy("Aurum Guard Combined v57: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 0.5,
@@ -641,6 +641,7 @@ planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 20
 showAutoFibonacci = input.bool(true, "Show automatic swing Fibonacci", group = "Automatic Fibonacci")
 showFibonacciLabels = input.bool(false, "Show Fibonacci level names", group = "Automatic Fibonacci")
 showFibonacciRejections = input.bool(true, "Mark confirmed golden-zone rejection", group = "Automatic Fibonacci")
+carryFibonacciAcrossSessions = input.bool(true, "Carry confirmed swings across session breaks", group = "Automatic Fibonacci")
 fibonacciProjectionBars = input.int(35, "Project levels for bars", minval = 10, maxval = 200, group = "Automatic Fibonacci")
 fibonacciSignalCooldown = input.int(5, "Bars between rejection watches", minval = 1, maxval = 50, group = "Automatic Fibonacci")
 
@@ -826,15 +827,39 @@ if not na(pivotLow)
     previousPivotLow := pivotLow
     previousPivotLowBar := bar_index - pivotLength
 
-// Automatic Fibonacci map uses only confirmed pivots. For a bullish markup,
-// 0% sits at the swing high and 100% at the swing low so the numbered levels
-// measure the pullback. A bearish markup is mirrored from low back to high.
-fibReady = showAutoFibonacci and not na(previousPivotHigh) and not na(previousPivotLow) and not na(previousPivotHighBar) and not na(previousPivotLowBar) and previousPivotHigh != previousPivotLow
-fibBullishMove = fibReady and previousPivotHighBar > previousPivotLowBar
-fibBearishMove = fibReady and previousPivotLowBar > previousPivotHighBar
-fibAnchorZero = fibBullishMove ? previousPivotHigh : fibBearishMove ? previousPivotLow : na
-fibAnchorOne = fibBullishMove ? previousPivotLow : fibBearishMove ? previousPivotHigh : na
-fibRange = math.abs(previousPivotHigh - previousPivotLow)
+// Automatic Fibonacci map has its own persistent confirmed-pivot memory. With
+// cross-session carry enabled (default), an overnight, weekend or broker-session
+// gap does not erase the active swing. A newer confirmed pivot replaces only its
+// matching anchor, so the map keeps scanning the pullback after trading resumes.
+expectedBarMilliseconds = timeframe.in_seconds() * 1000
+fibonacciSessionBreak = timeframe.isintraday and not na(time[1]) and time - time[1] > expectedBarMilliseconds * 3
+var float fibonacciPivotHigh = na
+var float fibonacciPivotLow = na
+var int fibonacciPivotHighBar = na
+var int fibonacciPivotLowBar = na
+
+if fibonacciSessionBreak and not carryFibonacciAcrossSessions
+    fibonacciPivotHigh := na
+    fibonacciPivotLow := na
+    fibonacciPivotHighBar := na
+    fibonacciPivotLowBar := na
+
+if not na(pivotHigh)
+    fibonacciPivotHigh := pivotHigh
+    fibonacciPivotHighBar := bar_index - pivotLength
+
+if not na(pivotLow)
+    fibonacciPivotLow := pivotLow
+    fibonacciPivotLowBar := bar_index - pivotLength
+
+// For a bullish markup, 0% sits at the swing high and 100% at the swing low.
+// A bearish markup is mirrored from low back to high.
+fibReady = showAutoFibonacci and not na(fibonacciPivotHigh) and not na(fibonacciPivotLow) and not na(fibonacciPivotHighBar) and not na(fibonacciPivotLowBar) and fibonacciPivotHigh != fibonacciPivotLow
+fibBullishMove = fibReady and fibonacciPivotHighBar > fibonacciPivotLowBar
+fibBearishMove = fibReady and fibonacciPivotLowBar > fibonacciPivotHighBar
+fibAnchorZero = fibBullishMove ? fibonacciPivotHigh : fibBearishMove ? fibonacciPivotLow : na
+fibAnchorOne = fibBullishMove ? fibonacciPivotLow : fibBearishMove ? fibonacciPivotHigh : na
+fibRange = math.abs(fibonacciPivotHigh - fibonacciPivotLow)
 
 getFibPrice(level) =>
     fibAnchorZero + (fibAnchorOne - fibAnchorZero) * level
@@ -1912,7 +1937,7 @@ if barstate.islast
         fibGoldenBox := na
 
     if fibReady
-        fibStartBar = math.min(previousPivotHighBar, previousPivotLowBar)
+        fibStartBar = math.min(fibonacciPivotHighBar, fibonacciPivotLowBar)
         fibEndBar = bar_index + fibonacciProjectionBars
         fibLevels = array.from(0.0, 0.236, 0.382, 0.500, 0.618, 0.705, 0.786, 1.0)
         fibNames = array.from("0% · SWING EXTREME", "23.6% · WEAK RETRACEMENT", "38.2% · TREND CONTINUATION", "50% · SMART MONEY REACTION", "61.8% · GOLDEN ENTRY", "70.5% · SNIPER ENTRY", "78.6% · DEEP RETRACEMENT", "100% · FULL RETRACEMENT")
@@ -3168,7 +3193,7 @@ export default function Home() {
 
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v56</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v57</CardTitle>
               <CardDescription>One free-plan script slot · M15/H1 four-stage POC cycle + Gold/Silver sync + three take-profit levels + strategy-compatible alerts</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
@@ -3200,7 +3225,7 @@ export default function Home() {
 
               <div className="mb-4 rounded-xl border border-orange-300/20 bg-orange-300/[.045] p-4 text-[10px] leading-5 text-muted-foreground">
                 <p className="font-semibold text-orange-100">Important: TradingView does not automatically sync website updates.</p>
-                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v56</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
+                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v57</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
@@ -3224,8 +3249,8 @@ export default function Home() {
               <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.045] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
-                    <p className="text-xs font-semibold text-cyan-100">v56 · compact chart defaults and cleaner warnings</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">A lower-timeframe P1 now needs the previous completed 15m and 1H candles to agree on direction through their 20/50 EMA structure and RSI. The defended pullback must also have at least 1.5R of space before the next confirmed pivot liquidity level. A technically valid but crowded setup displays WAIT · NO ROOM instead of BUY or SELL.</p>
+                    <p className="text-xs font-semibold text-cyan-100">v57 · session-continuous Fibonacci scanning</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Confirmed Fibonacci swing anchors now remain active across overnight, weekend and broker-session gaps. When trading resumes, the script continues scanning the same pullback and replaces an anchor only after a newer pivot is confirmed.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
                     {['15m agrees', '1H agrees', 'Pullback defended', '≥ 1.5R room', 'BUY / SELL P1'].map((step, index) => (
@@ -3395,7 +3420,7 @@ export default function Home() {
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.07em]">
                     <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Pine v6</Badge>
-                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v56</Badge>
+                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v57</Badge>
                     <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">Paper strategy</Badge>
                   </div>
                 </div>
@@ -3414,7 +3439,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="max-w-3xl">
                     <p className="text-xs font-semibold text-yellow-100">Compact volume profile by default</p>
-                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v56 keeps the important context without covering the candles. Yellow emphasizes the POC; cyan dashed lines show the 70% value area. Fibonacci names and VAH/VAL text are hidden by default, while every detailed control remains available in Settings.</p>
+                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v57 keeps the important context without covering the candles. Yellow emphasizes the POC; cyan dashed lines show the 70% value area. Fibonacci names and VAH/VAL text are hidden by default, while every detailed control remains available in Settings.</p>
                   </div>
                   <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">POC + VAH + VAL</Badge>
                 </div>
