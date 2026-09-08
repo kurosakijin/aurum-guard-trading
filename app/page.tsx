@@ -89,14 +89,16 @@ const historicalFlowBars: readonly HistoricalBar[] = [
 ];
 
 const historicalPoc30mBars: readonly HistoricalBar[] = [
-  ['Sep 02 19:00',4420.8,4429.7,4418.3,4427.6,1683],['19:30',4427.7,4437.9,4427.6,4437.7,3155],
-  ['20:00',4437.4,4438.2,4430.6,4433.2,1371],['20:30',4433.0,4437.7,4432.5,4434.3,874],
-  ['22:00',4436.4,4438.1,4432.6,4434.8,578],['22:30',4434.3,4434.7,4428.4,4429.8,820],
-  ['23:00',4430.2,4432.2,4427.3,4427.7,649],['23:30',4427.5,4434.4,4426.7,4431.0,1046],
-  ['Sep 03 00:00',4431.2,4438.0,4429.9,4432.5,1752],['00:30',4432.3,4442.9,4427.8,4440.5,1707],
-  ['01:00',4440.8,4454.7,4432.2,4447.1,6339],['01:30',4446.8,4457.6,4445.2,4455.0,2879],
-  ['02:00',4455.2,4461.2,4452.2,4457.1,2942],['02:30',4457.1,4466.2,4454.8,4466.0,3035],
-  ['03:00',4466.0,4477.1,4464.9,4475.1,3142],['03:30',4475.2,4478.2,4471.0,4477.1,3029],
+  ['Jul 24 07:30',4051.7,4056.3,4048.2,4051.1,1733],['08:00',4051.2,4055.3,4047.5,4054.9,1176],
+  ['08:30',4054.8,4061.5,4051.4,4060.0,1794],['09:00',4060.4,4064.0,4055.0,4055.6,2840],
+  ['09:30',4055.4,4062.6,4054.2,4062.6,1680],['10:00',4062.6,4066.6,4060.4,4064.5,1406],
+  ['10:30',4064.4,4067.0,4059.4,4062.2,1454],['11:00',4062.5,4065.9,4060.8,4061.6,1700],
+  ['11:30',4061.2,4063.9,4053.5,4060.2,2789],['12:00',4060.6,4062.9,4054.5,4062.1,2546],
+  ['12:30',4061.9,4062.1,4054.2,4058.5,2041],['13:00',4058.8,4061.0,4046.9,4048.8,4048],
+  ['13:30',4048.5,4071.5,4047.0,4070.0,6393],['14:00',4069.9,4073.0,4060.3,4068.9,7934],
+  ['14:30',4069.0,4071.1,4061.4,4066.2,3621],['15:00',4066.1,4085.2,4064.7,4077.9,11619],
+  ['15:30',4078.2,4082.5,4073.5,4079.9,5901],['16:00',4080.3,4080.9,4076.1,4076.6,2207],
+  ['16:30',4076.6,4076.6,4066.5,4069.5,3047],['17:00',4069.7,4072.8,4065.3,4071.3,6275],
 ];
 
 const historicalSilverConfirmCloses = [
@@ -252,7 +254,7 @@ function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuati
   const isStrongFlow = mode === 'strong-flow';
   const bars = isContinuation ? historicalPoc30mBars : isStrongFlow ? historicalStrongSweep15mBars : mode === 'flow' ? historicalFlowBars : historicalReversalBars;
   const chartLeft = isContinuation ? 170 : 42, chartRight = 1002, chartTop = 55, chartBottom = 482, volumeTop = 510, volumeBottom = 606;
-  const flowTarget = 4479.8;
+  const flowTarget = isContinuation ? 4094.7 : 4479.8;
   const rawLow = Math.min(...bars.map((bar) => bar[3]));
   const rawHigh = Math.max(...bars.map((bar) => bar[2]), isContinuation ? flowTarget : -Infinity);
   const padding = (rawHigh - rawLow) * 0.08;
@@ -261,17 +263,19 @@ function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuati
   const x = (index: number) => chartLeft + index * ((chartRight - chartLeft) / (bars.length - 1));
   const y = (price: number) => chartTop + ((high - price) / (high - low)) * (chartBottom - chartTop);
   const tickPrices = Array.from({ length: 6 }, (_, i) => high - i * ((high - low) / 5));
-  const rangeStart = isContinuation ? 2 : isStrongFlow ? 0 : mode === 'flow' ? 4 : 6;
-  const rangeEnd = isContinuation ? 8 : isStrongFlow ? 5 : mode === 'flow' ? 13 : 17;
-  const sweepIndex = isContinuation ? 9 : isStrongFlow ? 6 : mode === 'flow' ? 14 : 18;
-  const confirmationIndex = isContinuation ? 10 : isStrongFlow ? 7 : mode === 'flow' ? 20 : 22;
-  const rangeHigh = isStrongFlow ? 4384.6 : mode === 'reversal' ? 4382.2 : 4438.2;
-  const rangeLow = isStrongFlow ? 4371.9 : mode === 'reversal' ? 4371.9 : 4427.3;
-  const poc = isStrongFlow ? 4379.4 : mode === 'reversal' ? 4379.4 : 4433.7;
-  const entry = isContinuation ? 4447.1 : isStrongFlow ? 4384.7 : mode === 'flow' ? 4438.2 : 4380.0;
-  const stop = isContinuation ? 4431.8 : isStrongFlow ? 4365.3 : mode === 'flow' ? 4426.2 : 4364.8;
+  const rangeStart = isContinuation ? 0 : isStrongFlow ? 0 : mode === 'flow' ? 4 : 6;
+  const rangeEnd = isContinuation ? 10 : isStrongFlow ? 5 : mode === 'flow' ? 13 : 17;
+  const sweepIndex = isContinuation ? 11 : isStrongFlow ? 6 : mode === 'flow' ? 14 : 18;
+  const breakoutIndex = isContinuation ? 12 : sweepIndex;
+  const confirmationIndex = isContinuation ? 15 : isStrongFlow ? 7 : mode === 'flow' ? 20 : 22;
+  const pullbackIndex = isContinuation ? 14 : confirmationIndex;
+  const rangeHigh = isContinuation ? 4067.0 : isStrongFlow ? 4384.6 : mode === 'reversal' ? 4382.2 : 4438.2;
+  const rangeLow = isContinuation ? 4047.5 : isStrongFlow ? 4371.9 : mode === 'reversal' ? 4371.9 : 4427.3;
+  const poc = isContinuation ? 4059.5 : isStrongFlow ? 4379.4 : mode === 'reversal' ? 4379.4 : 4433.7;
+  const entry = isContinuation ? 4071.2 : isStrongFlow ? 4384.7 : mode === 'flow' ? 4438.2 : 4380.0;
+  const stop = isContinuation ? 4060.2 : isStrongFlow ? 4365.3 : mode === 'flow' ? 4426.2 : 4364.8;
   const target = isContinuation ? flowTarget : isStrongFlow ? 4392.0 : mode === 'flow' ? 4461.2 : 4392.0;
-  const label = isContinuation ? 'GC=F · 30m · Sep 02–03, 2026' : isStrongFlow ? 'GC=F · 15m · Aug 14, 2026' : mode === 'flow' ? 'GC=F · 15m · Sep 02–03, 2026' : 'GC=F · 5m · Aug 14, 2026';
+  const label = isContinuation ? 'GC=F · 30m · Jul 24, 2026' : isStrongFlow ? 'GC=F · 15m · Aug 14, 2026' : mode === 'flow' ? 'GC=F · 15m · Sep 02–03, 2026' : 'GC=F · 5m · Aug 14, 2026';
   const profileBins = isContinuation ? Array.from({ length: 11 }, (_, index) => {
     const binLow = rangeLow + index * ((rangeHigh - rangeLow) / 11);
     const binHigh = rangeLow + (index + 1) * ((rangeHigh - rangeLow) / 11);
@@ -317,12 +321,12 @@ function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuati
         return <g key={`${time}-${index}`}><line x1={x(index)} y1={y(barHigh)} x2={x(index)} y2={y(barLow)} stroke={color} strokeWidth="1.4"/><rect x={x(index)-candleWidth/2} y={bodyTop} width={candleWidth} height={bodyHeight} fill={color}/><rect x={x(index)-candleWidth/2} y={volumeBottom-volumeHeight} width={candleWidth} height={volumeHeight} fill={color} opacity=".42"/></g>;
       })}
 
-      <line x1={x(sweepIndex)} y1={y(isContinuation ? bars[sweepIndex][4] : bars[sweepIndex][3])} x2={x(sweepIndex)} y2={volumeTop-8} stroke="#fb923c" strokeWidth="1.5" strokeDasharray="5 4" />
-      <circle cx={x(sweepIndex)} cy={y(isContinuation ? bars[sweepIndex][4] : bars[sweepIndex][3])} r="5" fill="#0b0e18" stroke="#fb923c" strokeWidth="2.5" />
-      <text x={x(sweepIndex)-8} y={volumeTop-14} textAnchor="middle" fill="#fdba74" fontSize="10" fontWeight="700">{isContinuation ? '2 · BREAKOUT CLOSE' : '2 · LIQUIDITY SWEEP'}</text>
-      {isContinuation && <><circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][3])} r="6" fill="#0b0e18" stroke="#facc15" strokeWidth="2.5"/><text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][3])+18} fill="#fde047" fontSize="9" fontWeight="700">3 · PULLBACK TESTS POC</text></>}
+      <line x1={x(sweepIndex)} y1={y(bars[sweepIndex][3])} x2={x(sweepIndex)} y2={volumeTop-8} stroke="#fb923c" strokeWidth="1.5" strokeDasharray="5 4" />
+      <circle cx={x(sweepIndex)} cy={y(bars[sweepIndex][3])} r="5" fill="#0b0e18" stroke="#fb923c" strokeWidth="2.5" />
+      <text x={x(sweepIndex)-8} y={volumeTop-14} textAnchor="middle" fill="#fdba74" fontSize="10" fontWeight="700">2 · LIQUIDITY SWEEP</text>
+      {isContinuation && <><circle cx={x(breakoutIndex)} cy={y(bars[breakoutIndex][4])} r="6" fill="#0b0e18" stroke="#22d3ee" strokeWidth="2.5"/><text x={x(breakoutIndex)+9} y={y(bars[breakoutIndex][4])-14} fill="#67e8f9" fontSize="9" fontWeight="700">3 · BREAKOUT / RANGE RECLAIM</text><circle cx={x(pullbackIndex)} cy={y(bars[pullbackIndex][3])} r="6" fill="#0b0e18" stroke="#facc15" strokeWidth="2.5"/><text x={x(pullbackIndex)+10} y={y(bars[pullbackIndex][3])+18} fill="#fde047" fontSize="9" fontWeight="700">4 · PULLBACK HOLDS RANGE HIGH</text></>}
       <circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][4])} r="5" fill="#0b0e18" stroke="#34d399" strokeWidth="2.5" />
-      <text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][4])-12} fill="#6ee7b7" fontSize="10" fontWeight="700">{isContinuation ? '4 · CONTINUATION ENTRY' : isStrongFlow ? '3 · RECLAIM + DISPLACEMENT CLOSE' : '3 · CLOSED CONFIRMATION'}</text>
+      <text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][4])-12} fill="#6ee7b7" fontSize="10" fontWeight="700">{isContinuation ? '5 · CONTINUATION TRIGGER' : isStrongFlow ? '3 · RECLAIM + DISPLACEMENT CLOSE' : '3 · CLOSED CONFIRMATION'}</text>
 
       <line x1={x(confirmationIndex)} y1={y(entry)} x2={chartRight} y2={y(entry)} stroke="#34d399" strokeWidth="1.5" />
       <line x1={x(confirmationIndex)} y1={y(stop)} x2={chartRight} y2={y(stop)} stroke="#fb7185" strokeWidth="1.5" strokeDasharray="7 5" />
@@ -2989,7 +2993,7 @@ export default function Home() {
                 <div className="flex flex-col gap-2 border-b border-yellow-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs font-semibold text-yellow-100">30-minute consolidation → POC → breakout → pullback → continuation</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Additional setup using real GC gold-futures 30-minute candles aggregated from historical 15-minute OHLC and volume. The left profile estimates the range POC.</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Real GC gold-futures 30-minute candles from Jul 24, 2026. Price rotates across the range before a sell-side sweep, bullish reclaim, controlled pullback and second expansion.</p>
                   </div>
                   <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">30M CONTINUATION</Badge>
                 </div>
@@ -2998,12 +3002,13 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 {[
-                  ['1', 'Build the 30m range', 'Mark consolidation and its estimated volume-profile POC. No trade while candles remain inside the range.'],
-                  ['2', 'Require a breakout close', 'A wick outside is insufficient. Require a completed candle beyond the range with convincing displacement.'],
-                  ['3', 'Wait for the pullback', 'Do not chase. Let price revisit the broken boundary or POC and show that the level is defended.'],
-                  ['4', 'Enter continuation', 'Entry becomes possible after a completed rejection candle resumes the breakout direction. Put SL beyond pullback structure and use a risk-based TP.'],
+                  ['1', 'Build a real range', 'Require repeated rotation between both boundaries with overlapping candles. A one-direction drift is not consolidation.'],
+                  ['2', 'Mark the sweep', 'The final range candle probes below sell-side liquidity. Treat that as manipulation context, not an entry.'],
+                  ['3', 'Confirm the breakout', 'A high-volume bullish candle reclaims the full range and closes above its high. Do not chase that expansion.'],
+                  ['4', 'Inspect the pullback', 'Price returns into the broken range high, but closes near or above it instead of collapsing through the POC.'],
+                  ['5', 'Trigger continuation', 'A later candle breaks the pullback high. Put invalidation below pullback structure and size the target from actual risk.'],
                 ].map(([number, title, description]) => (
                   <div key={`continuation-${number}`} className="rounded-xl border border-yellow-200/12 bg-yellow-300/[.025] p-4">
                     <div className="grid size-7 place-items-center rounded-full border border-yellow-300/25 bg-yellow-300/10 text-[10px] font-bold text-yellow-100">{number}</div>
