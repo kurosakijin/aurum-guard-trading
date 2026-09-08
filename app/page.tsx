@@ -2520,12 +2520,12 @@ export default function Home() {
               <CardAction><Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-200">DEMO ENTRIES ON</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
-              <div>
+              <div className="grid content-start gap-4">
                 <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[.045] p-4">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-2xl">
-                      <p className="text-sm font-semibold text-emerald-100">A real MT5 Expert Advisor—not a browser trade button</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Version 1.90 removes daily profit, loss and trade-count quotas. Its POC sequence is intentionally limited to M15, M30 or H1—M1 is blocked because micro-noise can make this setup misleading. It identifies a tight range and estimates POC from broker tick volume, then waits for a liquidity sweep, directional displacement and a defended return to POC before entering. The stop sits beyond the sweep structure, but the order is refused if 0.01 lot would exceed the configured $2 money-risk cap. TP is projected at 2.14R. Gold/Silver agreement, spread, news and higher-timeframe shock protection remain active; there is no martingale or automatic revenge trade.</p>
+                      <p className="text-sm font-semibold text-emerald-100">MT5 Expert Advisor for demo testing</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Trades M15–H1 POC pullbacks with 0.01 lot, structural SL and a 2.14R target. M1 entries, martingale and revenge trading are disabled.</p>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <a
@@ -2546,12 +2546,12 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {[
-                    ['1 · Consolidation', 'On M15, M30 or H1, estimates the tick-volume POC inside a tight range. No trade inside the range.'],
-                    ['2 · Manipulation', 'Waits for a liquidity sweep beyond the range and a close back inside; either direction is possible.'],
-                    ['3 · Distribution', 'Requires directional displacement away from POC, then waits—no chasing the expansion candle.'],
-                    ['4 · POC entry', 'A defended return to POC permits 0.01 lot, a structural SL capped at $2, and a 2.14R TP.'],
+                    ['1 · Range', 'Find consolidation and estimate its tick-volume POC.'],
+                    ['2 · Sweep', 'Wait for price to take liquidity beyond the range.'],
+                    ['3 · Move', 'Confirm displacement; do not chase the breakout candle.'],
+                    ['4 · Entry', 'Enter only after a defended return to POC.'],
                   ].map(([title, description]) => (
                     <div key={title} className="rounded-xl border border-white/8 bg-black/15 p-3">
                       <p className="text-[10px] font-semibold text-emerald-200">{title}</p>
@@ -2560,23 +2560,17 @@ export default function Home() {
                   ))}
                 </div>
 
-                <div className="mt-4 rounded-xl border border-sky-300/20 bg-sky-300/[.04] p-4">
-                  <p className="text-xs font-semibold text-sky-100">Early-entry protection added</p>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The failed first BUY in your example was the type of entry that can occur when an EMA signal appears before buyers defend the pullback. The revised logic treats that first indication as a watch. It waits for price to retest, refuses a falling touch, and requires a completed reclaim candle before showing a confirmed entry. This may avoid some premature entries, but it also enters later and can miss fast reversals.</p>
-                </div>
-
-                <div className="mt-4 rounded-xl border border-violet-300/20 bg-violet-300/[.045] p-4">
+                <div className="rounded-xl border border-violet-300/20 bg-violet-300/[.045] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-xs font-semibold text-violet-100"><Sparkles className="size-3.5" /> AI approval—not an uncontrolled replacement</p>
+                    <p className="flex items-center gap-2 text-xs font-semibold text-violet-100"><Sparkles className="size-3.5" /> AI research status</p>
                     <Badge variant="outline" className="border-amber-300/25 text-amber-200">SHADOW ONLY</Badge>
                   </div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The model still ignores ordinary candles and scores only defended trend/pullback candidates. A shallow, regularized 300-tree ensemble evaluates 33 causal Gold/Silver, candle, volatility, trend and session features. Its protected-outcome label follows a 60-minute horizon, about 1R planned risk, 2.67R final reward, the EA’s staged stop protection, and an estimated 0.10R round-trip cost. Four expanding walk-forward checks use a 60-bar leakage gap, while regime drift remains fail-closed.</p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
                     {[
-                      ['74,353', 'Synchronized M1 bars'],
-                      ['3,878', 'Defended candidates'],
-                      ['4', 'Walk-forward folds'],
-                      ['3 / 4', 'Positive dev folds'],
+                      ['95', 'Test trades'],
+                      ['48.4%', 'Win rate'],
+                      ['+7.11R', 'Net after costs'],
+                      ['1.30', 'Profit factor'],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
                         <p className="font-heading text-sm font-semibold text-violet-100">{value}</p>
@@ -2584,58 +2578,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">The execution-aligned redesign improved the newest period, but it still marks itself <span className="font-semibold">FAILED RESEARCH GATE</span>. Development produced +6.52R across 473 non-overlapping trades, but profit factor was only 1.04, one fold lost, the lower confidence bound stayed negative, and drawdown reached 14.81R. Those failures matter more than the promising newest-period result.</p>
-                  <div className="mt-3 rounded-lg border border-red-300/20 bg-red-300/[.04] p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[10px] font-semibold text-red-100">AI expanding walk-forward shadow backtest</p>
-                      <Badge variant="outline" className="border-amber-300/25 text-amber-200">IMPROVED · STILL SHADOW</Badge>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
-                      {[
-                        ['95', 'Quarantine trades'],
-                        ['48.4%', 'Win rate'],
-                        ['+7.11R', 'Net after costs'],
-                        ['1.30', 'Profit factor'],
-                      ].map(([value, label]) => (
-                        <div key={label} className="rounded-md border border-white/7 bg-black/15 p-2">
-                          <p className="font-heading text-sm font-semibold text-red-100">{value}</p>
-                          <p className="mt-0.5 text-muted-foreground">{label}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Newest 582-candidate quarantine · 105 probability approvals · fixed 52.5% protected-outcome threshold · 0.10R estimated cost · 6.01R max drawdown. Its lower confidence bound remained negative, so this result does not authorize demo orders. The packaged snapshot makes the replay deterministic. It is an OHLC approximation—not exact MT5 ticks, fills, news behavior, or the full pending-retest state machine.</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.04] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><BookOpenCheck className="size-3.5" /> Learning dataset + candle guide</p>
-                    <Badge variant="outline" className="border-cyan-300/25 text-cyan-200">CAUSAL · CLOSED BARS</Badge>
-                  </div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The package can now export a broker-specific learning CSV with candle anatomy, Gold/Silver context and completed M5, M15 and H1 features. H1 describes regime, M15 checks setup risk, M5 adds retest context, and M1 supplies the final trigger. Future outcome fields are marked <span className="font-mono text-cyan-100">LABEL_ONLY</span> and are blocked from live inputs.</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
-                    {[
-                      ['H1', 'Regime'],
-                      ['M15', 'Risk / setup'],
-                      ['M5', 'Retest context'],
-                      ['M1', 'Closed trigger'],
-                    ].map(([timeframe, role]) => (
-                      <div key={timeframe} className="rounded-lg border border-white/8 bg-black/15 p-2.5 text-center">
-                        <p className="font-heading text-sm font-semibold text-cyan-100">{timeframe}</p>
-                        <p className="mt-0.5 text-[9px] text-muted-foreground">{role}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">The 45-feature multi-timeframe challenger was tested and rejected: development −34.43R with 0.80 profit factor; newest quarantine +0.92R with 1.04 profit factor. The stronger v5 model remains the active shadow champion. More features did not create a safer edge.</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <a href="./downloads/aurum-guard-ai/DATASET-GUIDE.md" download className="inline-flex h-8 items-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-3 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-300/15"><Download className="size-3.5" /> Dataset & candle guide</a>
-                    <a href="./downloads/aurum-guard-ai/READING-LIST.md" download className="inline-flex h-8 items-center gap-2 rounded-lg border border-white/10 bg-white/[.035] px-3 text-[10px] font-semibold text-foreground hover:bg-white/[.07]"><BookOpenCheck className="size-3.5" /> Books & data sources</a>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.04] p-4">
-                  <p className="flex items-center gap-2 text-xs font-semibold text-red-100"><LockKeyhole className="size-3.5" /> Live-account lock</p>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The EA refuses to initialize on a real-money account while <span className="font-mono text-red-200">AllowLiveTrading = false</span>. It also starts with <span className="font-mono text-red-200">EnableNewEntries = false</span>. Do not unlock either control until the exact broker symbols, volume sizing, stop distance, partial exits and news behavior have been forward-tested on demo. It has no martingale and no instant revenge re-entry.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Promising recent results, but the full research gate still failed. Keep <span className="font-mono">AIShadowMode = true</span>; AI approval must not place orders yet.</p>
                 </div>
               </div>
 
@@ -2655,8 +2598,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">The EA refuses to initialize if the broker does not support exactly 0.01 lot. The SL is configurable only from $5 to $10 and defaults to $7.50. There is no daily profit cutoff, but one planned full loss locks new entries for the day. These amounts use the account currency; gaps, slippage and commissions can make the actual result different.</p>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">The MT5 economic calendar guard is intentionally bypassed in Strategy Tester because historical calendar availability differs by terminal. Verify its real-time USD-event blocking during demo forward testing.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Broker support for 0.01 lot is required. Slippage, gaps and commission can change the actual result.</p>
                 </div>
 
                 <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
@@ -2664,17 +2606,13 @@ export default function Home() {
                     <p className="text-xs font-semibold text-amber-100">Broad M1 research result</p>
                     <Badge variant="outline" className="border-red-300/25 text-red-200">NOT LIVE READY</Badge>
                   </div>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Version 1.30 confirmation + 50% candle-retest candidate · XAUUSD M1 · every tick · January 1–September 2, 2026 · $10,000 tester balance · zero-latency model</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4 xl:grid-cols-2">
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">XAUUSD M1 · January–September 2026 · every tick</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
                     {[
                       ['+$0.04', 'Net result'],
                       ['1.00', 'Profit factor'],
-                      ['$15.11', 'Gross profit'],
-                      ['−$15.07', 'Gross loss'],
                       ['0.19%', 'Max equity drawdown'],
                       ['7', 'Total trades'],
-                      ['71.43%', 'Winning trades'],
-                      ['100%', 'History quality'],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
                         <p className="font-heading text-sm font-semibold text-amber-100">{value}</p>
@@ -2682,26 +2620,22 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-red-100/85">The retest improved the older −$7.73 candidate to break-even, but it still failed validation: a 1.00 profit factor shows no measured edge, and seven trades are far too few for a reliable conclusion. The built-in optimizer gate rejected it because validation requires at least 30 trades, positive net profit, profit factor of 1.20 or better, and no more than 5% equity drawdown. The 71.43% win rate is misleading by itself because several wins were tiny while two losses reached the planned stop. New entries and live trading remain off by default. No result here is a profit prediction.</p>
-                  <p className="mt-2 text-[10px] leading-4 text-sky-100/80">Version 1.80 uses the execution-aligned protected-outcome AI and stepped one-way profit protection. It compiled with zero errors and warnings. The displayed AI result is a chronological shadow-model check, not an exact EA tick-fill backtest.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-red-100/85">Failed validation: too few trades and no measured edge. This is not a profit forecast.</p>
                 </div>
 
                 <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-4">
                   <p className="text-xs font-semibold text-cyan-100">Install in MetaTrader 5</p>
                   <ol className="mt-2 space-y-2 text-[10px] leading-4 text-muted-foreground">
-                    <li><span className="mr-2 font-semibold text-cyan-200">1.</span>Download the <span className="font-mono text-foreground">.mq5</span> file.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">2.</span>In MT5: File → Open Data Folder → MQL5 → Experts, then place the file there.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">3.</span>Open MetaEditor, compile with F7, then refresh Navigator → Expert Advisors.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>Open your broker’s Gold chart and drag Aurum Guard onto it. H1 is the lower-frequency default; M1 remains research-only.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Enter your broker’s exact Silver symbol—such as XAGUSD, XAGUSD.a or SILVER.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">6.</span>For a deliberate demo/tester run only, set <span className="font-mono text-foreground">EnableNewEntries = true</span>, enable Algo Trading and monitor Experts and Journal.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">7.</span>For AI shadow testing, download and unzip the AI layer, run <span className="font-mono text-foreground">install_ai.cmd</span>, then <span className="font-mono text-foreground">train_ai.cmd</span> and keep <span className="font-mono text-foreground">run_ai_gate.cmd</span> open beside MT5.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">8.</span>Leave <span className="font-mono text-foreground">AIShadowMode = true</span>. The current included model failed its locked research gate, so strict mode correctly blocks rather than pretending it has an edge.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">1.</span>Download the EA and copy it to <span className="font-mono text-foreground">MQL5/Experts</span>.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">2.</span>Compile it in MetaEditor with F7.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">3.</span>Attach it to a Gold chart and enter the correct Silver symbol.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>On demo only, enable Algo Trading and <span className="font-mono text-foreground">EnableNewEntries</span>.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Keep <span className="font-mono text-foreground">AIShadowMode = true</span> and monitor Experts/Journal.</li>
                   </ol>
                 </div>
 
                 <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-3 text-[10px] leading-4 text-muted-foreground">
-                  <p><span className="font-semibold text-amber-200">Keep MT5 running:</span> the public website cannot execute brokerage orders or safely hold login credentials. For 24/7 operation, MT5 must remain connected on your computer or a Windows VPS. Stops can still suffer slippage or gaps, and no bot guarantees profit.</p>
+                  <p><span className="font-semibold text-amber-200">Keep MT5 running:</span> the website cannot place orders. MT5 must stay connected on your PC or VPS. No EA guarantees profit.</p>
                 </div>
               </div>
             </CardContent>
