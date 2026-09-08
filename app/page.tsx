@@ -542,7 +542,7 @@ function FibonacciChartGuide() {
 }
 
 const pineScript = String.raw`//@version=6
-strategy("Aurum Guard Combined v58: Trend + Reversal", overlay = true, pyramiding = 0,
+strategy("Aurum Guard Combined v59: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 0.5,
@@ -551,6 +551,7 @@ strategy("Aurum Guard Combined v58: Trend + Reversal", overlay = true, pyramidin
      calc_on_every_tick = true,
      calc_on_order_fills = true,
      process_orders_on_close = true,
+     max_bars_back = 600,
      max_labels_count = 300,
      max_lines_count = 100,
      max_boxes_count = 100)
@@ -641,8 +642,8 @@ planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 20
 showAutoFibonacci = input.bool(true, "Show automatic swing Fibonacci", group = "Automatic Fibonacci")
 showFibonacciLabels = input.bool(false, "Show Fibonacci level names", group = "Automatic Fibonacci")
 showFibonacciRejections = input.bool(true, "Mark confirmed golden-zone rejection", group = "Automatic Fibonacci")
-fibonacciAnchorMode = input.string("Previous completed session", "Swing anchor source", options = ["Previous completed session", "Latest confirmed pivots"], group = "Automatic Fibonacci")
 carryFibonacciAcrossSessions = input.bool(true, "Carry confirmed swings across session breaks", group = "Automatic Fibonacci")
+fibonacciLowerPivotLength = input.int(8, "1m–15m confirmed pivot length", minval = 3, maxval = 30, group = "Automatic Fibonacci")
 fibonacciProjectionBars = input.int(35, "Project levels for bars", minval = 10, maxval = 200, group = "Automatic Fibonacci")
 fibonacciSignalCooldown = input.int(5, "Bars between rejection watches", minval = 1, maxval = 50, group = "Automatic Fibonacci")
 
@@ -837,25 +838,32 @@ var float fibonacciCurrentSessionHigh = na
 var float fibonacciCurrentSessionLow = na
 var int fibonacciCurrentSessionHighBar = na
 var int fibonacciCurrentSessionLowBar = na
+var int fibonacciCurrentSessionStartBar = na
 var float fibonacciPreviousSessionHigh = na
 var float fibonacciPreviousSessionLow = na
 var int fibonacciPreviousSessionHighBar = na
 var int fibonacciPreviousSessionLowBar = na
+var int fibonacciPreviousSessionStartBar = na
+var int fibonacciPreviousSessionEndBar = na
 
 if barstate.isfirst
     fibonacciCurrentSessionHigh := high
     fibonacciCurrentSessionLow := low
     fibonacciCurrentSessionHighBar := bar_index
     fibonacciCurrentSessionLowBar := bar_index
+    fibonacciCurrentSessionStartBar := bar_index
 else if newFibonacciSession
     fibonacciPreviousSessionHigh := fibonacciCurrentSessionHigh
     fibonacciPreviousSessionLow := fibonacciCurrentSessionLow
     fibonacciPreviousSessionHighBar := fibonacciCurrentSessionHighBar
     fibonacciPreviousSessionLowBar := fibonacciCurrentSessionLowBar
+    fibonacciPreviousSessionStartBar := fibonacciCurrentSessionStartBar
+    fibonacciPreviousSessionEndBar := bar_index - 1
     fibonacciCurrentSessionHigh := high
     fibonacciCurrentSessionLow := low
     fibonacciCurrentSessionHighBar := bar_index
     fibonacciCurrentSessionLowBar := bar_index
+    fibonacciCurrentSessionStartBar := bar_index
 else
     if na(fibonacciCurrentSessionHigh) or high >= fibonacciCurrentSessionHigh
         fibonacciCurrentSessionHigh := high
@@ -872,6 +880,8 @@ var float fibonacciPivotHigh = na
 var float fibonacciPivotLow = na
 var int fibonacciPivotHighBar = na
 var int fibonacciPivotLowBar = na
+fibonacciLowerPivotHigh = ta.pivothigh(high, fibonacciLowerPivotLength, fibonacciLowerPivotLength)
+fibonacciLowerPivotLow = ta.pivotlow(low, fibonacciLowerPivotLength, fibonacciLowerPivotLength)
 
 if fibonacciSessionBreak and not carryFibonacciAcrossSessions
     fibonacciPivotHigh := na
@@ -879,16 +889,20 @@ if fibonacciSessionBreak and not carryFibonacciAcrossSessions
     fibonacciPivotHighBar := na
     fibonacciPivotLowBar := na
 
-if not na(pivotHigh)
-    fibonacciPivotHigh := pivotHigh
-    fibonacciPivotHighBar := bar_index - pivotLength
+if not na(fibonacciLowerPivotHigh)
+    fibonacciPivotHigh := fibonacciLowerPivotHigh
+    fibonacciPivotHighBar := bar_index - fibonacciLowerPivotLength
 
-if not na(pivotLow)
-    fibonacciPivotLow := pivotLow
-    fibonacciPivotLowBar := bar_index - pivotLength
+if not na(fibonacciLowerPivotLow)
+    fibonacciPivotLow := fibonacciLowerPivotLow
+    fibonacciPivotLowBar := bar_index - fibonacciLowerPivotLength
 
 previousSessionFibReady = timeframe.isintraday and not na(fibonacciPreviousSessionHigh) and not na(fibonacciPreviousSessionLow) and not na(fibonacciPreviousSessionHighBar) and not na(fibonacciPreviousSessionLowBar) and fibonacciPreviousSessionHigh != fibonacciPreviousSessionLow
-usePreviousSessionFib = fibonacciAnchorMode == "Previous completed session" and previousSessionFibReady
+fibonacciTimeframeSeconds = timeframe.in_seconds()
+fibonacciLowerTimeframe = timeframe.isintraday and fibonacciTimeframeSeconds >= 60 and fibonacciTimeframeSeconds <= 900
+fibonacciPreviousSessionTimeframe = timeframe.isintraday and fibonacciTimeframeSeconds >= 1800 and fibonacciTimeframeSeconds <= 3600
+fibonacciTimeframeSupported = fibonacciLowerTimeframe or fibonacciPreviousSessionTimeframe
+usePreviousSessionFib = fibonacciPreviousSessionTimeframe and previousSessionFibReady
 fibSelectedHigh = usePreviousSessionFib ? fibonacciPreviousSessionHigh : fibonacciPivotHigh
 fibSelectedLow = usePreviousSessionFib ? fibonacciPreviousSessionLow : fibonacciPivotLow
 fibSelectedHighBar = usePreviousSessionFib ? fibonacciPreviousSessionHighBar : fibonacciPivotHighBar
@@ -896,7 +910,7 @@ fibSelectedLowBar = usePreviousSessionFib ? fibonacciPreviousSessionLowBar : fib
 
 // For a bullish markup, 0% sits at the swing high and 100% at the swing low.
 // A bearish markup is mirrored from low back to high.
-fibReady = showAutoFibonacci and not na(fibSelectedHigh) and not na(fibSelectedLow) and not na(fibSelectedHighBar) and not na(fibSelectedLowBar) and fibSelectedHigh != fibSelectedLow
+fibReady = showAutoFibonacci and fibonacciTimeframeSupported and not na(fibSelectedHigh) and not na(fibSelectedLow) and not na(fibSelectedHighBar) and not na(fibSelectedLowBar) and fibSelectedHigh != fibSelectedLow
 fibBullishMove = fibReady and fibSelectedHighBar > fibSelectedLowBar
 fibBearishMove = fibReady and fibSelectedLowBar > fibSelectedHighBar
 fibAnchorZero = fibBullishMove ? fibSelectedHigh : fibBearishMove ? fibSelectedLow : na
@@ -2036,8 +2050,8 @@ plotshape(showPriorityMarks and reentryShortConfirmed and oneMinuteRecoveryActiv
 // available volume across every price row crossed by that candle, then expands
 // from the highest-volume row until the requested value-area percentage is met.
 // Forex/CFD symbols normally supply tick volume, so this is an approximation.
-volumeProfileHigh = ta.highest(high[1], volumeProfileLookback)
-volumeProfileLow = ta.lowest(low[1], volumeProfileLookback)
+volumeProfileHigh = fibonacciPreviousSessionHigh
+volumeProfileLow = fibonacciPreviousSessionLow
 var detailedVPBoxes = array.new_box()
 var line detailedVPPocLine = na
 var line detailedVPVahLine = na
@@ -2071,26 +2085,29 @@ if barstate.islast and (na(detailedVPUpdateBar) or bar_index != detailedVPUpdate
     detailedVPValLabel := na
 
     profileRange = volumeProfileHigh - volumeProfileLow
-    if showDetailedVolumeProfile and bar_index >= volumeProfileLookback and profileRange > syminfo.mintick
+    previousSessionProfileReady = fibonacciPreviousSessionTimeframe and not na(fibonacciPreviousSessionStartBar) and not na(fibonacciPreviousSessionEndBar)
+    if showDetailedVolumeProfile and previousSessionProfileReady and profileRange > syminfo.mintick
         rowHeight = profileRange / volumeProfileRows
         profileVolumes = array.new_float(volumeProfileRows, 0.0)
         for profileOffset = 1 to volumeProfileLookback
-            candleLow = low[profileOffset]
-            candleHigh = high[profileOffset]
-            candleRange = candleHigh - candleLow
-            candleVolume = nz(volume[profileOffset], 1.0)
-            if candleRange <= syminfo.mintick
-                typicalBin = int(math.floor((close[profileOffset] - volumeProfileLow) / profileRange * volumeProfileRows))
-                safeTypicalBin = math.max(0, math.min(volumeProfileRows - 1, typicalBin))
-                array.set(profileVolumes, safeTypicalBin, array.get(profileVolumes, safeTypicalBin) + candleVolume)
-            else
-                for profileRow = 0 to volumeProfileRows - 1
-                    rowLow = volumeProfileLow + profileRow * rowHeight
-                    rowHigh = rowLow + rowHeight
-                    overlap = math.max(0.0, math.min(candleHigh, rowHigh) - math.max(candleLow, rowLow))
-                    if overlap > 0
-                        distributedVolume = candleVolume * overlap / candleRange
-                        array.set(profileVolumes, profileRow, array.get(profileVolumes, profileRow) + distributedVolume)
+            profileSourceBar = bar_index - profileOffset
+            if profileSourceBar >= fibonacciPreviousSessionStartBar and profileSourceBar <= fibonacciPreviousSessionEndBar
+                candleLow = low[profileOffset]
+                candleHigh = high[profileOffset]
+                candleRange = candleHigh - candleLow
+                candleVolume = nz(volume[profileOffset], 1.0)
+                if candleRange <= syminfo.mintick
+                    typicalBin = int(math.floor((close[profileOffset] - volumeProfileLow) / profileRange * volumeProfileRows))
+                    safeTypicalBin = math.max(0, math.min(volumeProfileRows - 1, typicalBin))
+                    array.set(profileVolumes, safeTypicalBin, array.get(profileVolumes, safeTypicalBin) + candleVolume)
+                else
+                    for profileRow = 0 to volumeProfileRows - 1
+                        rowLow = volumeProfileLow + profileRow * rowHeight
+                        rowHigh = rowLow + rowHeight
+                        overlap = math.max(0.0, math.min(candleHigh, rowHigh) - math.max(candleLow, rowLow))
+                        if overlap > 0
+                            distributedVolume = candleVolume * overlap / candleRange
+                            array.set(profileVolumes, profileRow, array.get(profileVolumes, profileRow) + distributedVolume)
 
         pocRow = 0
         maximumRowVolume = array.get(profileVolumes, 0)
@@ -2115,7 +2132,7 @@ if barstate.islast and (na(detailedVPUpdateBar) or bar_index != detailedVPUpdate
                 valueAreaLowRow -= 1
                 valueAreaVolume += math.max(0.0, nextLowerVolume)
 
-        profileStartX = bar_index + 2
+        profileEndX = fibonacciPreviousSessionEndBar
         for profileRow = 0 to volumeProfileRows - 1
             rowVolume = array.get(profileVolumes, profileRow)
             rowWidth = maximumRowVolume > 0 ? math.max(1, int(math.round(volumeProfileWidthBars * rowVolume / maximumRowVolume))) : 1
@@ -2123,23 +2140,23 @@ if barstate.islast and (na(detailedVPUpdateBar) or bar_index != detailedVPUpdate
             rowHigh = rowLow + rowHeight
             isPOCRow = profileRow == pocRow
             isValueAreaRow = profileRow >= valueAreaLowRow and profileRow <= valueAreaHighRow
-            rowColor = isPOCRow ? color.new(color.yellow, 18) : isValueAreaRow ? color.new(color.aqua, 68) : color.new(color.gray, 82)
-            rowBorder = isPOCRow ? color.yellow : isValueAreaRow ? color.new(color.aqua, 48) : color.new(color.gray, 76)
-            profileBox = box.new(left = profileStartX, top = rowHigh, right = profileStartX + rowWidth, bottom = rowLow, xloc = xloc.bar_index, border_color = rowBorder, bgcolor = rowColor)
+            rowColor = isPOCRow ? color.new(color.yellow, 58) : isValueAreaRow ? color.new(color.aqua, 84) : color.new(color.gray, 92)
+            rowBorder = isPOCRow ? color.new(color.yellow, 35) : isValueAreaRow ? color.new(color.aqua, 72) : color.new(color.gray, 88)
+            profileBox = box.new(left = profileEndX - rowWidth + 1, top = rowHigh, right = profileEndX, bottom = rowLow, xloc = xloc.bar_index, border_color = rowBorder, bgcolor = rowColor)
             array.push(detailedVPBoxes, profileBox)
 
         pocPrice = volumeProfileLow + (pocRow + 0.5) * rowHeight
         vahPrice = volumeProfileLow + (valueAreaHighRow + 1.0) * rowHeight
         valPrice = volumeProfileLow + valueAreaLowRow * rowHeight
-        profileLineStart = bar_index - volumeProfileLookback
-        profileLineEnd = bar_index + volumeProfileWidthBars + 2
+        profileLineStart = fibonacciPreviousSessionStartBar
+        profileLineEnd = fibonacciPreviousSessionEndBar
         detailedVPPocLine := line.new(profileLineStart, pocPrice, profileLineEnd, pocPrice, xloc = xloc.bar_index, color = color.yellow, width = 2)
         detailedVPVahLine := line.new(profileLineStart, vahPrice, profileLineEnd, vahPrice, xloc = xloc.bar_index, color = color.new(color.aqua, 20), style = line.style_dashed)
         detailedVPValLine := line.new(profileLineStart, valPrice, profileLineEnd, valPrice, xloc = xloc.bar_index, color = color.new(color.aqua, 20), style = line.style_dashed)
-        detailedVPPocLabel := label.new(profileLineEnd, pocPrice, "POC · " + str.tostring(pocPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.yellow, 15), textcolor = color.black, size = size.tiny)
+        detailedVPPocLabel := label.new(profileLineStart, pocPrice, "POC · " + str.tostring(pocPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.yellow, 35), textcolor = color.black, size = size.tiny)
         if showVolumeProfileLabels
-            detailedVPVahLabel := label.new(profileLineEnd, vahPrice, "VAH · " + str.tostring(vahPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.aqua, 45), textcolor = color.white, size = size.tiny)
-            detailedVPValLabel := label.new(profileLineEnd, valPrice, "VAL · " + str.tostring(valPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.aqua, 45), textcolor = color.white, size = size.tiny)
+            detailedVPVahLabel := label.new(profileLineStart, vahPrice, "VAH · " + str.tostring(vahPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.aqua, 65), textcolor = color.white, size = size.tiny)
+            detailedVPValLabel := label.new(profileLineStart, valPrice, "VAL · " + str.tostring(valPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.aqua, 65), textcolor = color.white, size = size.tiny)
 
 plotshape(buySideManipulation, title = "15M BUY-SIDE MANIPULATION", text = "MANIPULATION\nAVOID LONG", style = shape.labeldown, location = location.abovebar, color = color.orange, textcolor = color.black, size = size.small)
 plotshape(sellSideManipulation, title = "15M SELL-SIDE MANIPULATION", text = "MANIPULATION\nAVOID SHORT", style = shape.labelup, location = location.belowbar, color = color.orange, textcolor = color.black, size = size.small)
@@ -2191,7 +2208,7 @@ simpleRiskText = blowOffTop ? "BLOW-OFF TOP" : blowOffBottom ? "BLOW-OFF BOTTOM"
 simpleRiskColor = blowOffTop or blowOffBottom or shockPauseActive ? color.new(color.fuchsia, 48) : buySideManipulation or sellSideManipulation ? color.new(color.orange, 52) : lowerTFLongNoRoom or lowerTFShortNoRoom or lowerTFLongMTFBlocked or lowerTFShortMTFBlocked ? color.new(color.orange, 54) : tp1FailureWarned ? color.new(color.orange, 48) : halfStopWarned ? color.new(color.red, 48) : rawAvoidShort or rawAvoidLong or rawNoChaseLong or rawNoChaseShort ? color.new(color.orange, 62) : color.new(color.lime, 78)
 oneMinuteModeText = oneMinuteRecoveryActive ? "ON · AUTO SL/TP + FLIP" : oneMinuteChart ? "OFF IN SETTINGS" : "OFF · USE 1m CHART"
 oneMinuteModeColor = oneMinuteRecoveryActive ? color.new(color.lime, 72) : color.new(color.gray, 82)
-fibonacciStatusText = not showAutoFibonacci ? "OFF IN SETTINGS" : not fibReady ? "WAIT CONFIRMED SWINGS" : fibLongRejection ? "LONG REJECTION · WATCH" : fibShortRejection ? "SHORT REJECTION · WATCH" : fibTouchesGoldenZone ? "IN 61.8–70.5 ZONE" : usePreviousSessionFib and fibBullishMove ? "PREV SESSION · BULL MAP" : usePreviousSessionFib and fibBearishMove ? "PREV SESSION · BEAR MAP" : fibBullishMove ? "LATEST PIVOT · BULL MAP" : "LATEST PIVOT · BEAR MAP"
+fibonacciStatusText = not showAutoFibonacci ? "OFF IN SETTINGS" : not fibonacciTimeframeSupported ? "USE 1m–15m OR 30m–1H" : not fibReady ? "WAIT CONFIRMED SWINGS" : fibLongRejection ? "LONG REJECTION · WATCH" : fibShortRejection ? "SHORT REJECTION · WATCH" : fibTouchesGoldenZone ? "IN 61.8–70.5 ZONE" : usePreviousSessionFib and fibBullishMove ? "PREV SESSION · BULL MAP" : usePreviousSessionFib and fibBearishMove ? "PREV SESSION · BEAR MAP" : fibBullishMove ? "INTRADAY PIVOT · BULL" : "INTRADAY PIVOT · BEAR"
 fibonacciStatusColor = fibLongRejection or fibShortRejection ? color.new(color.yellow, 48) : fibTouchesGoldenZone ? color.new(color.orange, 58) : fibReady ? color.new(color.purple, 70) : color.new(color.gray, 82)
 fibonacciTextColor = fibLongRejection or fibShortRejection ? color.black : color.white
 manipulationStatusText = not enable15mManipulation ? "OFF IN SETTINGS" : not fifteenMinuteChart ? "USE 15m CHART" : blowOffTop ? "BLOW-OFF TOP · WAIT" : blowOffBottom ? "BLOW-OFF BOTTOM · WAIT" : buySideManipulation ? "BUY-SIDE SWEEP · AVOID LONG" : sellSideManipulation ? "SELL-SIDE SWEEP · AVOID SHORT" : "SCANNING · CLEAR"
@@ -3235,7 +3252,7 @@ export default function Home() {
 
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v58</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v59</CardTitle>
               <CardDescription>One free-plan script slot · M15/H1 four-stage POC cycle + Gold/Silver sync + three take-profit levels + strategy-compatible alerts</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
@@ -3267,7 +3284,7 @@ export default function Home() {
 
               <div className="mb-4 rounded-xl border border-orange-300/20 bg-orange-300/[.045] p-4 text-[10px] leading-5 text-muted-foreground">
                 <p className="font-semibold text-orange-100">Important: TradingView does not automatically sync website updates.</p>
-                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v58</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
+                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v59</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
@@ -3291,8 +3308,8 @@ export default function Home() {
               <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.045] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
-                    <p className="text-xs font-semibold text-cyan-100">v58 · previous-session Fibonacci map</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The default Fibonacci map now freezes the previous completed session’s full high-to-low swing and projects it into the current session. Small pivots forming today cannot move those anchors. Latest confirmed pivots remains available as an optional anchor mode.</p>
+                    <p className="text-xs font-semibold text-cyan-100">v59 · timeframe-specific Fibonacci maps</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">On 30m and 1H, Fibonacci uses the previous completed session’s full swing. On 1m through 15m, a separate eight-bar confirmed-pivot scanner follows local structure. The map stays off outside those ranges so an unsuitable timeframe cannot display misleading anchors.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
                     {['15m agrees', '1H agrees', 'Pullback defended', '≥ 1.5R room', 'BUY / SELL P1'].map((step, index) => (
@@ -3462,7 +3479,7 @@ export default function Home() {
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.07em]">
                     <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Pine v6</Badge>
-                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v58</Badge>
+                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v59</Badge>
                     <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">Paper strategy</Badge>
                   </div>
                 </div>
@@ -3481,7 +3498,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="max-w-3xl">
                     <p className="text-xs font-semibold text-yellow-100">Compact volume profile by default</p>
-                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v58 keeps the important context without covering the candles. Yellow emphasizes the POC; cyan dashed lines show the 70% value area. Fibonacci names and VAH/VAL text are hidden by default, while every detailed control remains available in Settings.</p>
+                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v59 calculates the Volume Profile from the previous completed session only on 30m and 1H. Its translucent rows, POC, VAH and VAL stay inside that historical session instead of extending into future space or covering current candles.</p>
                   </div>
                   <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">POC + VAH + VAL</Badge>
                 </div>
