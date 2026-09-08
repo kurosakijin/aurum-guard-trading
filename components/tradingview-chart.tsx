@@ -87,7 +87,9 @@ export function TradingViewChart({
       hide_top_toolbar: isMobile,
       hide_legend: isMobile,
       hide_volume: isGoldChart || isMobile,
-      studies: isGoldChart ? ['STD;RSI'] : [],
+      studies: isGoldChart
+        ? ['STD;RSI', 'Sessions@tv-basicstudies']
+        : ['Sessions@tv-basicstudies'],
       allow_symbol_change: !isMobile,
       save_image: false,
       calendar: false,

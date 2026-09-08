@@ -52,12 +52,12 @@ const liveMarkets = [
 
 const timeframes = [
   { label: '1m', value: '1' },
+  { label: '3m', value: '3' },
   { label: '5m', value: '5' },
   { label: '15m', value: '15' },
+  { label: '30m', value: '30' },
   { label: '1h', value: '60' },
-  { label: '4h', value: '240' },
   { label: '1D', value: 'D' },
-  { label: '1W', value: 'W' },
 ] as const;
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
@@ -2464,12 +2464,6 @@ export default function Home() {
                   interval="60"
                   label="Gold"
                 />
-              </div>
-              <div className="mt-2 flex flex-col gap-2 rounded-lg border border-cyan-300/12 bg-cyan-300/[.035] px-3 py-2 text-[10px] leading-4 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                <span>Custom Pine cannot run inside TradingView’s embedded chart. Copy Aurum Guard, then add it to your full TradingView chart.</span>
-                <Button variant="ghost" size="sm" className="h-7 shrink-0 text-cyan-200 hover:bg-cyan-300/10 hover:text-cyan-100 sm:hidden" onClick={() => openWorkspace('pine', 'pine-script')}>
-                  <Code2 className="size-3.5" /> Use Aurum Pine
-                </Button>
               </div>
             </CardContent>
           </Card>
