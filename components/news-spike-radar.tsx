@@ -29,6 +29,55 @@ import {
 } from '@/components/tradingview-insights';
 
 const refreshIntervalMs = 5 * 60 * 1000;
+const postReleaseHoldMs = 15 * 60 * 1000;
+
+type PriorityEventKind = 'CPI' | 'NFP' | 'FOMC';
+
+type PriorityMacroEvent = {
+  kind: PriorityEventKind;
+  title: string;
+  utc: string;
+  sourceUrl: string;
+};
+
+const priorityMacroEvents: PriorityMacroEvent[] = [
+  { kind: 'CPI', title: 'US Consumer Price Index', utc: '2026-09-11T12:30:00Z', sourceUrl: 'https://www.bls.gov/schedule/news_release/cpi.htm' },
+  { kind: 'CPI', title: 'US Consumer Price Index', utc: '2026-10-14T12:30:00Z', sourceUrl: 'https://www.bls.gov/schedule/news_release/cpi.htm' },
+  { kind: 'CPI', title: 'US Consumer Price Index', utc: '2026-11-10T13:30:00Z', sourceUrl: 'https://www.bls.gov/schedule/news_release/cpi.htm' },
+  { kind: 'CPI', title: 'US Consumer Price Index', utc: '2026-12-10T13:30:00Z', sourceUrl: 'https://www.bls.gov/schedule/news_release/cpi.htm' },
+  { kind: 'NFP', title: 'US Employment Situation', utc: '2026-10-02T12:30:00Z', sourceUrl: 'https://www.bls.gov/cps/publications/release-calendar.htm' },
+  { kind: 'NFP', title: 'US Employment Situation', utc: '2026-11-06T13:30:00Z', sourceUrl: 'https://www.bls.gov/cps/publications/release-calendar.htm' },
+  { kind: 'NFP', title: 'US Employment Situation', utc: '2026-12-04T13:30:00Z', sourceUrl: 'https://www.bls.gov/cps/publications/release-calendar.htm' },
+  { kind: 'FOMC', title: 'Federal Reserve rate decision', utc: '2026-09-16T18:00:00Z', sourceUrl: 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm' },
+  { kind: 'FOMC', title: 'Federal Reserve rate decision', utc: '2026-10-28T18:00:00Z', sourceUrl: 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm' },
+  { kind: 'FOMC', title: 'Federal Reserve rate decision', utc: '2026-12-09T19:00:00Z', sourceUrl: 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm' },
+];
+
+function formatEventTime(utc: string, timeZone: string) {
+  return new Intl.DateTimeFormat('en-PH', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date(utc));
+}
+
+function formatCountdown(eventTime: number, nowMs: number | null) {
+  if (nowMs === null) return 'SYNCING…';
+
+  const difference = eventTime - nowMs;
+  const absoluteSeconds = Math.floor(Math.abs(difference) / 1000);
+  const days = Math.floor(absoluteSeconds / 86400);
+  const hours = Math.floor((absoluteSeconds % 86400) / 3600);
+  const minutes = Math.floor((absoluteSeconds % 3600) / 60);
+  const seconds = absoluteSeconds % 60;
+  const clock = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+  if (difference <= 0) return `LIVE +${clock}`;
+  return days > 0 ? `${days}d ${clock}` : clock;
+}
 
 function formatPhilippineDate(date: Date, includeSeconds = true) {
   return new Intl.DateTimeFormat('en-PH', {
@@ -45,6 +94,7 @@ function formatPhilippineDate(date: Date, includeSeconds = true) {
 }
 
 export function NewsSpikeRadar() {
+  const [nowMs, setNowMs] = useState<number | null>(null);
   const [philippineTime, setPhilippineTime] = useState('Loading Philippine time…');
   const [monitoringSince, setMonitoringSince] = useState('Starting now');
   const [lastRefresh, setLastRefresh] = useState('Connecting…');
@@ -53,7 +103,11 @@ export function NewsSpikeRadar() {
 
   useEffect(() => {
     const startedAt = new Date();
-    const updateClock = () => setPhilippineTime(formatPhilippineDate(new Date()));
+    const updateClock = () => {
+      const now = new Date();
+      setNowMs(now.getTime());
+      setPhilippineTime(formatPhilippineDate(now));
+    };
     const initialFrame = window.requestAnimationFrame(() => {
       setMonitoringSince(formatPhilippineDate(startedAt, false));
       setLastRefresh(formatPhilippineDate(startedAt, false));
@@ -76,6 +130,14 @@ export function NewsSpikeRadar() {
     setRefreshKey((current) => current + 1);
     setLastRefresh(formatPhilippineDate(new Date(), false));
   }
+
+  const priorityEvents = (['CPI', 'NFP', 'FOMC'] as const).map((kind) => {
+    const candidates = priorityMacroEvents.filter((event) => event.kind === kind);
+    const nextEvent = nowMs === null
+      ? candidates[0]
+      : candidates.find((event) => new Date(event.utc).getTime() > nowMs - postReleaseHoldMs);
+    return { kind, event: nextEvent };
+  });
 
   return (
     <section id="news-radar" className="mb-4" aria-labelledby="news-radar-heading">
@@ -114,6 +176,52 @@ export function NewsSpikeRadar() {
             <Button variant="outline" className="border-white/10 bg-white/[.03]" onClick={refreshNews}>
               <RefreshCw /> Refresh radar now
             </Button>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-amber-300/25 bg-[linear-gradient(135deg,rgba(251,191,36,.08),rgba(248,113,113,.045))] p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-amber-200">Priority macro countdowns</p>
+                <p className="mt-1 text-sm font-semibold">CPI · NFP · FOMC</p>
+              </div>
+              <Badge variant="outline" className="border-amber-300/30 text-amber-200">PREPARE · DO NOT FRONT-RUN</Badge>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {priorityEvents.map(({ kind, event }) => {
+                if (!event) {
+                  return (
+                    <div key={kind} className="rounded-xl border border-white/8 bg-black/20 p-3">
+                      <p className="text-xs font-semibold text-amber-100">{kind}</p>
+                      <p className="mt-3 font-mono text-lg font-semibold">SCHEDULE PENDING</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Check the official calendar for the next published date.</p>
+                    </div>
+                  );
+                }
+
+                const eventTime = new Date(event.utc).getTime();
+                const difference = nowMs === null ? Number.POSITIVE_INFINITY : eventTime - nowMs;
+                const isLiveWindow = difference <= 0;
+                const isEntryBlocked = difference > 0 && difference <= 30 * 60 * 1000;
+
+                return (
+                  <a key={kind} href={event.sourceUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-white/9 bg-black/20 p-3 transition hover:border-amber-300/30 hover:bg-black/30">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-amber-100">{kind}</p>
+                      <span className={`text-[9px] font-semibold uppercase tracking-[.1em] ${isLiveWindow || isEntryBlocked ? 'text-red-300' : 'text-emerald-300'}`}>
+                        {isLiveWindow ? 'WAIT 15 MIN' : isEntryBlocked ? 'NO NEW ENTRY' : 'COUNTDOWN'}
+                      </span>
+                    </div>
+                    <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{formatCountdown(eventTime, nowMs)}</p>
+                    <p className="mt-1 text-[10px] font-medium text-zinc-300">{event.title}</p>
+                    <p className="mt-2 text-[10px] text-muted-foreground">{formatEventTime(event.utc, 'Asia/Manila')} PHT</p>
+                    <p className="mt-0.5 text-[9px] text-muted-foreground">{formatEventTime(event.utc, 'America/New_York')} ET · official schedule ↗</p>
+                  </a>
+                );
+              })}
+            </div>
+
+            <p className="mt-3 text-[10px] leading-4 text-amber-100/80">Use the timer to prepare, not to predict direction. At zero, wait for the release, spread normalization and a confirmed chart setup before considering an order.</p>
           </div>
 
           <div className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[.055] p-4">
