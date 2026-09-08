@@ -165,6 +165,15 @@ const historicalReversalBars: readonly HistoricalBar[] = [
   ['06:40',4385.3,4388.8,4383.6,4388.6,301],['06:45',4389,4392.2,4388.4,4390.8,411],['06:50',4390.5,4391.2,4389.1,4390.2,142],['06:55',4389.6,4391.9,4389.6,4391.6,87],
 ];
 
+const historicalStrongSweep15mBars: readonly HistoricalBar[] = [
+  ['Aug 14 04:00',4379.2,4382.7,4378.3,4381.7,563],['04:15',4381.2,4384.6,4380.2,4380.2,472],
+  ['04:30',4380.7,4381.2,4378.4,4380.4,471],['04:45',4380.1,4382.0,4378.3,4382.0,294],
+  ['05:00',4382.2,4382.2,4374.3,4374.8,523],['05:15',4374.9,4375.1,4371.9,4373.3,481],
+  ['05:30',4372.9,4379.8,4365.6,4372.7,1720],['05:45',4372.5,4389.5,4372.5,4389.5,1607],
+  ['06:00',4389.6,4392.6,4385.5,4388.3,1195],['06:15',4388.2,4389.1,4384.2,4387.0,663],
+  ['06:30',4385.1,4388.8,4383.6,4388.6,568],['06:45',4389.0,4392.2,4388.4,4391.6,640],
+];
+
 const historicalFibonacciBars: readonly HistoricalBar[] = [
   ['Aug 26 18:45',4651.6,4653,4648.3,4648.5,791],['19:00',4648.8,4650.4,4645.7,4649.1,685],['19:15',4649.1,4653.7,4645.8,4653.1,931],['19:30',4653.2,4656.3,4649,4650.2,802],
   ['19:45',4650.5,4651.1,4647,4648.9,1090],['20:00',4649,4651.4,4646,4646,499],['20:15',4646.4,4646.7,4638.6,4645.9,739],['20:30',4645.8,4648.4,4645,4646.4,245],
@@ -238,9 +247,10 @@ function HistoricalFibonacciStudy() {
   );
 }
 
-function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuation' }) {
+function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuation' | 'strong-flow' }) {
   const isContinuation = mode === 'continuation';
-  const bars = isContinuation ? historicalPoc30mBars : mode === 'flow' ? historicalFlowBars : historicalReversalBars;
+  const isStrongFlow = mode === 'strong-flow';
+  const bars = isContinuation ? historicalPoc30mBars : isStrongFlow ? historicalStrongSweep15mBars : mode === 'flow' ? historicalFlowBars : historicalReversalBars;
   const chartLeft = isContinuation ? 170 : 42, chartRight = 1002, chartTop = 55, chartBottom = 482, volumeTop = 510, volumeBottom = 606;
   const flowTarget = 4479.8;
   const rawLow = Math.min(...bars.map((bar) => bar[3]));
@@ -251,17 +261,17 @@ function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuati
   const x = (index: number) => chartLeft + index * ((chartRight - chartLeft) / (bars.length - 1));
   const y = (price: number) => chartTop + ((high - price) / (high - low)) * (chartBottom - chartTop);
   const tickPrices = Array.from({ length: 6 }, (_, i) => high - i * ((high - low) / 5));
-  const rangeStart = isContinuation ? 2 : mode === 'flow' ? 4 : 6;
-  const rangeEnd = isContinuation ? 8 : mode === 'flow' ? 13 : 17;
-  const sweepIndex = isContinuation ? 9 : mode === 'flow' ? 14 : 18;
-  const confirmationIndex = isContinuation ? 10 : mode === 'flow' ? 20 : 22;
-  const rangeHigh = mode === 'reversal' ? 4382.2 : 4438.2;
-  const rangeLow = mode === 'reversal' ? 4371.9 : 4427.3;
-  const poc = mode === 'reversal' ? 4379.4 : 4433.7;
-  const entry = isContinuation ? 4447.1 : mode === 'flow' ? 4438.2 : 4380.0;
-  const stop = isContinuation ? 4431.8 : mode === 'flow' ? 4426.2 : 4364.8;
-  const target = isContinuation ? flowTarget : mode === 'flow' ? 4461.2 : 4392.0;
-  const label = isContinuation ? 'GC=F · 30m · Sep 02–03, 2026' : mode === 'flow' ? 'GC=F · 15m · Sep 02–03, 2026' : 'GC=F · 5m · Aug 14, 2026';
+  const rangeStart = isContinuation ? 2 : isStrongFlow ? 0 : mode === 'flow' ? 4 : 6;
+  const rangeEnd = isContinuation ? 8 : isStrongFlow ? 5 : mode === 'flow' ? 13 : 17;
+  const sweepIndex = isContinuation ? 9 : isStrongFlow ? 6 : mode === 'flow' ? 14 : 18;
+  const confirmationIndex = isContinuation ? 10 : isStrongFlow ? 7 : mode === 'flow' ? 20 : 22;
+  const rangeHigh = isStrongFlow ? 4384.6 : mode === 'reversal' ? 4382.2 : 4438.2;
+  const rangeLow = isStrongFlow ? 4371.9 : mode === 'reversal' ? 4371.9 : 4427.3;
+  const poc = isStrongFlow ? 4379.4 : mode === 'reversal' ? 4379.4 : 4433.7;
+  const entry = isContinuation ? 4447.1 : isStrongFlow ? 4384.7 : mode === 'flow' ? 4438.2 : 4380.0;
+  const stop = isContinuation ? 4431.8 : isStrongFlow ? 4365.3 : mode === 'flow' ? 4426.2 : 4364.8;
+  const target = isContinuation ? flowTarget : isStrongFlow ? 4392.0 : mode === 'flow' ? 4461.2 : 4392.0;
+  const label = isContinuation ? 'GC=F · 30m · Sep 02–03, 2026' : isStrongFlow ? 'GC=F · 15m · Aug 14, 2026' : mode === 'flow' ? 'GC=F · 15m · Sep 02–03, 2026' : 'GC=F · 5m · Aug 14, 2026';
   const profileBins = isContinuation ? Array.from({ length: 11 }, (_, index) => {
     const binLow = rangeLow + index * ((rangeHigh - rangeLow) / 11);
     const binHigh = rangeLow + (index + 1) * ((rangeHigh - rangeLow) / 11);
@@ -312,14 +322,14 @@ function HistoricalGoldStudy({ mode }: { mode: 'flow' | 'reversal' | 'continuati
       <text x={x(sweepIndex)-8} y={volumeTop-14} textAnchor="middle" fill="#fdba74" fontSize="10" fontWeight="700">{isContinuation ? '2 · BREAKOUT CLOSE' : '2 · LIQUIDITY SWEEP'}</text>
       {isContinuation && <><circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][3])} r="6" fill="#0b0e18" stroke="#facc15" strokeWidth="2.5"/><text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][3])+18} fill="#fde047" fontSize="9" fontWeight="700">3 · PULLBACK TESTS POC</text></>}
       <circle cx={x(confirmationIndex)} cy={y(bars[confirmationIndex][4])} r="5" fill="#0b0e18" stroke="#34d399" strokeWidth="2.5" />
-      <text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][4])-12} fill="#6ee7b7" fontSize="10" fontWeight="700">{isContinuation ? '4 · CONTINUATION ENTRY' : '3 · CLOSED CONFIRMATION'}</text>
+      <text x={x(confirmationIndex)+10} y={y(bars[confirmationIndex][4])-12} fill="#6ee7b7" fontSize="10" fontWeight="700">{isContinuation ? '4 · CONTINUATION ENTRY' : isStrongFlow ? '3 · RECLAIM + DISPLACEMENT CLOSE' : '3 · CLOSED CONFIRMATION'}</text>
 
       <line x1={x(confirmationIndex)} y1={y(entry)} x2={chartRight} y2={y(entry)} stroke="#34d399" strokeWidth="1.5" />
       <line x1={x(confirmationIndex)} y1={y(stop)} x2={chartRight} y2={y(stop)} stroke="#fb7185" strokeWidth="1.5" strokeDasharray="7 5" />
       <line x1={x(confirmationIndex)} y1={y(target)} x2={chartRight} y2={y(target)} stroke="#34d399" strokeWidth="1.5" strokeDasharray="7 5" />
-      <text x="1018" y={y(entry)+4} fill="#6ee7b7" fontSize="10" fontWeight="700">ENTRY {entry.toFixed(1)}</text>
-      <text x="1018" y={y(stop)+4} fill="#fda4af" fontSize="10" fontWeight="700">SL {stop.toFixed(1)}</text>
-      <text x="1018" y={y(target)+4} fill="#6ee7b7" fontSize="10" fontWeight="700">TP {target.toFixed(1)}</text>
+      <text x="1018" y={y(entry)+4} fill="#6ee7b7" fontSize="10" fontWeight="700">{isStrongFlow ? 'RANGE RECLAIM' : 'ENTRY'} {entry.toFixed(1)}</text>
+      <text x="1018" y={y(stop)+4} fill="#fda4af" fontSize="10" fontWeight="700">{isStrongFlow ? 'INVALID BELOW' : 'SL'} {stop.toFixed(1)}</text>
+      <text x="1018" y={y(target)+4} fill="#6ee7b7" fontSize="10" fontWeight="700">{isStrongFlow ? 'NEXT LIQUIDITY' : 'TP'} {target.toFixed(1)}</text>
 
       <text x="42" y="503" fill="#64748b" fontSize="9">VOLUME</text>
       {bars.map((bar,index) => index % 6 === 0 ? <text key={`label-${index}`} x={x(index)} y="628" textAnchor="middle" fill="#64748b" fontSize="9">{bar[0].includes(' ') ? bar[0].split(' ').at(-1) : bar[0]}</text> : null)}
@@ -2943,23 +2953,23 @@ export default function Home() {
               <div className="overflow-hidden rounded-2xl border border-cyan-300/18 bg-[#041326]/65">
                 <div className="flex flex-col gap-2 border-b border-cyan-200/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-cyan-100">Historical range → sweep → confirmation study</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Real GC gold-futures 15-minute OHLC and volume from Sep 2–3, 2026. Labels are our retrospective study.</p>
+                    <p className="text-xs font-semibold text-cyan-100">Strong sell-side sweep → range reclaim study</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Real GC gold-futures 15-minute OHLC and volume from Aug 14, 2026. The higher-volume sweep is followed by an immediate full-range displacement close.</p>
                   </div>
                   <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">15M–1H SETUP</Badge>
                 </div>
 
                 <div className="aspect-[16/9] min-h-[330px] overflow-hidden">
-                  <HistoricalGoldStudy mode="flow" />
+                  <HistoricalGoldStudy mode="strong-flow" />
                 </div>
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                  ['1', 'Mark the range', 'Find sideways price action and the POC—the level where the most activity is concentrated. Wait while price remains inside.'],
-                  ['2', 'Watch the sweep', 'Price briefly takes liquidity outside the range. The sweep alone is not an entry; require a close back and directional evidence.'],
-                  ['3', 'Let the move develop', 'A strong displacement shows which side gained control. Do not chase the expansion candle; wait for the return.'],
-                  ['4', 'Enter after defense', 'Trade only after the POC/retest area is defended on a completed candle. Place SL beyond structure and project TP from risk.'],
+                  ['1', 'Define the balance', 'Use the repeated 15-minute overlap to mark the range high, range low and POC. There is no trade while price rotates inside it.'],
+                  ['2', 'Demand a real liquidity raid', 'The sweep must clearly break the range low and expand on stronger volume. The sweep candle itself is still not an entry.'],
+                  ['3', 'Require a decisive reclaim', 'The next completed candle must close back through the POC and above the opposite range boundary with strong displacement.'],
+                  ['4', 'Wait for executable risk', 'Do not chase the large reclaim candle. Entry needs a later retest that holds; invalidation remains below the sweep extreme.'],
                 ].map(([number, title, description]) => (
                   <div key={number} className="rounded-xl border border-sky-200/12 bg-[#06182b]/42 p-4">
                     <div className="grid size-7 place-items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 text-[10px] font-bold text-cyan-100">{number}</div>
