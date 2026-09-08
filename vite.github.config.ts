@@ -7,7 +7,7 @@ const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   root: fileURLToPath(new URL('./github-pages', import.meta.url)),
-  base: '/aurum-guard-trading/',
+  base: process.env.VERCEL ? '/' : '/aurum-guard-trading/',
   publicDir: fileURLToPath(new URL('./public', import.meta.url)),
   css: { postcss: { plugins: [tailwindcss()] } },
   resolve: { alias: { '@': projectRoot } },
