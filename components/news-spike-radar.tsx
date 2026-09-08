@@ -289,7 +289,7 @@ export function NewsSpikeRadar() {
           </div>
 
           <div className="mt-4 grid gap-3 border-t border-white/7 pt-4 md:grid-cols-[1fr_auto] md:items-center">
-            <p className="text-[10px] leading-4 text-muted-foreground"><strong className="text-foreground">About “pips”:</strong> XAUUSD pip size varies by broker, so the radar does not invent a fixed pip forecast. Use your broker’s quote convention and the chart’s ATR. Aurum Guard’s Pine shock label activates after a completed candle reaches at least 2.0× ATR or gaps at least 0.75× ATR.</p>
+            <p className="text-[10px] leading-4 text-muted-foreground"><strong className="text-foreground">About “pips”:</strong> XAUUSD pip size varies by broker, so the radar does not invent a fixed pip forecast. Use your broker’s quote convention and the chart’s ATR. Asheparte AI’s Pine shock label activates after a completed candle reaches at least 2.0× ATR or gaps at least 0.75× ATR.</p>
             <a href="https://www.tradingview.com/economic-calendar/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">Open full calendar <ExternalLink className="size-3" /></a>
           </div>
         </CardContent>

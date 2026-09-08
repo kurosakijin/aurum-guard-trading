@@ -542,7 +542,7 @@ function FibonacciChartGuide() {
 }
 
 const pineScript = String.raw`//@version=6
-strategy("Aurum Guard Combined v59: Trend + Reversal", overlay = true, pyramiding = 0,
+strategy("Asheparte AI Combined v59: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 0.5,
@@ -627,7 +627,7 @@ syncMinimumCorrelation = input.float(0.25, "Minimum correlation", minval = -1.00
 
 // TradingView's strategy-wide circuit breaker cancels pending orders, closes an
 // open simulated position and blocks additional orders for the session at this loss.
-strategy.risk.max_intraday_loss(maxDailyLossPercent, strategy.percent_of_equity, "Aurum Guard daily-loss lock")
+strategy.risk.max_intraday_loss(maxDailyLossPercent, strategy.percent_of_equity, "Asheparte AI daily-loss lock")
 
 pivotLength = input.int(5, "Liquidity / structure swing length", minval = 2, maxval = 30, group = "Automatic chart map")
 simpleChartMode = input.bool(true, "Simple chart mode (recommended)", group = "Automatic chart map")
@@ -2359,7 +2359,7 @@ export default function Home() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-heading text-[15px] font-semibold tracking-tight">Aurum Guard</span>
+                <span className="font-heading text-[15px] font-semibold tracking-tight">Asheparte AI</span>
                 <Badge className="hidden border border-emerald-400/20 bg-emerald-400/10 text-[10px] text-emerald-300 min-[380px]:inline-flex">PAPER</Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">Precious metals decision engine</p>
@@ -2515,7 +2515,7 @@ export default function Home() {
         <section id="mt5-bot" className={workspacePanel === 'mt5' ? 'mb-4' : 'hidden'} aria-labelledby="mt5-bot-heading">
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Aurum Guard MT5 Auto Trader</CardTitle>
+              <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Asheparte AI MT5 Auto Trader</CardTitle>
               <CardDescription>MT5 v1.90 · M15/M30/H1 consolidation/POC → sweep → displacement → POC-return entry · fixed 0.01 lot · 2.14R target</CardDescription>
               <CardAction><Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-200">DEMO ENTRIES ON</Badge></CardAction>
             </CardHeader>
@@ -2971,7 +2971,7 @@ export default function Home() {
 
               <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr_.8fr]">
                 <div className="rounded-xl border border-sky-300/16 bg-sky-300/[.04] p-4">
-                  <p className="text-xs font-semibold text-sky-100">How Aurum Guard should use these patterns</p>
+                  <p className="text-xs font-semibold text-sky-100">How Asheparte AI should use these patterns</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-4">
                     {[
                       ['1 · STRUCTURE', 'Pattern must be visible on 15m or 1H—not imagined from two candles.'],
@@ -3223,7 +3223,7 @@ export default function Home() {
 
               <div className="mb-4 rounded-xl border border-orange-300/20 bg-orange-300/[.045] p-4 text-[10px] leading-5 text-muted-foreground">
                 <p className="font-semibold text-orange-100">Important: TradingView does not automatically sync website updates.</p>
-                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v59</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
+                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Asheparte AI Combined v59</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
@@ -3390,7 +3390,7 @@ export default function Home() {
 
               <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0c0f12]">
                 <div className="flex items-center justify-between border-b border-white/8 px-4 py-2 text-[10px] uppercase tracking-[.12em] text-muted-foreground">
-                  <span>aurum-guard-combined-trend-reversal.pine</span>
+                  <span>asheparte-ai-combined-trend-reversal.pine</span>
                   <span>Version 6</span>
                 </div>
                 <pre className="max-h-[730px] overflow-auto p-4 font-mono text-[11px] leading-[1.7] text-zinc-300"><code>{pineScript}</code></pre>
@@ -3399,7 +3399,7 @@ export default function Home() {
               <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/12 bg-primary/[.035] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium">Use it in TradingView</p>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor and select “Add to chart.” Use exactly 1m for automatic failure recovery, or 1H for the selective pullback entry. Keep Settings → 1m Auto Recovery and Simple chart mode enabled. For signals plus TP/SL fills, choose Create Alert → Aurum Guard → “Order fills and alert() function calls.”</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Copy once, replace the old code in Pine Editor and select “Add to chart.” Use exactly 1m for automatic failure recovery, or 1H for the selective pullback entry. Keep Settings → 1m Auto Recovery and Simple chart mode enabled. For signals plus TP/SL fills, choose Create Alert → Asheparte AI → “Order fills and alert() function calls.”</p>
                 </div>
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeLiveMarket.symbol)}`} target="_blank" rel="noreferrer">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">Open TradingView <ExternalLink /></Button>
@@ -3414,7 +3414,7 @@ export default function Home() {
                   <div className="max-w-3xl">
                     <p className="text-xs font-semibold uppercase tracking-[.12em] text-cyan-200">What the combined strategy does</p>
                     <h3 className="mt-2 font-heading text-lg font-semibold text-sky-50">Waits for agreement, confirms the entry, then manages three profit targets</h3>
-                    <p className="mt-2 text-[11px] leading-5 text-muted-foreground">Aurum Guard combines trend, reversal, liquidity and risk rules. It does not buy or sell from one indicator alone. Every signal is evaluated after the candle closes, then rejected if market direction, Gold/Silver agreement, volatility or available price room is unsuitable.</p>
+                    <p className="mt-2 text-[11px] leading-5 text-muted-foreground">Asheparte AI combines trend, reversal, liquidity and risk rules. It does not buy or sell from one indicator alone. Every signal is evaluated after the candle closes, then rejected if market direction, Gold/Silver agreement, volatility or available price room is unsuitable.</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.07em]">
                     <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Pine v6</Badge>

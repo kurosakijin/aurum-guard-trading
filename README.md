@@ -1,4 +1,4 @@
-# Aurum Guard
+# Asheparte AI
 
 A responsive gold and silver market dashboard with live TradingView widgets, a combined Pine Script v6 strategy, Gold/Silver confirmation, automatic projected SL/TP levels, a confirmed-swing Fibonacci golden zone, a 15-minute manipulation and blow-off safety detector, Philippine-time US news monitoring, and risk-first entry guidance.
 
@@ -33,4 +33,4 @@ npm run build:pages
 
 ## Risk notice
 
-Aurum Guard provides educational, rule-based paper-trading tools. Signals, targets, stops, correlations, and TradingView ratings are not guarantees of profit or personalized financial advice. Backtest and paper-trade before considering live capital.
+Asheparte AI provides educational, rule-based paper-trading tools. Signals, targets, stops, correlations, and TradingView ratings are not guarantees of profit or personalized financial advice. Backtest and paper-trade before considering live capital.
