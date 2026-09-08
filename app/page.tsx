@@ -2361,6 +2361,7 @@ export default function Home() {
   const [widgetRefresh, setWidgetRefresh] = useState(0);
   const [scriptCopied, setScriptCopied] = useState(false);
   const [structureScriptCopied, setStructureScriptCopied] = useState(false);
+  const [pineScriptView, setPineScriptView] = useState<'structure' | 'combined'>('structure');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
@@ -3253,7 +3254,27 @@ export default function Home() {
             </Card>
           </div>
 
-          <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
+          <div id="pine-script" className="min-w-0">
+            <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-sky-300/15 bg-[#06182b]/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,.18)]">
+              <Button
+                type="button"
+                variant="ghost"
+                className={pineScriptView === 'structure' ? 'bg-cyan-300 text-[#03121f] hover:bg-cyan-200 hover:text-[#03121f]' : 'text-muted-foreground hover:bg-white/[.05] hover:text-foreground'}
+                onClick={() => setPineScriptView('structure')}
+              >
+                <ScanLine /> Swing Structure
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className={pineScriptView === 'combined' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-muted-foreground hover:bg-white/[.05] hover:text-foreground'}
+                onClick={() => setPineScriptView('combined')}
+              >
+                <Code2 /> Combined Strategy
+              </Button>
+            </div>
+
+          <Card className={pineScriptView === 'combined' ? 'overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]' : 'hidden'}>
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v59</CardTitle>
               <CardDescription>One free-plan script slot · M15/H1 four-stage POC cycle + Gold/Silver sync + three take-profit levels + strategy-compatible alerts</CardDescription>
@@ -3548,7 +3569,7 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card className="mt-4 overflow-hidden border-cyan-300/18 bg-[linear-gradient(145deg,rgba(34,211,238,.07),rgba(18,22,27,.96)_42%)] shadow-[0_20px_70px_rgba(0,0,0,.2)]">
+          <Card className={pineScriptView === 'structure' ? 'overflow-hidden border-cyan-300/18 bg-[linear-gradient(145deg,rgba(34,211,238,.07),rgba(18,22,27,.96)_42%)] shadow-[0_20px_70px_rgba(0,0,0,.2)]' : 'hidden'}>
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><ScanLine className="size-4 text-cyan-300" /> Swing Structure + Consolidation · Pine v6</CardTitle>
               <CardDescription>A separate clean overlay: confirmed Swing High, confirmed Swing Low, and consolidation boxes—nothing else.</CardDescription>
@@ -3586,6 +3607,7 @@ export default function Home() {
               <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Default settings use five candles on each side of a pivot and a 20-bar consolidation scan. Because pivots need future candles for confirmation, labels appear later but remain anchored to the true swing candle.</p>
             </CardContent>
           </Card>
+          </div>
         </section>
 
         <section id="reversal-playbook" className={workspacePanel === 'guides' ? 'mt-4' : 'hidden'}>
