@@ -22,6 +22,7 @@ import {
   RadioTower,
   RefreshCw,
   RotateCcw,
+  ScanLine,
   ShieldCheck,
   Sparkles,
   TriangleAlert,
@@ -2298,12 +2299,68 @@ sendAurumAlert(sellSideManipulation, "15M MANIPULATION: sell-side liquidity swep
 sendAurumAlert(blowOffTop, "15M BLOW-OFF TOP: extended exhaustion candle confirmed; wait, this is not an automatic short")
 sendAurumAlert(blowOffBottom, "15M BLOW-OFF BOTTOM: extended exhaustion candle confirmed; wait, this is not an automatic long")`;
 
+const swingStructureScript = String.raw`//@version=6
+indicator("Asheparte AI · Swing High / Low + Consolidation", overlay = true, max_labels_count = 300, max_boxes_count = 80)
+
+// Confirmed pivots print only after the right-side bars have closed.
+leftBars = input.int(5, "Swing bars left", minval = 1, maxval = 25, group = "Swing High / Low")
+rightBars = input.int(5, "Swing bars right", minval = 1, maxval = 25, group = "Swing High / Low")
+
+// A range is marked only when price is compact and directionless relative to ATR.
+rangeBars = input.int(20, "Consolidation lookback", minval = 8, maxval = 100, group = "Consolidation")
+atrLength = input.int(14, "ATR length", minval = 5, maxval = 100, group = "Consolidation")
+maxRangeATR = input.float(2.0, "Maximum range size (ATR)", minval = 0.5, maxval = 6.0, step = 0.1, group = "Consolidation")
+maxNetMove = input.float(0.45, "Maximum net move / range", minval = 0.10, maxval = 0.90, step = 0.05, group = "Consolidation")
+breakBufferATR = input.float(0.05, "Close breakout buffer (ATR)", minval = 0.0, maxval = 0.5, step = 0.01, group = "Consolidation")
+boxFill = input.int(86, "Box transparency", minval = 60, maxval = 95, group = "Style")
+
+swingHigh = ta.pivothigh(high, leftBars, rightBars)
+swingLow = ta.pivotlow(low, leftBars, rightBars)
+
+if not na(swingHigh)
+    label.new(bar_index - rightBars, swingHigh, "Swing High", style = label.style_label_down, color = color.new(color.red, 5), textcolor = color.white, size = size.tiny)
+
+if not na(swingLow)
+    label.new(bar_index - rightBars, swingLow, "Swing Low", style = label.style_label_up, color = color.new(color.lime, 12), textcolor = color.white, size = size.tiny)
+
+atr = ta.atr(atrLength)
+candidateHigh = ta.highest(high, rangeBars)
+candidateLow = ta.lowest(low, rangeBars)
+candidateRange = candidateHigh - candidateLow
+netMove = math.abs(close - close[rangeBars - 1])
+enoughHistory = bar_index >= rangeBars - 1 and not na(atr)
+compactRange = enoughHistory and candidateRange <= atr * maxRangeATR
+directionless = enoughHistory and candidateRange > syminfo.mintick and netMove / candidateRange <= maxNetMove
+rangeConfirmed = compactRange and directionless
+
+var box consolidationBox = na
+var float consolidationHigh = na
+var float consolidationLow = na
+var bool inConsolidation = false
+
+if not inConsolidation and rangeConfirmed
+    consolidationHigh := candidateHigh
+    consolidationLow := candidateLow
+    consolidationBox := box.new(left = bar_index - rangeBars + 1, top = consolidationHigh, right = bar_index, bottom = consolidationLow, border_color = color.new(color.aqua, 15), border_width = 1, bgcolor = color.new(color.blue, boxFill), text = "CONSOLIDATION", text_color = color.new(color.aqua, 5), text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_top)
+    inConsolidation := true
+
+if inConsolidation
+    breakoutBuffer = atr * breakBufferATR
+    confirmedBreakout = close > consolidationHigh + breakoutBuffer or close < consolidationLow - breakoutBuffer
+    box.set_right(consolidationBox, bar_index)
+    if confirmedBreakout
+        inConsolidation := false
+        consolidationBox := na
+        consolidationHigh := na
+        consolidationLow := na`;
+
 export default function Home() {
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>('desk');
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
   const [widgetRefresh, setWidgetRefresh] = useState(0);
   const [scriptCopied, setScriptCopied] = useState(false);
+  const [structureScriptCopied, setStructureScriptCopied] = useState(false);
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
@@ -2343,6 +2400,12 @@ export default function Home() {
     await navigator.clipboard.writeText(pineScript);
     setScriptCopied(true);
     window.setTimeout(() => setScriptCopied(false), 1600);
+  }
+
+  async function copyStructureScript() {
+    await navigator.clipboard.writeText(swingStructureScript);
+    setStructureScriptCopied(true);
+    window.setTimeout(() => setStructureScriptCopied(false), 1600);
   }
 
   function selectMetal(value: LiveMarketKey) {
@@ -2390,7 +2453,7 @@ export default function Home() {
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-medium text-primary transition hover:bg-primary/15"
             >
               <Code2 className="size-4" />
-              <span className="hidden sm:inline">One Pine Script</span>
+              <span className="hidden sm:inline">Pine Scripts</span>
               <span className="sm:hidden">Script</span>
             </button>
             <Button variant="outline" className="border-white/10 bg-white/[.03] text-xs" onClick={runScan} disabled={scanning}>
@@ -2640,6 +2703,7 @@ export default function Home() {
               </div>
             </CardContent>
           </Card>
+
         </section>
 
         <section id="chart-guide" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="chart-guide-heading">
@@ -3481,6 +3545,45 @@ export default function Home() {
               </div>
 
               <p className="mt-4 text-[10px] leading-4 text-muted-foreground">Use 1m–5m for lower-timeframe pullback and recovery logic; use 15m or 1H for the slower consolidation/POC sequence. Signals are conditional and cannot guarantee a profitable outcome. The complete source stays available through “Copy full Pine script” without filling this page with thousands of lines.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-4 overflow-hidden border-cyan-300/18 bg-[linear-gradient(145deg,rgba(34,211,238,.07),rgba(18,22,27,.96)_42%)] shadow-[0_20px_70px_rgba(0,0,0,.2)]">
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle className="flex items-center gap-2"><ScanLine className="size-4 text-cyan-300" /> Swing Structure + Consolidation · Pine v6</CardTitle>
+              <CardDescription>A separate clean overlay: confirmed Swing High, confirmed Swing Low, and consolidation boxes—nothing else.</CardDescription>
+              <CardAction>
+                <Button variant="outline" size="sm" className="border-cyan-300/15 bg-cyan-300/[.04]" onClick={copyStructureScript}>
+                  {structureScriptCopied ? <Check /> : <Clipboard />}
+                  {structureScriptCopied ? 'Structure script copied' : 'Copy structure script'}
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-red-300/15 bg-red-300/[.035] p-3">
+                  <p className="text-xs font-semibold text-red-200">Swing High</p>
+                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Marks a pivot only after the selected right-side candles close, preventing a developing pivot from being presented as confirmed.</p>
+                </div>
+                <div className="rounded-xl border border-emerald-300/15 bg-emerald-300/[.035] p-3">
+                  <p className="text-xs font-semibold text-emerald-200">Swing Low</p>
+                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Uses the same confirmed-pivot rule and places the label on the original pivot candle.</p>
+                </div>
+                <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-3">
+                  <p className="text-xs font-semibold text-cyan-200">Consolidation Box</p>
+                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Requires a compact ATR-sized range with limited net movement, then extends the box until a candle closes outside its boundary.</p>
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-[#0c0f12]">
+                <div className="flex items-center justify-between border-b border-white/8 px-4 py-2 text-[10px] uppercase tracking-[.12em] text-muted-foreground">
+                  <span>asheparte-ai-swing-structure.pine</span>
+                  <span>Indicator · Version 6</span>
+                </div>
+                <pre className="max-h-[520px] overflow-auto p-4 font-mono text-[11px] leading-[1.7] text-zinc-300"><code>{swingStructureScript}</code></pre>
+              </div>
+
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Default settings use five candles on each side of a pivot and a 20-bar consolidation scan. Because pivots need future candles for confirmation, labels appear later but remain anchored to the true swing candle.</p>
             </CardContent>
           </Card>
         </section>
