@@ -542,7 +542,7 @@ function FibonacciChartGuide() {
 }
 
 const pineScript = String.raw`//@version=6
-strategy("Aurum Guard Combined v55: Trend + Reversal", overlay = true, pyramiding = 0,
+strategy("Aurum Guard Combined v56: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 0.5,
@@ -639,17 +639,17 @@ structureStopLookback = input.int(7, "Trend structural stop lookback", minval = 
 planBars = input.int(25, "Keep projected plan for bars", minval = 5, maxval = 200, group = "Automatic chart map")
 
 showAutoFibonacci = input.bool(true, "Show automatic swing Fibonacci", group = "Automatic Fibonacci")
-showFibonacciLabels = input.bool(true, "Show Fibonacci level names", group = "Automatic Fibonacci")
+showFibonacciLabels = input.bool(false, "Show Fibonacci level names", group = "Automatic Fibonacci")
 showFibonacciRejections = input.bool(true, "Mark confirmed golden-zone rejection", group = "Automatic Fibonacci")
 fibonacciProjectionBars = input.int(35, "Project levels for bars", minval = 10, maxval = 200, group = "Automatic Fibonacci")
 fibonacciSignalCooldown = input.int(5, "Bars between rejection watches", minval = 1, maxval = 50, group = "Automatic Fibonacci")
 
 showDetailedVolumeProfile = input.bool(true, "Show detailed volume profile", group = "Detailed Volume Profile")
 volumeProfileLookback = input.int(120, "Profile lookback bars", minval = 30, maxval = 500, group = "Detailed Volume Profile")
-volumeProfileRows = input.int(24, "Profile rows", minval = 8, maxval = 40, group = "Detailed Volume Profile")
+volumeProfileRows = input.int(16, "Profile rows", minval = 8, maxval = 40, group = "Detailed Volume Profile")
 volumeProfileValueArea = input.float(70.0, "Value area percent", minval = 50.0, maxval = 90.0, step = 1.0, group = "Detailed Volume Profile")
-volumeProfileWidthBars = input.int(18, "Maximum profile width in bars", minval = 5, maxval = 40, group = "Detailed Volume Profile")
-showVolumeProfileLabels = input.bool(true, "Show POC / VAH / VAL labels", group = "Detailed Volume Profile")
+volumeProfileWidthBars = input.int(12, "Maximum profile width in bars", minval = 5, maxval = 40, group = "Detailed Volume Profile")
+showVolumeProfileLabels = input.bool(false, "Show VAH / VAL labels", group = "Detailed Volume Profile")
 
 enable15mManipulation = input.bool(true, "Enable 15m manipulation detector", group = "15m Manipulation + Blow-off")
 manipulationMinimumWick = input.float(0.45, "Manipulation wick share", minval = 0.25, maxval = 0.80, step = 0.05, group = "15m Manipulation + Blow-off")
@@ -2069,8 +2069,8 @@ if barstate.islast and (na(detailedVPUpdateBar) or bar_index != detailedVPUpdate
         detailedVPPocLine := line.new(profileLineStart, pocPrice, profileLineEnd, pocPrice, xloc = xloc.bar_index, color = color.yellow, width = 2)
         detailedVPVahLine := line.new(profileLineStart, vahPrice, profileLineEnd, vahPrice, xloc = xloc.bar_index, color = color.new(color.aqua, 20), style = line.style_dashed)
         detailedVPValLine := line.new(profileLineStart, valPrice, profileLineEnd, valPrice, xloc = xloc.bar_index, color = color.new(color.aqua, 20), style = line.style_dashed)
+        detailedVPPocLabel := label.new(profileLineEnd, pocPrice, "POC · " + str.tostring(pocPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.yellow, 15), textcolor = color.black, size = size.tiny)
         if showVolumeProfileLabels
-            detailedVPPocLabel := label.new(profileLineEnd, pocPrice, "POC · " + str.tostring(pocPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.yellow, 15), textcolor = color.black, size = size.tiny)
             detailedVPVahLabel := label.new(profileLineEnd, vahPrice, "VAH · " + str.tostring(vahPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.aqua, 45), textcolor = color.white, size = size.tiny)
             detailedVPValLabel := label.new(profileLineEnd, valPrice, "VAL · " + str.tostring(valPrice, format.mintick), xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.aqua, 45), textcolor = color.white, size = size.tiny)
 
@@ -2080,7 +2080,8 @@ plotshape(blowOffTop, title = "15M BLOW-OFF TOP", text = "BLOW-OFF TOP\nWAIT", s
 plotshape(blowOffBottom, title = "15M BLOW-OFF BOTTOM", text = "BLOW-OFF BOTTOM\nWAIT", style = shape.labelup, location = location.belowbar, color = color.aqua, textcolor = color.black, size = size.small)
 plotshape(showPriorityMarks and not simpleChartMode and fibLongRejection, title = "FIBONACCI CONTEXT ONLY LONG", text = "FIB CONTEXT\nNOT AN ENTRY", style = shape.labelup, location = location.belowbar, color = color.yellow, textcolor = color.black, size = size.tiny)
 plotshape(showPriorityMarks and not simpleChartMode and fibShortRejection, title = "FIBONACCI CONTEXT ONLY SHORT", text = "FIB CONTEXT\nNOT AN ENTRY", style = shape.labeldown, location = location.abovebar, color = color.yellow, textcolor = color.black, size = size.tiny)
-plotshape(volatilityShock and not blowOffTop and not blowOffBottom, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
+newVolatilityShock = volatilityShock and not volatilityShock[1]
+plotshape(newVolatilityShock and not blowOffTop and not blowOffBottom, title = "VOLATILITY SHOCK", text = "NO TRADE\nSHOCK", style = shape.labeldown, location = location.abovebar, color = color.fuchsia, textcolor = color.white, size = size.small)
 plotshape(not simpleChartMode and shockReset, title = "SHOCK PAUSE RESET", text = "SHOCK RESET\nWAIT P1 / P2 / P3", style = shape.labelup, location = location.belowbar, color = color.new(color.teal, 8), textcolor = color.white, size = size.tiny)
 plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBullishChanged, title = "GOLD SILVER SYNC BULLISH", text = "SYNC GOOD\nBULLISH", style = shape.labelup, location = location.belowbar, color = color.new(color.lime, 8), textcolor = color.black, size = size.tiny)
 plotshape(not simpleChartMode and showMetalSyncMarks and metalSyncBearishChanged, title = "GOLD SILVER SYNC BEARISH", text = "SYNC GOOD\nBEARISH", style = shape.labeldown, location = location.abovebar, color = color.new(color.red, 8), textcolor = color.white, size = size.tiny)
@@ -3167,7 +3168,7 @@ export default function Home() {
 
           <Card id="pine-script" className="overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v55</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v56</CardTitle>
               <CardDescription>One free-plan script slot · M15/H1 four-stage POC cycle + Gold/Silver sync + three take-profit levels + strategy-compatible alerts</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
@@ -3199,7 +3200,7 @@ export default function Home() {
 
               <div className="mb-4 rounded-xl border border-orange-300/20 bg-orange-300/[.045] p-4 text-[10px] leading-5 text-muted-foreground">
                 <p className="font-semibold text-orange-100">Important: TradingView does not automatically sync website updates.</p>
-                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v55</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
+                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Aurum Guard Combined v56</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
@@ -3223,7 +3224,7 @@ export default function Home() {
               <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.045] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
-                    <p className="text-xs font-semibold text-cyan-100">v55 · 1m / 5m precision and liquidity-room gate</p>
+                    <p className="text-xs font-semibold text-cyan-100">v56 · compact chart defaults and cleaner warnings</p>
                     <p className="mt-1 text-[10px] leading-4 text-muted-foreground">A lower-timeframe P1 now needs the previous completed 15m and 1H candles to agree on direction through their 20/50 EMA structure and RSI. The defended pullback must also have at least 1.5R of space before the next confirmed pivot liquidity level. A technically valid but crowded setup displays WAIT · NO ROOM instead of BUY or SELL.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
@@ -3394,7 +3395,7 @@ export default function Home() {
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.07em]">
                     <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Pine v6</Badge>
-                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v55</Badge>
+                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v56</Badge>
                     <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">Paper strategy</Badge>
                   </div>
                 </div>
@@ -3412,16 +3413,16 @@ export default function Home() {
               <div className="mt-4 rounded-xl border border-yellow-300/18 bg-yellow-300/[.035] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="max-w-3xl">
-                    <p className="text-xs font-semibold text-yellow-100">Detailed volume profile included</p>
-                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v55 draws adjustable horizontal volume rows for the latest lookback window. Yellow marks the POC, while cyan dashed lines mark VAH and VAL around the default 70% value area. Volume is distributed across every price row crossed by each candle instead of assigning the whole candle to one price.</p>
+                    <p className="text-xs font-semibold text-yellow-100">Compact volume profile by default</p>
+                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v56 keeps the important context without covering the candles. Yellow emphasizes the POC; cyan dashed lines show the 70% value area. Fibonacci names and VAH/VAL text are hidden by default, while every detailed control remains available in Settings.</p>
                   </div>
                   <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">POC + VAH + VAL</Badge>
                 </div>
                 <div className="mt-3 grid gap-2 text-[10px] sm:grid-cols-4">
                   <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><span className="font-semibold text-yellow-200">Lookback</span><p className="mt-1 text-muted-foreground">120 bars</p></div>
-                  <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><span className="font-semibold text-cyan-200">Rows</span><p className="mt-1 text-muted-foreground">24 price levels</p></div>
+                  <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><span className="font-semibold text-cyan-200">Rows</span><p className="mt-1 text-muted-foreground">16 price levels</p></div>
                   <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><span className="font-semibold text-cyan-200">Value area</span><p className="mt-1 text-muted-foreground">70% of volume</p></div>
-                  <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><span className="font-semibold text-sky-200">Width</span><p className="mt-1 text-muted-foreground">18 chart bars</p></div>
+                  <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><span className="font-semibold text-sky-200">Width</span><p className="mt-1 text-muted-foreground">12 chart bars</p></div>
                 </div>
                 <p className="mt-3 border-t border-yellow-300/10 pt-3 text-[10px] leading-4 text-muted-foreground">Adjust these under Settings → Detailed Volume Profile. XAUUSD normally supplies tick volume; use GC futures when exchange-traded gold volume is required. POC and value-area levels are context, not automatic entries.</p>
               </div>
