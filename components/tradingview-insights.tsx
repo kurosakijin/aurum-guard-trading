@@ -23,10 +23,12 @@ function TradingViewWidget({
     if (!element) return;
 
     element.replaceChildren();
+    element.style.colorScheme = 'dark';
     const widget = document.createElement('div');
     widget.className = 'tradingview-widget-container__widget';
     widget.style.height = '100%';
     widget.style.width = '100%';
+    widget.style.colorScheme = 'dark';
 
     const script = document.createElement('script');
     script.src = scriptUrl;
@@ -144,7 +146,7 @@ export function TradingViewMetalsNews({
         symbol,
         displayMode: 'regular',
         colorTheme: 'dark',
-        isTransparent: true,
+        isTransparent: false,
         locale: 'en',
         width: '100%',
         height: '100%',

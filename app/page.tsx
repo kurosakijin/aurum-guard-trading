@@ -2448,7 +2448,12 @@ export default function Home() {
               <CardTitle className="flex items-center gap-2"><CandlestickChart className="size-4 text-cyan-300" /> XAUUSD live chart</CardTitle>
               <CardDescription>Account-independent market view · H1 by default</CardDescription>
               <CardAction>
-                <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-200"><RadioTower className="size-3" /> LIVE</Badge>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="hidden border-cyan-300/20 bg-cyan-300/[.06] text-cyan-100 sm:inline-flex" onClick={() => openWorkspace('pine', 'pine-script')}>
+                    <Code2 className="size-3.5" /> Use Aurum Pine
+                  </Button>
+                  <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-200"><RadioTower className="size-3" /> LIVE</Badge>
+                </div>
               </CardAction>
             </CardHeader>
             <CardContent className="p-2 sm:p-3">
@@ -2459,6 +2464,12 @@ export default function Home() {
                   interval="60"
                   label="Gold"
                 />
+              </div>
+              <div className="mt-2 flex flex-col gap-2 rounded-lg border border-cyan-300/12 bg-cyan-300/[.035] px-3 py-2 text-[10px] leading-4 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>Custom Pine cannot run inside TradingView’s embedded chart. Copy Aurum Guard, then add it to your full TradingView chart.</span>
+                <Button variant="ghost" size="sm" className="h-7 shrink-0 text-cyan-200 hover:bg-cyan-300/10 hover:text-cyan-100 sm:hidden" onClick={() => openWorkspace('pine', 'pine-script')}>
+                  <Code2 className="size-3.5" /> Use Aurum Pine
+                </Button>
               </div>
             </CardContent>
           </Card>
