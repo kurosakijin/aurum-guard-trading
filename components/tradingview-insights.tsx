@@ -102,7 +102,7 @@ export function TradingViewTechnicalAnalysis({
         colorTheme: 'dark',
       }}
       label="Live TradingView technical rating"
-      className="h-[680px] w-full sm:h-[760px]"
+      className="h-[410px] w-full sm:h-[440px]"
     />
   );
 }
