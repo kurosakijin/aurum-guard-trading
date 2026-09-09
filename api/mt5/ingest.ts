@@ -1,4 +1,4 @@
-import { authorized, ingestJournal, type BridgePayload } from '../../lib/hosted-journal';
+import { authorized, ingestJournal, type BridgePayload } from '../../lib/hosted-journal.js';
 
 export default {
   async fetch(request: Request) {

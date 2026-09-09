@@ -1,4 +1,4 @@
-import { readJournal } from '../lib/hosted-journal';
+import { readJournal } from '../lib/hosted-journal.js';
 
 export default {
   async fetch(request: Request) {
