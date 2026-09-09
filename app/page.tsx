@@ -2655,7 +2655,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-sky-200/15 bg-sky-300/[.055] px-3 py-2 text-[11px] text-sky-100">
               <span className="size-2 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(253,224,71,.7)]" />
-              MT5 account not connected
+              MT5 / ACCM account not connected
             </div>
           </div>
         </section>
@@ -2689,14 +2689,14 @@ export default function Home() {
           <div className="grid content-start gap-4">
             <Card className="border-cyan-300/20">
               <CardHeader className="border-b border-sky-200/10 pb-3">
-                <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> MT5 account</CardTitle>
+                <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> MT5 / ACCM account</CardTitle>
                 <CardDescription>Session-bound broker data</CardDescription>
                 <CardAction><Badge variant="outline" className="border-amber-300/25 text-amber-200">OFFLINE</Badge></CardAction>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
                   <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> Account data waiting</div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">When the secure MT5 bridge is added, this panel will load only the account belonging to the signed-in session.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">When the secure bridge is added, this panel will load either a standard MT5 account or an ACCM account through its MT5 server—only for the signed-in user.</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {['Balance', 'Equity', 'Free margin', 'Open P/L'].map((label) => (
@@ -2706,9 +2706,14 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <Button disabled className="mt-3 w-full border border-sky-300/15 bg-sky-300/10 text-sky-200 opacity-70">
-                  <PlugZap className="size-4" /> Connect after backend setup
-                </Button>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button disabled className="border border-sky-300/15 bg-sky-300/10 text-sky-200 opacity-70">
+                    <PlugZap className="size-4" /> MT5
+                  </Button>
+                  <Button disabled className="border border-amber-300/15 bg-amber-300/[.08] text-amber-200 opacity-70">
+                    <PlugZap className="size-4" /> ACCM
+                  </Button>
+                </div>
                 <Button variant="outline" className="mt-2 w-full border-white/10 bg-white/[.025]" onClick={() => openWorkspace('journal', 'trade-journal')}>
                   <BookOpenCheck className="size-4" /> Open account journal
                 </Button>
@@ -2739,11 +2744,34 @@ export default function Home() {
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-cyan-300">
                 <Database className="size-3.5" /> Account performance
               </div>
-              <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">MT5 trading journal</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Closed trades become a daily record of profit, loss, fees and execution quality for the MT5 account linked to the signed-in user.</p>
+              <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">MT5 / ACCM trading journal</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Closed trades become a daily record of profit, loss, fees and execution quality for the MT5 or ACCM account linked to the signed-in user.</p>
             </div>
             <Badge variant="outline" className="w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200">ACCOUNT NOT CONNECTED</Badge>
           </div>
+
+          <Card className="overflow-hidden border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,.055),rgba(251,191,36,.035),rgba(5,18,32,.82))]">
+            <CardContent className="grid gap-3 pt-4 md:grid-cols-2">
+              <div className="rounded-xl border border-sky-300/15 bg-sky-300/[.035] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-sky-100"><PlugZap className="size-4 text-cyan-300" /> Standard MT5</p>
+                  <Badge variant="outline" className="border-sky-300/20 text-[9px] text-cyan-200">BRIDGE PLANNED</Badge>
+                </div>
+                <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Connect any supported MT5 broker through the Asheparte read-only journal bridge. Closed deals and account metrics use the broker server as their source.</p>
+              </div>
+              <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-amber-100"><Landmark className="size-4 text-amber-300" /> ACCM account</p>
+                  <Badge variant="outline" className="border-amber-300/20 text-[9px] text-amber-200">VIA MT5</Badge>
+                </div>
+                <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Select ACCM, then connect the ACCM MT5 login and exact broker server through the same bridge. ACCM trades remain labeled as an ACCM source in the journal.</p>
+              </div>
+              <div className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-white/8 bg-black/15 px-4 py-3 text-[10px] leading-4 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>Connection fields will stay server-side. The browser journal will never request or retain the master trading password.</span>
+                <Badge className="w-fit shrink-0 border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">READ-ONLY JOURNAL</Badge>
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
@@ -2778,7 +2806,7 @@ export default function Home() {
                     <div>
                       <Database className="mx-auto size-7 text-cyan-300/65" />
                       <p className="mt-3 text-sm font-medium text-sky-100">Waiting for linked account history</p>
-                      <p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">No sample trades are shown. After the secure bridge is connected, completed MT5 deals will appear here automatically while open positions remain in the account panel.</p>
+                      <p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">No sample trades are shown. After the secure bridge is connected, completed MT5 or ACCM deals will appear here automatically while open positions remain in the account panel.</p>
                     </div>
                   </div>
                 </div>
