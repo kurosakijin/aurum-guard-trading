@@ -17,7 +17,6 @@ import {
   ExternalLink,
   Landmark,
   LineChart,
-  LockKeyhole,
   Newspaper,
   PlugZap,
   RadioTower,
@@ -2816,8 +2815,8 @@ export default function Home() {
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-cyan-300">
                 <Database className="size-3.5" /> Account performance
               </div>
-              <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">MT5 / ACCM trading journal</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Closed trades become a daily record of profit, loss, fees and execution quality for the MT5 or ACCM account linked to the signed-in user.</p>
+              <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Trading journal</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Live ACCM performance and trade history.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" className={demoJournalEnabled ? 'border-red-300/20 bg-red-300/[.04] text-red-200' : 'border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100'} onClick={() => setDemoJournalEnabled((enabled) => !enabled)}>
@@ -2826,65 +2825,6 @@ export default function Home() {
               <Badge variant="outline" className={demoJournalEnabled ? 'w-fit border-fuchsia-300/25 bg-fuchsia-300/[.08] px-3 py-1.5 text-fuchsia-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{demoJournalEnabled ? (journalFeedOnline ? 'ACCM LIVE DEMO' : 'ACCM DEMO SNAPSHOT') : 'DEMO HIDDEN'}</Badge>
             </div>
           </div>
-
-          <Card className="overflow-hidden border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,.055),rgba(251,191,36,.035),rgba(5,18,32,.82))]">
-            <CardContent className="grid gap-3 pt-4 md:grid-cols-2">
-              <div className="rounded-xl border border-sky-300/15 bg-sky-300/[.035] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="flex items-center gap-2 text-xs font-semibold text-sky-100"><PlugZap className="size-4 text-cyan-300" /> Standard MT5</p>
-                  <Badge variant="outline" className="border-emerald-300/20 text-[9px] text-emerald-200">BRIDGE READY</Badge>
-                </div>
-                <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Connect any supported MT5 broker through the Asheparte read-only journal bridge. Closed deals and account metrics use the broker server as their source.</p>
-              </div>
-              <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="flex items-center gap-2 text-xs font-semibold text-amber-100"><Landmark className="size-4 text-amber-300" /> ACCM account</p>
-                  <Badge variant="outline" className="border-amber-300/20 text-[9px] text-amber-200">VIA MT5</Badge>
-                </div>
-                <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Select ACCM, then connect the ACCM MT5 login and exact broker server through the same bridge. ACCM trades remain labeled as an ACCM source in the journal.</p>
-              </div>
-              <div className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-white/8 bg-black/15 px-4 py-3 text-[10px] leading-4 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                <span>Connection fields will stay server-side. The browser journal will never request or retain the master trading password.</span>
-                <Badge className="w-fit shrink-0 border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">READ-ONLY JOURNAL</Badge>
-              </div>
-              <div className="md:col-span-2 grid gap-3 rounded-xl border border-cyan-300/12 bg-[#041326]/55 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
-                <div>
-                  <p className="text-xs font-semibold text-cyan-100">Install the combined analysis + journal advisor</p>
-                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">One analysis-only EA now provides the chart dashboard and read-only journal sync. Add <span className="font-mono text-sky-100">https://asheparte-ai.vercel.app</span> to MT5 WebRequest permissions before pairing a future hosted journal.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <a href="/downloads/AurumGuardAnalysisAdvisor.ex5" download>
-                    <Button className="bg-cyan-300 text-[#03121f] hover:bg-cyan-200"><Download className="size-4" /> Download combined EA</Button>
-                  </a>
-                  <a href="/downloads/AurumGuardAnalysisAdvisor.mq5" download>
-                    <Button variant="outline" className="border-white/10 bg-white/[.025]"><Code2 className="size-4" /> Source</Button>
-                  </a>
-                </div>
-              </div>
-              <div className="md:col-span-2 grid gap-2 sm:grid-cols-3">
-                {[
-                  ['1 · Install', 'Put the combined EA in MT5 Experts and attach it to one chart.'],
-                  ['2 · Analyze', 'Chart guidance and the account journal run together without trade execution.'],
-                  ['3 · Pair later', 'Hosted continuous sync activates after private storage and sign-in are added.'],
-                ].map(([step, detail]) => (
-                  <div key={step} className="rounded-lg border border-white/8 bg-white/[.025] p-3">
-                    <p className="text-[10px] font-semibold text-sky-100">{step}</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{detail}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-amber-300/15 bg-amber-300/[.035] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold text-amber-100">Pairing token</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">This public version displays a masked ACCM demo snapshot. Tokens remain local and are never published.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" className="border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100" onClick={() => setDemoJournalEnabled(true)}><BookOpenCheck className="size-4" /> Try demo journal</Button>
-                  <Button disabled variant="outline" className="shrink-0 border-amber-300/15 bg-amber-300/[.04] text-amber-200 opacity-65"><LockKeyhole className="size-4" /> Generate token</Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
@@ -3035,20 +2975,12 @@ export default function Home() {
                 </CardContent>
               </Card>
 
-              <Card className="border-cyan-300/15" size="sm">
-                <CardContent className="flex gap-3">
-                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-300" />
-                  <div>
-                    <p className="text-xs font-medium text-sky-100">Private by account</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The bridge will submit account number, deal ticket, timestamps, symbol, side, volume, prices, commission, swap and realized P/L. Each record must be scoped to its authenticated owner.</p>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
 
-          <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] px-4 py-3 text-[10px] leading-5 text-muted-foreground">
-            {demoJournalEnabled ? (journalFeedOnline ? `Live read-only demo feed · last broker sync ${new Date(journalData.account.updatedAt).toLocaleString()}. The login is masked and deposits are excluded from trading P/L.` : 'Showing the last safe ACCM demo snapshot until the hosted journal feed becomes available. The login and bridge token are not exposed.') : 'Deposits and withdrawals are excluded from trading results, preventing added funds from being mistaken for profit. Show the demo to inspect the masked broker-reported journal.'}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[.02] px-4 py-2.5 text-[10px] text-muted-foreground">
+            <span>{demoJournalEnabled ? (journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()}` : 'Using saved demo snapshot') : 'Demo journal hidden'}</span>
+            <span className="text-sky-100">Deposits excluded from P/L</span>
           </div>
         </section>
 
