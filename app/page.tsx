@@ -63,7 +63,7 @@ const timeframes = [
 ] as const;
 
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
-type WorkspacePanel = 'desk' | 'charts' | 'pine' | 'mt5' | 'guides' | 'risk';
+type WorkspacePanel = 'desk' | 'charts' | 'pine' | 'mt5' | 'journal' | 'guides' | 'risk';
 
 type GuideCandle = readonly [x: number, openY: number, closeY: number, lowY: number, highY: number];
 
@@ -2518,6 +2518,7 @@ export default function Home() {
       if (hash === '#live-chart') setWorkspacePanel('charts');
       else if (hash === '#pine-script') setWorkspacePanel('pine');
       else if (hash === '#mt5-bot') setWorkspacePanel('mt5');
+      else if (hash === '#journal' || hash === '#trade-journal') setWorkspacePanel('journal');
       else if (hash === '#chart-guide' || hash === '#pattern-playbook' || hash === '#fibonacci-guide' || hash === '#reversal-playbook') setWorkspacePanel('guides');
       else if (hash === '#risk-plan' || hash === '#news' || hash === '#news-radar') setWorkspacePanel('risk');
     };
@@ -2625,13 +2626,14 @@ export default function Home() {
             ['charts', 'Charts', CandlestickChart],
             ['pine', 'Pine strategy', Code2],
             ['mt5', 'MT5', Bot],
+            ['journal', 'Journal', Database],
             ['guides', 'Guides', BookOpenCheck],
             ['risk', 'Risk & news', ShieldCheck],
           ] as const).map(([panel, label, Icon]) => (
             <button
               key={panel}
               type="button"
-              onClick={() => openWorkspace(panel, panel === 'charts' ? 'live-chart' : panel === 'pine' ? 'pine-script' : panel === 'mt5' ? 'mt5-bot' : panel === 'guides' ? 'chart-guide' : panel === 'risk' ? 'news-radar' : 'desk')}
+              onClick={() => openWorkspace(panel, panel === 'charts' ? 'live-chart' : panel === 'pine' ? 'pine-script' : panel === 'mt5' ? 'mt5-bot' : panel === 'journal' ? 'trade-journal' : panel === 'guides' ? 'chart-guide' : panel === 'risk' ? 'news-radar' : 'desk')}
               className={`flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition ${workspacePanel === panel ? 'border-primary/35 bg-primary/12 text-primary shadow-[0_0_24px_rgba(225,177,78,.08)]' : 'border-transparent text-muted-foreground hover:border-white/10 hover:bg-white/[.04] hover:text-foreground'}`}
               aria-pressed={workspacePanel === panel}
             >
@@ -2707,6 +2709,9 @@ export default function Home() {
                 <Button disabled className="mt-3 w-full border border-sky-300/15 bg-sky-300/10 text-sky-200 opacity-70">
                   <PlugZap className="size-4" /> Connect after backend setup
                 </Button>
+                <Button variant="outline" className="mt-2 w-full border-white/10 bg-white/[.025]" onClick={() => openWorkspace('journal', 'trade-journal')}>
+                  <BookOpenCheck className="size-4" /> Open account journal
+                </Button>
               </CardContent>
             </Card>
 
@@ -2727,6 +2732,90 @@ export default function Home() {
         <div className={workspacePanel === 'risk' ? 'block' : 'hidden'}>
           <NewsSpikeRadar />
         </div>
+
+        <section id="trade-journal" className={workspacePanel === 'journal' ? 'space-y-4' : 'hidden'} aria-labelledby="trade-journal-heading">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-cyan-300">
+                <Database className="size-3.5" /> Account performance
+              </div>
+              <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">MT5 trading journal</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Closed trades become a daily record of profit, loss, fees and execution quality for the MT5 account linked to the signed-in user.</p>
+            </div>
+            <Badge variant="outline" className="w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200">ACCOUNT NOT CONNECTED</Badge>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ['Net P/L', 'Profit − loss − costs', 'text-sky-100'],
+              ['Gross profit', 'Sum of winning trades', 'text-emerald-300'],
+              ['Gross loss', 'Sum of losing trades', 'text-red-300'],
+              ['Closed trades', 'Completed deals only', 'text-amber-200'],
+            ].map(([label, note, tone]) => (
+              <Card key={label} className="border-sky-300/15 bg-[linear-gradient(145deg,rgba(56,189,248,.055),rgba(5,18,32,.78))]" size="sm">
+                <CardContent>
+                  <p className="text-[9px] font-medium uppercase tracking-[.13em] text-muted-foreground">{label}</p>
+                  <p className={`mt-2 font-mono text-xl font-semibold ${tone}`}>—</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">{note}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,.5fr)]">
+            <Card className="min-w-0 overflow-hidden border-sky-300/18">
+              <CardHeader className="border-b border-white/7 pb-3">
+                <CardTitle className="flex items-center gap-2"><BookOpenCheck className="size-4 text-cyan-300" /> Trade history</CardTitle>
+                <CardDescription>One row per closed MT5 deal · broker-reported values</CardDescription>
+                <CardAction><Badge variant="outline" className="border-white/10 text-muted-foreground">All time</Badge></CardAction>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <div className="grid min-w-[760px] grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 border-b border-white/7 bg-white/[.025] px-4 py-2.5 text-[9px] font-semibold uppercase tracking-[.1em] text-muted-foreground">
+                    <span>Closed</span><span>Symbol</span><span>Side</span><span>Volume</span><span>Entry → exit</span><span>Costs</span><span className="text-right">Net P/L</span>
+                  </div>
+                  <div className="grid min-h-44 place-items-center px-5 py-10 text-center">
+                    <div>
+                      <Database className="mx-auto size-7 text-cyan-300/65" />
+                      <p className="mt-3 text-sm font-medium text-sky-100">Waiting for linked account history</p>
+                      <p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">No sample trades are shown. After the secure bridge is connected, completed MT5 deals will appear here automatically while open positions remain in the account panel.</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid content-start gap-4">
+              <Card className="border-emerald-300/15" size="sm">
+                <CardContent>
+                  <p className="text-xs font-semibold text-emerald-200">Daily performance</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {['Win rate', 'Profit factor', 'Average win', 'Average loss'].map((metric) => (
+                      <div key={metric} className="rounded-lg border border-white/8 bg-white/[.025] p-2.5">
+                        <p className="text-[9px] text-muted-foreground">{metric}</p>
+                        <p className="mt-1 font-mono text-sm text-sky-100">—</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-cyan-300/15" size="sm">
+                <CardContent className="flex gap-3">
+                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-300" />
+                  <div>
+                    <p className="text-xs font-medium text-sky-100">Private by account</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">The bridge will submit account number, deal ticket, timestamps, symbol, side, volume, prices, commission, swap and realized P/L. Each record must be scoped to its authenticated owner.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] px-4 py-3 text-[10px] leading-5 text-muted-foreground">
+            Deposits and withdrawals will be recorded separately from trading results, preventing added funds from being mistaken for profit. The journal will use broker-reported closed-deal data rather than estimating P/L from chart prices.
+          </div>
+        </section>
 
         <section id="mt5-bot" className={workspacePanel === 'mt5' ? 'mb-4' : 'hidden'} aria-labelledby="mt5-bot-heading">
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
