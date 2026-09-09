@@ -14,6 +14,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://asheparte-ai.vercel.app'),
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+  },
   title: 'Asheparte AI — Gold & Silver Trading Intelligence',
   description:
     'Live TradingView charts from 1 minute upward, plus risk-first gold and silver paper signals, position sizing and news awareness.',
