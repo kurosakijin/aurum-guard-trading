@@ -52,6 +52,15 @@ const liveMarkets = [
   { key: 'silver', label: 'Silver', short: 'XAG / USD', symbol: 'OANDA:XAGUSD' },
 ] as const;
 
+const demoJournalTrades = [
+  { closed: 'Sep 8 · 15:42', symbol: 'XAUUSD', side: 'BUY', volume: '0.01', prices: '4,398.50 → 4,407.80', costs: '−$0.07', net: 9.23 },
+  { closed: 'Sep 8 · 13:18', symbol: 'XAUUSD', side: 'SELL', volume: '0.01', prices: '4,412.20 → 4,408.70', costs: '−$0.07', net: 3.43 },
+  { closed: 'Sep 8 · 10:06', symbol: 'XAUUSD', side: 'BUY', volume: '0.01', prices: '4,405.30 → 4,401.60', costs: '−$0.07', net: -3.77 },
+  { closed: 'Sep 7 · 20:44', symbol: 'XAUUSD', side: 'SELL', volume: '0.01', prices: '4,420.10 → 4,414.90', costs: '−$0.19', net: 5.01 },
+  { closed: 'Sep 7 · 16:10', symbol: 'XAUUSD', side: 'BUY', volume: '0.01', prices: '4,410.40 → 4,413.20', costs: '−$0.07', net: 2.73 },
+  { closed: 'Sep 7 · 09:31', symbol: 'XAUUSD', side: 'SELL', volume: '0.01', prices: '4,395.80 → 4,398.40', costs: '−$0.07', net: -2.67 },
+] as const;
+
 const timeframes = [
   { label: '1m', value: '1' },
   { label: '3m', value: '3' },
@@ -2507,6 +2516,7 @@ export default function Home() {
   const [scriptCopied, setScriptCopied] = useState(false);
   const [structureScriptCopied, setStructureScriptCopied] = useState(false);
   const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
+  const [demoJournalEnabled, setDemoJournalEnabled] = useState(false);
   const [pineScriptView, setPineScriptView] = useState<'structure' | 'volume' | 'combined'>('structure');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
@@ -2747,7 +2757,12 @@ export default function Home() {
               <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">MT5 / ACCM trading journal</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Closed trades become a daily record of profit, loss, fees and execution quality for the MT5 or ACCM account linked to the signed-in user.</p>
             </div>
-            <Badge variant="outline" className="w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200">ACCOUNT NOT CONNECTED</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" className={demoJournalEnabled ? 'border-red-300/20 bg-red-300/[.04] text-red-200' : 'border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100'} onClick={() => setDemoJournalEnabled((enabled) => !enabled)}>
+                {demoJournalEnabled ? 'Clear demo' : 'Load demo journal'}
+              </Button>
+              <Badge variant="outline" className={demoJournalEnabled ? 'w-fit border-fuchsia-300/25 bg-fuchsia-300/[.08] px-3 py-1.5 text-fuchsia-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{demoJournalEnabled ? 'FICTIONAL DEMO DATA' : 'ACCOUNT NOT CONNECTED'}</Badge>
+            </div>
           </div>
 
           <Card className="overflow-hidden border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,.055),rgba(251,191,36,.035),rgba(5,18,32,.82))]">
@@ -2801,22 +2816,25 @@ export default function Home() {
                   <p className="text-[10px] font-semibold text-amber-100">Pairing token</p>
                   <p className="mt-1 text-[10px] text-muted-foreground">Token generation activates after private sign-in and the journal database are connected.</p>
                 </div>
-                <Button disabled variant="outline" className="shrink-0 border-amber-300/15 bg-amber-300/[.04] text-amber-200 opacity-65"><LockKeyhole className="size-4" /> Generate token</Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" className="border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100" onClick={() => setDemoJournalEnabled(true)}><BookOpenCheck className="size-4" /> Try demo journal</Button>
+                  <Button disabled variant="outline" className="shrink-0 border-amber-300/15 bg-amber-300/[.04] text-amber-200 opacity-65"><LockKeyhole className="size-4" /> Generate token</Button>
+                </div>
               </div>
             </CardContent>
           </Card>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Net P/L', 'Profit − loss − costs', 'text-sky-100'],
-              ['Gross profit', 'Sum of winning trades', 'text-emerald-300'],
-              ['Gross loss', 'Sum of losing trades', 'text-red-300'],
-              ['Closed trades', 'Completed deals only', 'text-amber-200'],
-            ].map(([label, note, tone]) => (
+              ['Net P/L', demoJournalEnabled ? '+$13.96' : '—', 'Profit − loss − costs', 'text-sky-100'],
+              ['Gross profit', demoJournalEnabled ? '$20.40' : '—', 'Sum of winning trades', 'text-emerald-300'],
+              ['Gross loss', demoJournalEnabled ? '−$6.44' : '—', 'Sum of losing trades', 'text-red-300'],
+              ['Closed trades', demoJournalEnabled ? '6' : '—', 'Completed deals only', 'text-amber-200'],
+            ].map(([label, value, note, tone]) => (
               <Card key={label} className="border-sky-300/15 bg-[linear-gradient(145deg,rgba(56,189,248,.055),rgba(5,18,32,.78))]" size="sm">
                 <CardContent>
                   <p className="text-[9px] font-medium uppercase tracking-[.13em] text-muted-foreground">{label}</p>
-                  <p className={`mt-2 font-mono text-xl font-semibold ${tone}`}>—</p>
+                  <p className={`mt-2 font-mono text-xl font-semibold ${tone}`}>{value}</p>
                   <p className="mt-1 text-[10px] text-muted-foreground">{note}</p>
                 </CardContent>
               </Card>
@@ -2827,21 +2845,37 @@ export default function Home() {
             <Card className="min-w-0 overflow-hidden border-sky-300/18">
               <CardHeader className="border-b border-white/7 pb-3">
                 <CardTitle className="flex items-center gap-2"><BookOpenCheck className="size-4 text-cyan-300" /> Trade history</CardTitle>
-                <CardDescription>One row per closed MT5 deal · broker-reported values</CardDescription>
-                <CardAction><Badge variant="outline" className="border-white/10 text-muted-foreground">All time</Badge></CardAction>
+                <CardDescription>{demoJournalEnabled ? 'Six fictional trades for interface testing' : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
+                <CardAction><Badge variant="outline" className={demoJournalEnabled ? 'border-fuchsia-300/20 text-fuchsia-200' : 'border-white/10 text-muted-foreground'}>{demoJournalEnabled ? 'DEMO' : 'All time'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
                   <div className="grid min-w-[760px] grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 border-b border-white/7 bg-white/[.025] px-4 py-2.5 text-[9px] font-semibold uppercase tracking-[.1em] text-muted-foreground">
                     <span>Closed</span><span>Symbol</span><span>Side</span><span>Volume</span><span>Entry → exit</span><span>Costs</span><span className="text-right">Net P/L</span>
                   </div>
-                  <div className="grid min-h-44 place-items-center px-5 py-10 text-center">
-                    <div>
-                      <Database className="mx-auto size-7 text-cyan-300/65" />
-                      <p className="mt-3 text-sm font-medium text-sky-100">Waiting for linked account history</p>
-                      <p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">No sample trades are shown. After the secure bridge is connected, completed MT5 or ACCM deals will appear here automatically while open positions remain in the account panel.</p>
+                  {demoJournalEnabled ? (
+                    <div className="min-w-[760px] divide-y divide-white/6">
+                      {demoJournalTrades.map((trade) => (
+                        <div key={`${trade.closed}-${trade.side}`} className="grid grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 px-4 py-3 text-[10px] text-sky-50">
+                          <span className="text-muted-foreground">{trade.closed}</span>
+                          <span>{trade.symbol}</span>
+                          <span className={trade.side === 'BUY' ? 'text-emerald-300' : 'text-red-300'}>{trade.side}</span>
+                          <span className="font-mono">{trade.volume}</span>
+                          <span className="font-mono text-muted-foreground">{trade.prices}</span>
+                          <span className="font-mono text-muted-foreground">{trade.costs}</span>
+                          <span className={`text-right font-mono font-semibold ${trade.net >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{trade.net >= 0 ? '+' : '−'}${Math.abs(trade.net).toFixed(2)}</span>
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid min-h-44 place-items-center px-5 py-10 text-center">
+                      <div>
+                        <Database className="mx-auto size-7 text-cyan-300/65" />
+                        <p className="mt-3 text-sm font-medium text-sky-100">Waiting for linked account history</p>
+                        <p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">No sample trades are shown. Load the demo journal to test this page, or connect the secure bridge later for real MT5 or ACCM history.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -2851,10 +2885,15 @@ export default function Home() {
                 <CardContent>
                   <p className="text-xs font-semibold text-emerald-200">Daily performance</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    {['Win rate', 'Profit factor', 'Average win', 'Average loss'].map((metric) => (
+                    {[
+                      ['Win rate', demoJournalEnabled ? '66.7%' : '—'],
+                      ['Profit factor', demoJournalEnabled ? '3.17' : '—'],
+                      ['Average win', demoJournalEnabled ? '$5.10' : '—'],
+                      ['Average loss', demoJournalEnabled ? '−$3.22' : '—'],
+                    ].map(([metric, value]) => (
                       <div key={metric} className="rounded-lg border border-white/8 bg-white/[.025] p-2.5">
                         <p className="text-[9px] text-muted-foreground">{metric}</p>
-                        <p className="mt-1 font-mono text-sm text-sky-100">—</p>
+                        <p className="mt-1 font-mono text-sm text-sky-100">{value}</p>
                       </div>
                     ))}
                   </div>
@@ -2874,7 +2913,7 @@ export default function Home() {
           </div>
 
           <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] px-4 py-3 text-[10px] leading-5 text-muted-foreground">
-            Deposits and withdrawals will be recorded separately from trading results, preventing added funds from being mistaken for profit. The journal will use broker-reported closed-deal data rather than estimating P/L from chart prices.
+            {demoJournalEnabled ? 'Demo mode uses fictional XAUUSD trades and resets when the page reloads. It is not connected to your installed bridge, ACCM account or MT5 history.' : 'Deposits and withdrawals will be recorded separately from trading results, preventing added funds from being mistaken for profit. The live journal will use broker-reported closed-deal data rather than estimating P/L from chart prices.'}
           </div>
         </section>
 
