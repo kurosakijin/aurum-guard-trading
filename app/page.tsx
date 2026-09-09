@@ -2534,12 +2534,16 @@ export default function Home() {
   const [demoJournalEnabled, setDemoJournalEnabled] = useState(true);
   const [journalData, setJournalData] = useState<JournalData>(fallbackDemoJournal);
   const [journalFeedOnline, setJournalFeedOnline] = useState(false);
+  const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
   const [pineScriptView, setPineScriptView] = useState<'structure' | 'volume' | 'combined'>('structure');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
+  const journalPageSize = 10;
+  const journalTotalPages = Math.max(1, Math.ceil(journalData.trades.length / journalPageSize));
+  const journalPageTrades = journalData.trades.slice((journalPage - 1) * journalPageSize, journalPage * journalPageSize);
 
   useEffect(() => {
     let active = true;
@@ -2560,6 +2564,10 @@ export default function Home() {
     const timer = window.setInterval(refreshJournal, 5000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
+
+  useEffect(() => {
+    setJournalPage((page) => Math.min(page, journalTotalPages));
+  }, [journalTotalPages]);
 
   useEffect(() => {
     const syncPanelFromHash = () => {
@@ -2958,8 +2966,8 @@ export default function Home() {
             <Card className="min-w-0 overflow-hidden border-sky-300/18">
               <CardHeader className="border-b border-white/7 pb-3">
                 <CardTitle className="flex items-center gap-2"><BookOpenCheck className="size-4 text-cyan-300" /> Trade history</CardTitle>
-                <CardDescription>{demoJournalEnabled ? 'Three closed trades from the masked ACCM demo snapshot' : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
-                <CardAction><Badge variant="outline" className={demoJournalEnabled ? 'border-fuchsia-300/20 text-fuchsia-200' : 'border-white/10 text-muted-foreground'}>{demoJournalEnabled ? 'DEMO' : 'All time'}</Badge></CardAction>
+                <CardDescription>{demoJournalEnabled ? `Showing 10 trades per page · ${journalData.trades.length} closed trades` : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
+                <CardAction><Badge variant="outline" className={demoJournalEnabled ? 'border-fuchsia-300/20 text-fuchsia-200' : 'border-white/10 text-muted-foreground'}>{demoJournalEnabled ? `PAGE ${journalPage} / ${journalTotalPages}` : 'All time'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -2968,8 +2976,8 @@ export default function Home() {
                   </div>
                   {demoJournalEnabled ? (
                     <div className="min-w-[760px] divide-y divide-white/6">
-                      {journalData.trades.map((trade) => (
-                        <div key={`${trade.closed}-${trade.side}`} className="grid grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 px-4 py-3 text-[10px] text-sky-50">
+                      {journalPageTrades.map((trade, index) => (
+                        <div key={`${trade.closed}-${trade.side}-${trade.symbol}-${index}`} className="grid grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 px-4 py-3 text-[10px] text-sky-50">
                           <span className="text-muted-foreground">{new Date(trade.closed).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                           <span>{trade.symbol}</span>
                           <span className={trade.side === 'BUY' ? 'text-emerald-300' : 'text-red-300'}>{trade.side}</span>
@@ -2990,6 +2998,20 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+                {demoJournalEnabled && journalData.trades.length > 0 && (
+                  <div className="flex flex-col gap-2 border-t border-white/7 bg-white/[.018] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-[10px] text-muted-foreground">
+                      Showing {(journalPage - 1) * journalPageSize + 1}–{Math.min(journalPage * journalPageSize, journalData.trades.length)} of {journalData.trades.length}
+                    </p>
+                    <div className="flex items-center gap-1.5" aria-label="Trade history pagination">
+                      <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] px-3 text-[10px]" disabled={journalPage === 1} onClick={() => setJournalPage((page) => Math.max(1, page - 1))}>Previous</Button>
+                      {Array.from({ length: journalTotalPages }, (_, index) => index + 1).map((page) => (
+                        <button key={page} type="button" aria-label={`Go to trade history page ${page}`} aria-current={page === journalPage ? 'page' : undefined} onClick={() => setJournalPage(page)} className={`grid size-8 place-items-center rounded-md border text-[10px] font-semibold transition ${page === journalPage ? 'border-cyan-300/40 bg-cyan-300 text-[#03121f]' : 'border-white/10 bg-white/[.025] text-muted-foreground hover:border-cyan-300/25 hover:text-cyan-100'}`}>{page}</button>
+                      ))}
+                      <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] px-3 text-[10px]" disabled={journalPage === journalTotalPages} onClick={() => setJournalPage((page) => Math.min(journalTotalPages, page + 1))}>Next</Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
