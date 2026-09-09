@@ -2292,16 +2292,24 @@ bool JournalPostPayload(const string payload)
    if(ArraySize(requestData)>0)
       ArrayResize(requestData,ArraySize(requestData)-1);
 
+   string journalUrl=JournalEndpoint;
+   // Migrate charts that still have the retired local receiver saved in their
+   // EA inputs. This keeps existing installations streaming to the hosted
+   // demo journal without requiring the advisor to be removed and re-added.
+   if(StringFind(journalUrl,"http://127.0.0.1:")==0 ||
+      StringFind(journalUrl,"http://localhost:")==0)
+      journalUrl="https://asheparte-ai.vercel.app/api/mt5/ingest";
+
    const string headers="Content-Type: application/json\r\n"+
                         "X-Asheparte-Bridge-Token: "+JournalBridgeToken+"\r\n"+
-                        "X-Asheparte-Bridge-Version: combined-3.13\r\n";
+                        "X-Asheparte-Bridge-Version: combined-3.14\r\n";
    ResetLastError();
-   const int status=WebRequest("POST",JournalEndpoint,headers,15000,
+   const int status=WebRequest("POST",journalUrl,headers,15000,
                                requestData,responseData,responseHeaders);
    if(status==-1)
      {
       Print("Asheparte Journal: WebRequest failed. Error ",GetLastError(),
-            ". Add ",JournalEndpoint," to MT5 allowed WebRequest URLs.");
+            ". Add ",journalUrl," to MT5 allowed WebRequest URLs.");
       return false;
      }
    if(status<200 || status>=300)
