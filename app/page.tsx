@@ -61,6 +61,12 @@ const demoJournalTrades = [
   { closed: 'Sep 7 · 09:31', symbol: 'XAUUSD', side: 'SELL', volume: '0.01', prices: '4,395.80 → 4,398.40', costs: '−$0.07', net: -2.67 },
 ] as const;
 
+const journalMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
+const demoDailyJournal: Record<string, number> = {
+  '2026-09-07': 5.07,
+  '2026-09-08': 8.89,
+};
+
 const timeframes = [
   { label: '1m', value: '1' },
   { label: '3m', value: '3' },
@@ -2517,6 +2523,8 @@ export default function Home() {
   const [structureScriptCopied, setStructureScriptCopied] = useState(false);
   const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
   const [demoJournalEnabled, setDemoJournalEnabled] = useState(false);
+  const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
+  const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
   const [pineScriptView, setPineScriptView] = useState<'structure' | 'volume' | 'combined'>('structure');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
@@ -2575,6 +2583,21 @@ export default function Home() {
   function selectMetal(value: LiveMarketKey) {
     setLiveMarket(value);
   }
+
+  function shiftJournalCalendar(direction: number) {
+    setJournalCalendarCursor((cursor) => {
+      if (journalCalendarMode === 'year') return { year: cursor.year + direction, month: cursor.month };
+      const next = new Date(cursor.year, cursor.month + direction, 1);
+      return { year: next.getFullYear(), month: next.getMonth() };
+    });
+  }
+
+  const monthStartWeekday = new Date(journalCalendarCursor.year, journalCalendarCursor.month, 1).getDay();
+  const daysInJournalMonth = new Date(journalCalendarCursor.year, journalCalendarCursor.month + 1, 0).getDate();
+  const journalCalendarCells = Array.from({ length: Math.ceil((monthStartWeekday + daysInJournalMonth) / 7) * 7 }, (_, index) => {
+    const day = index - monthStartWeekday + 1;
+    return day >= 1 && day <= daysInJournalMonth ? day : null;
+  });
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -2840,6 +2863,62 @@ export default function Home() {
               </Card>
             ))}
           </div>
+
+          <Card className="overflow-hidden border-fuchsia-300/15 bg-[linear-gradient(145deg,rgba(192,132,252,.045),rgba(5,18,32,.84)_48%)]">
+            <CardHeader className="border-b border-white/7 pb-3">
+              <CardTitle className="flex items-center gap-2"><Clock3 className="size-4 text-fuchsia-300" /> Profit &amp; loss calendar</CardTitle>
+              <CardDescription>Green days are profitable, red days are losses, and empty days have no closed trades.</CardDescription>
+              <CardAction>
+                <div className="flex rounded-lg border border-white/10 bg-black/15 p-0.5">
+                  {(['month', 'year'] as const).map((mode) => (
+                    <button key={mode} type="button" aria-pressed={journalCalendarMode === mode} onClick={() => setJournalCalendarMode(mode)} className={`rounded-md px-3 py-1.5 text-[10px] font-semibold capitalize transition ${journalCalendarMode === mode ? 'bg-fuchsia-300 text-[#190a20]' : 'text-muted-foreground hover:text-foreground'}`}>{mode}</button>
+                  ))}
+                </div>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Previous ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(-1)}>←</Button>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-sky-50">{journalCalendarMode === 'month' ? `${journalMonthNames[journalCalendarCursor.month]} ${journalCalendarCursor.year}` : journalCalendarCursor.year}</p>
+                  <p className="mt-1 text-[9px] uppercase tracking-[.12em] text-muted-foreground">{demoJournalEnabled ? 'Fictional demo results' : 'No account data'}</p>
+                </div>
+                <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Next ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(1)}>→</Button>
+              </div>
+
+              {journalCalendarMode === 'month' ? (
+                <div>
+                  <div className="grid grid-cols-7 gap-1.5 text-center text-[9px] font-medium uppercase tracking-[.08em] text-muted-foreground">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <span key={day} className="py-1">{day}</span>)}
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-7 gap-1.5">
+                    {journalCalendarCells.map((day, index) => {
+                      const dateKey = day ? `${journalCalendarCursor.year}-${String(journalCalendarCursor.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+                      const result = demoJournalEnabled ? demoDailyJournal[dateKey] : undefined;
+                      return (
+                        <div key={`${index}-${day ?? 'blank'}`} className={`min-h-16 rounded-lg border p-2 sm:min-h-20 ${day === null ? 'border-transparent bg-transparent' : result === undefined ? 'border-white/7 bg-white/[.018]' : result >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-red-300/20 bg-red-300/[.07]'}`}>
+                          {day !== null && <><p className="text-[10px] text-muted-foreground">{day}</p>{result !== undefined && <><p className={`mt-2 font-mono text-[11px] font-semibold ${result >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{result >= 0 ? '+' : '−'}${Math.abs(result).toFixed(2)}</p><p className="mt-1 text-[8px] text-muted-foreground">{day === 7 ? '3 trades' : '3 trades'}</p></>}</>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                  {journalMonthNames.map((month, monthIndex) => {
+                    const value = demoJournalEnabled && journalCalendarCursor.year === 2026 && monthIndex === 8 ? 13.96 : undefined;
+                    return (
+                      <button key={month} type="button" onClick={() => { setJournalCalendarCursor({ year: journalCalendarCursor.year, month: monthIndex }); setJournalCalendarMode('month'); }} className={`rounded-xl border p-3 text-left transition hover:border-fuchsia-300/25 ${value === undefined ? 'border-white/8 bg-white/[.02]' : value >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.06]' : 'border-red-300/20 bg-red-300/[.06]'}`}>
+                        <p className="text-[10px] font-medium text-muted-foreground">{month.slice(0, 3)}</p>
+                        <p className={`mt-2 font-mono text-sm font-semibold ${value === undefined ? 'text-sky-100' : value >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{value === undefined ? '—' : `${value >= 0 ? '+' : '−'}$${Math.abs(value).toFixed(2)}`}</p>
+                        <p className="mt-1 text-[9px] text-muted-foreground">{value === undefined ? 'No trades' : '6 trades'}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,.5fr)]">
             <Card className="min-w-0 overflow-hidden border-sky-300/18">
