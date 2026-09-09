@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowUpRight,
+  BarChart3,
   Bot,
   BookOpenCheck,
   CandlestickChart,
@@ -2366,7 +2367,137 @@ if inConsolidation
         inConsolidation := false
         consolidationBox := na
         consolidationHigh := na
-        consolidationLow := na`;
+         consolidationLow := na`;
+
+const volumeClusterScript = String.raw`//@version=6
+// Original concept and open-source VCP code by Zeiierman.
+// Modified by Asheparte AI: Pine v6 compatibility, bounded drawings,
+// range-distributed candle volume, explicit approximation labels and compact UI.
+indicator("Asheparte AI · Volume Cluster Profile [Zeiierman concept]", overlay = true, max_boxes_count = 260, max_lines_count = 30, max_labels_count = 20, max_bars_back = 5000)
+
+lookback = input.int(250, "Profile lookback", minval = 50, maxval = 2000, group = "Profile")
+rows = input.int(36, "Price rows", minval = 12, maxval = 60, group = "Profile")
+widthBars = input.int(32, "Maximum width", minval = 8, maxval = 100, group = "Profile")
+valueAreaPct = input.float(70.0, "Value area %", minval = 50, maxval = 95, step = 1, group = "Profile")
+smoothRadius = input.int(2, "Cluster smoothing", minval = 0, maxval = 6, group = "Clusters")
+clusterCount = input.int(3, "Cluster centers", minval = 1, maxval = 6, group = "Clusters")
+showClusters = input.bool(true, "Show cluster centers", group = "Clusters")
+showValueArea = input.bool(true, "Show VAH / VAL", group = "Levels")
+profileColor = input.color(color.new(color.teal, 72), "Profile", group = "Style")
+valueColor = input.color(color.new(color.aqua, 58), "Value area", group = "Style")
+pocColor = input.color(color.yellow, "POC", group = "Style")
+clusterColor = input.color(color.orange, "Clusters", group = "Style")
+
+var array<box> drawnBoxes = array.new_box()
+var array<line> drawnLines = array.new_line()
+var array<label> drawnLabels = array.new_label()
+
+clearDrawings() =>
+    while array.size(drawnBoxes) > 0
+        box.delete(array.pop(drawnBoxes))
+    while array.size(drawnLines) > 0
+        line.delete(array.pop(drawnLines))
+    while array.size(drawnLabels) > 0
+        label.delete(array.pop(drawnLabels))
+
+clampInt(int value, int minimum, int maximum) =>
+    math.max(minimum, math.min(maximum, value))
+
+if barstate.islast
+    clearDrawings()
+    barsUsed = math.min(lookback, bar_index + 1)
+    if barsUsed >= 20
+        profileHigh = ta.highest(high, barsUsed)
+        profileLow = ta.lowest(low, barsUsed)
+        profileRange = profileHigh - profileLow
+        if profileRange > syminfo.mintick
+            rowSize = profileRange / rows
+            raw = array.new_float(rows, 0.0)
+            smoothed = array.new_float(rows, 0.0)
+
+            // Spread each candle's volume evenly through every price row its range touches.
+            // This remains a bar-data approximation; it is not exchange order-flow data.
+            for offset = 0 to barsUsed - 1
+                firstRow = clampInt(int(math.floor((low[offset] - profileLow) / rowSize)), 0, rows - 1)
+                lastRow = clampInt(int(math.floor((high[offset] - profileLow) / rowSize)), 0, rows - 1)
+                touched = math.max(1, lastRow - firstRow + 1)
+                share = nz(volume[offset]) / touched
+                for row = firstRow to lastRow
+                    array.set(raw, row, array.get(raw, row) + share)
+
+            for row = 0 to rows - 1
+                weighted = 0.0
+                weightSum = 0.0
+                for neighbor = 0 to rows - 1
+                    distance = math.abs(row - neighbor)
+                    if distance <= smoothRadius
+                        weight = smoothRadius == 0 ? 1.0 : math.exp(-0.5 * math.pow(distance / math.max(1.0, smoothRadius * 0.65), 2))
+                        weighted += array.get(raw, neighbor) * weight
+                        weightSum += weight
+                array.set(smoothed, row, weightSum > 0 ? weighted / weightSum : array.get(raw, row))
+
+            totalVolume = array.sum(smoothed)
+            maxVolume = array.max(smoothed)
+            pocRow = array.indexof(smoothed, maxVolume)
+            lowerVA = pocRow
+            upperVA = pocRow
+            includedVolume = array.get(smoothed, pocRow)
+            targetVolume = totalVolume * valueAreaPct / 100.0
+            while includedVolume < targetVolume and (lowerVA > 0 or upperVA < rows - 1)
+                belowVolume = lowerVA > 0 ? array.get(smoothed, lowerVA - 1) : -1.0
+                aboveVolume = upperVA < rows - 1 ? array.get(smoothed, upperVA + 1) : -1.0
+                if aboveVolume >= belowVolume and upperVA < rows - 1
+                    upperVA += 1
+                    includedVolume += aboveVolume
+                else if lowerVA > 0
+                    lowerVA -= 1
+                    includedVolume += belowVolume
+
+            anchorRight = bar_index
+            for row = 0 to rows - 1
+                relativeVolume = maxVolume > 0 ? array.get(smoothed, row) / maxVolume : 0.0
+                rowWidth = math.max(1, int(math.round(relativeVolume * widthBars)))
+                rowBottom = profileLow + row * rowSize
+                rowTop = rowBottom + rowSize
+                insideVA = row >= lowerVA and row <= upperVA
+                fill = insideVA ? valueColor : profileColor
+                profileBox = box.new(anchorRight - rowWidth + 1, rowTop, anchorRight, rowBottom, bgcolor = fill, border_color = color.new(fill, 38))
+                array.push(drawnBoxes, profileBox)
+
+            pocPrice = profileLow + (pocRow + 0.5) * rowSize
+            vahPrice = profileLow + (upperVA + 1.0) * rowSize
+            valPrice = profileLow + lowerVA * rowSize
+            pocLine = line.new(anchorRight - widthBars + 1, pocPrice, anchorRight, pocPrice, color = pocColor, width = 2)
+            array.push(drawnLines, pocLine)
+            array.push(drawnLabels, label.new(anchorRight, pocPrice, "POC · approx", style = label.style_label_left, color = pocColor, textcolor = color.black, size = size.tiny))
+
+            if showValueArea
+                array.push(drawnLines, line.new(anchorRight - widthBars + 1, vahPrice, anchorRight, vahPrice, color = color.new(color.aqua, 10), style = line.style_dashed))
+                array.push(drawnLines, line.new(anchorRight - widthBars + 1, valPrice, anchorRight, valPrice, color = color.new(color.aqua, 10), style = line.style_dashed))
+
+            if showClusters
+                candidates = array.new_int()
+                for row = 0 to rows - 1
+                    current = array.get(smoothed, row)
+                    left = row > 0 ? array.get(smoothed, row - 1) : current
+                    right = row < rows - 1 ? array.get(smoothed, row + 1) : current
+                    if current >= left and current >= right
+                        array.push(candidates, row)
+                for pick = 0 to clusterCount - 1
+                    if array.size(candidates) > 0
+                        bestAt = 0
+                        bestRow = array.get(candidates, 0)
+                        bestVolume = array.get(smoothed, bestRow)
+                        for candidateAt = 1 to array.size(candidates) - 1
+                            candidateRow = array.get(candidates, candidateAt)
+                            candidateVolume = array.get(smoothed, candidateRow)
+                            if candidateVolume > bestVolume
+                                bestAt := candidateAt
+                                bestRow := candidateRow
+                                bestVolume := candidateVolume
+                        clusterPrice = profileLow + (bestRow + 0.5) * rowSize
+                        array.push(drawnLines, line.new(anchorRight - widthBars + 1, clusterPrice, anchorRight, clusterPrice, color = color.new(clusterColor, 15), style = line.style_dotted))
+                        array.remove(candidates, bestAt)`;
 
 export default function Home() {
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>('desk');
@@ -2375,7 +2506,8 @@ export default function Home() {
   const [widgetRefresh, setWidgetRefresh] = useState(0);
   const [scriptCopied, setScriptCopied] = useState(false);
   const [structureScriptCopied, setStructureScriptCopied] = useState(false);
-  const [pineScriptView, setPineScriptView] = useState<'structure' | 'combined'>('structure');
+  const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
+  const [pineScriptView, setPineScriptView] = useState<'structure' | 'volume' | 'combined'>('structure');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
@@ -2421,6 +2553,12 @@ export default function Home() {
     await navigator.clipboard.writeText(swingStructureScript);
     setStructureScriptCopied(true);
     window.setTimeout(() => setStructureScriptCopied(false), 1600);
+  }
+
+  async function copyVolumeScript() {
+    await navigator.clipboard.writeText(volumeClusterScript);
+    setVolumeScriptCopied(true);
+    window.setTimeout(() => setVolumeScriptCopied(false), 1600);
   }
 
   function selectMetal(value: LiveMarketKey) {
@@ -3270,7 +3408,7 @@ export default function Home() {
           </div>
 
           <div id="pine-script" className="min-w-0">
-            <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-sky-300/15 bg-[#06182b]/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,.18)]">
+            <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl border border-sky-300/15 bg-[#06182b]/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,.18)] sm:grid-cols-3">
               <Button
                 type="button"
                 variant="ghost"
@@ -3282,12 +3420,63 @@ export default function Home() {
               <Button
                 type="button"
                 variant="ghost"
+                className={pineScriptView === 'volume' ? 'bg-yellow-300 text-[#171003] hover:bg-yellow-200 hover:text-[#171003]' : 'text-muted-foreground hover:bg-white/[.05] hover:text-foreground'}
+                onClick={() => setPineScriptView('volume')}
+              >
+                <BarChart3 /> Volume Clusters
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
                 className={pineScriptView === 'combined' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-muted-foreground hover:bg-white/[.05] hover:text-foreground'}
                 onClick={() => setPineScriptView('combined')}
               >
                 <Code2 /> Combined Strategy
               </Button>
             </div>
+
+          <Card className={pineScriptView === 'volume' ? 'overflow-hidden border-yellow-300/18 bg-[linear-gradient(145deg,rgba(250,204,21,.065),rgba(18,22,27,.96)_42%)] shadow-[0_20px_70px_rgba(0,0,0,.2)]' : 'hidden'}>
+            <CardHeader className="border-b border-white/7 pb-4">
+              <CardTitle className="flex items-center gap-2"><BarChart3 className="size-4 text-yellow-300" /> Volume Cluster Profile · Pine v6</CardTitle>
+              <CardDescription>POC, value area and smoothed volume clusters · Original VCP concept and open-source code by Zeiierman · modified by Asheparte AI</CardDescription>
+              <CardAction>
+                <Button variant="outline" size="sm" className="border-yellow-300/15 bg-yellow-300/[.04]" onClick={copyVolumeScript}>
+                  {volumeScriptCopied ? <Check /> : <Clipboard />}
+                  {volumeScriptCopied ? 'Volume script copied' : 'Copy volume script'}
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-yellow-300/15 bg-yellow-300/[.035] p-3">
+                  <p className="text-xs font-semibold text-yellow-200">POC</p>
+                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Marks the profile row with the greatest estimated participation. Treat it as a reaction area, not an automatic entry or stop.</p>
+                </div>
+                <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-3">
+                  <p className="text-xs font-semibold text-cyan-200">VAH / VAL</p>
+                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Expands outward from POC until the selected percentage of estimated volume is included, showing the accepted-value region.</p>
+                </div>
+                <div className="rounded-xl border border-orange-300/15 bg-orange-300/[.035] p-3">
+                  <p className="text-xs font-semibold text-orange-200">Cluster centers</p>
+                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Ranks local peaks after light Gaussian smoothing. These are statistical concentrations—not predictions or trained-AI signals.</p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-sky-300/12 bg-sky-300/[.035] p-3 text-[10px] leading-4 text-muted-foreground">
+                <span className="font-semibold text-sky-100">Asheparte modification:</span> volume is shared across every price row touched by each candle instead of being placed entirely at the close. Object counts are bounded for TradingView, and the script identifies all values as bar-data approximations. On XAUUSD this is normally tick volume; GC futures is preferable when exchange-traded gold volume is required.
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-[#0c0f12]">
+                <div className="flex items-center justify-between border-b border-white/8 px-4 py-2 text-[10px] uppercase tracking-[.12em] text-muted-foreground">
+                  <span>asheparte-ai-volume-cluster-profile.pine</span>
+                  <span>Credits preserved · Version 6</span>
+                </div>
+                <pre className="max-h-[620px] overflow-auto p-4 font-mono text-[11px] leading-[1.7] text-zinc-300"><code>{volumeClusterScript}</code></pre>
+              </div>
+
+              <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Use it as context for consolidation, acceptance and retests. A valid entry still needs structure and candle confirmation, while the stop belongs beyond the setup’s invalidation point. Credit: Zeiierman, original Volume Cluster Profile concept and supplied open-source implementation.</p>
+            </CardContent>
+          </Card>
 
           <Card className={pineScriptView === 'combined' ? 'overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]' : 'hidden'}>
             <CardHeader className="border-b border-white/7 pb-4">
