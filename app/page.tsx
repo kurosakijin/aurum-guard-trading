@@ -53,18 +53,14 @@ const liveMarkets = [
 ] as const;
 
 const demoJournalTrades = [
-  { closed: 'Sep 8 · 15:42', symbol: 'XAUUSD', side: 'BUY', volume: '0.01', prices: '4,398.50 → 4,407.80', costs: '−$0.07', net: 9.23 },
-  { closed: 'Sep 8 · 13:18', symbol: 'XAUUSD', side: 'SELL', volume: '0.01', prices: '4,412.20 → 4,408.70', costs: '−$0.07', net: 3.43 },
-  { closed: 'Sep 8 · 10:06', symbol: 'XAUUSD', side: 'BUY', volume: '0.01', prices: '4,405.30 → 4,401.60', costs: '−$0.07', net: -3.77 },
-  { closed: 'Sep 7 · 20:44', symbol: 'XAUUSD', side: 'SELL', volume: '0.01', prices: '4,420.10 → 4,414.90', costs: '−$0.19', net: 5.01 },
-  { closed: 'Sep 7 · 16:10', symbol: 'XAUUSD', side: 'BUY', volume: '0.01', prices: '4,410.40 → 4,413.20', costs: '−$0.07', net: 2.73 },
-  { closed: 'Sep 7 · 09:31', symbol: 'XAUUSD', side: 'SELL', volume: '0.01', prices: '4,395.80 → 4,398.40', costs: '−$0.07', net: -2.67 },
+  { closed: 'Sep 10 · 01:45', symbol: 'XAUUSD', side: 'BUY', volume: '1.00', prices: '4,414.14 → 4,413.71', costs: '$0.00', net: -43.00 },
+  { closed: 'Sep 10 · 01:41', symbol: 'XAUUSD', side: 'BUY', volume: '1.00', prices: '4,412.97 → 4,416.03', costs: '$0.00', net: 306.00 },
+  { closed: 'Sep 10 · 01:36', symbol: 'XAUUSD', side: 'SELL', volume: '0.30', prices: '4,413.33 → 4,413.39', costs: '$0.00', net: -1.80 },
 ] as const;
 
 const journalMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
 const demoDailyJournal: Record<string, number> = {
-  '2026-09-07': 5.07,
-  '2026-09-08': 8.89,
+  '2026-09-10': 261.20,
 };
 
 const timeframes = [
@@ -2522,7 +2518,7 @@ export default function Home() {
   const [scriptCopied, setScriptCopied] = useState(false);
   const [structureScriptCopied, setStructureScriptCopied] = useState(false);
   const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
-  const [demoJournalEnabled, setDemoJournalEnabled] = useState(false);
+  const [demoJournalEnabled, setDemoJournalEnabled] = useState(true);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
   const [pineScriptView, setPineScriptView] = useState<'structure' | 'volume' | 'combined'>('structure');
@@ -2688,7 +2684,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-sky-200/15 bg-sky-300/[.055] px-3 py-2 text-[11px] text-sky-100">
               <span className="size-2 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(253,224,71,.7)]" />
-              MT5 / ACCM account not connected
+              ACCM demo snapshot connected
             </div>
           </div>
         </section>
@@ -2723,19 +2719,19 @@ export default function Home() {
             <Card className="border-cyan-300/20">
               <CardHeader className="border-b border-sky-200/10 pb-3">
                 <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> MT5 / ACCM account</CardTitle>
-                <CardDescription>Session-bound broker data</CardDescription>
-                <CardAction><Badge variant="outline" className="border-amber-300/25 text-amber-200">OFFLINE</Badge></CardAction>
+                <CardDescription>Public demo snapshot · read-only</CardDescription>
+                <CardAction><Badge variant="outline" className="border-emerald-300/25 text-emerald-200">DEMO</Badge></CardAction>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
-                  <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> Account data waiting</div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">When the secure bridge is added, this panel will load either a standard MT5 account or an ACCM account through its MT5 server—only for the signed-in user.</p>
+                  <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> ACCMIntl-Demo · 316•••</div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Snapshot imported from the read-only combined advisor. It is demonstration data, not a live or real-money account connection.</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  {['Balance', 'Equity', 'Free margin', 'Open P/L'].map((label) => (
+                  {[['Balance', '$100,261.20'], ['Equity', '$100,261.20'], ['Free margin', '$100,261.20'], ['Open P/L', '$0.00']].map(([label, value]) => (
                     <div key={label} className="rounded-lg border border-sky-200/10 bg-white/[.025] p-2.5">
                       <p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">{label}</p>
-                      <p className="mt-1 font-mono text-sm text-sky-100">—</p>
+                      <p className="mt-1 font-mono text-sm text-sky-100">{value}</p>
                     </div>
                   ))}
                 </div>
@@ -2782,9 +2778,9 @@ export default function Home() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" className={demoJournalEnabled ? 'border-red-300/20 bg-red-300/[.04] text-red-200' : 'border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100'} onClick={() => setDemoJournalEnabled((enabled) => !enabled)}>
-                {demoJournalEnabled ? 'Clear demo' : 'Load demo journal'}
+                {demoJournalEnabled ? 'Hide demo' : 'Show ACCM demo'}
               </Button>
-              <Badge variant="outline" className={demoJournalEnabled ? 'w-fit border-fuchsia-300/25 bg-fuchsia-300/[.08] px-3 py-1.5 text-fuchsia-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{demoJournalEnabled ? 'FICTIONAL DEMO DATA' : 'ACCOUNT NOT CONNECTED'}</Badge>
+              <Badge variant="outline" className={demoJournalEnabled ? 'w-fit border-fuchsia-300/25 bg-fuchsia-300/[.08] px-3 py-1.5 text-fuchsia-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{demoJournalEnabled ? 'ACCM DEMO SNAPSHOT' : 'DEMO HIDDEN'}</Badge>
             </div>
           </div>
 
@@ -2810,23 +2806,23 @@ export default function Home() {
               </div>
               <div className="md:col-span-2 grid gap-3 rounded-xl border border-cyan-300/12 bg-[#041326]/55 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
                 <div>
-                  <p className="text-xs font-semibold text-cyan-100">Install the journal bridge</p>
-                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Attach it to one MT5 chart, add <span className="font-mono text-sky-100">https://asheparte-ai.vercel.app</span> under MT5 WebRequest permissions, then paste the revocable token generated by your journal account. The bridge has no trading functions.</p>
+                  <p className="text-xs font-semibold text-cyan-100">Install the combined analysis + journal advisor</p>
+                  <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">One analysis-only EA now provides the chart dashboard and read-only journal sync. Add <span className="font-mono text-sky-100">https://asheparte-ai.vercel.app</span> to MT5 WebRequest permissions before pairing a future hosted journal.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <a href="/downloads/AsheparteJournalBridge.ex5" download>
-                    <Button className="bg-cyan-300 text-[#03121f] hover:bg-cyan-200"><Download className="size-4" /> Download bridge</Button>
+                  <a href="/downloads/AurumGuardAnalysisAdvisor.ex5" download>
+                    <Button className="bg-cyan-300 text-[#03121f] hover:bg-cyan-200"><Download className="size-4" /> Download combined EA</Button>
                   </a>
-                  <a href="/downloads/AsheparteJournalBridge.mq5" download>
+                  <a href="/downloads/AurumGuardAnalysisAdvisor.mq5" download>
                     <Button variant="outline" className="border-white/10 bg-white/[.025]"><Code2 className="size-4" /> Source</Button>
                   </a>
                 </div>
               </div>
               <div className="md:col-span-2 grid gap-2 sm:grid-cols-3">
                 {[
-                  ['1 · Install', 'Put the compiled bridge in MT5 Experts and attach it to one chart.'],
-                  ['2 · Pair', 'Generate a one-time account token and paste it into the bridge input.'],
-                  ['3 · Sync', 'Account snapshots and new deals upload on a 60-second timer.'],
+                  ['1 · Install', 'Put the combined EA in MT5 Experts and attach it to one chart.'],
+                  ['2 · Analyze', 'Chart guidance and the account journal run together without trade execution.'],
+                  ['3 · Pair later', 'Hosted continuous sync activates after private storage and sign-in are added.'],
                 ].map(([step, detail]) => (
                   <div key={step} className="rounded-lg border border-white/8 bg-white/[.025] p-3">
                     <p className="text-[10px] font-semibold text-sky-100">{step}</p>
@@ -2837,7 +2833,7 @@ export default function Home() {
               <div className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-amber-300/15 bg-amber-300/[.035] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-[10px] font-semibold text-amber-100">Pairing token</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">Token generation activates after private sign-in and the journal database are connected.</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">This public version displays a masked ACCM demo snapshot. Tokens remain local and are never published.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" className="border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100" onClick={() => setDemoJournalEnabled(true)}><BookOpenCheck className="size-4" /> Try demo journal</Button>
@@ -2849,10 +2845,10 @@ export default function Home() {
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Net P/L', demoJournalEnabled ? '+$13.96' : '—', 'Profit − loss − costs', 'text-sky-100'],
-              ['Gross profit', demoJournalEnabled ? '$20.40' : '—', 'Sum of winning trades', 'text-emerald-300'],
-              ['Gross loss', demoJournalEnabled ? '−$6.44' : '—', 'Sum of losing trades', 'text-red-300'],
-              ['Closed trades', demoJournalEnabled ? '6' : '—', 'Completed deals only', 'text-amber-200'],
+              ['Net P/L', demoJournalEnabled ? '+$261.20' : '—', 'Profit − loss − costs', 'text-sky-100'],
+              ['Gross profit', demoJournalEnabled ? '$306.00' : '—', 'Sum of winning trades', 'text-emerald-300'],
+              ['Gross loss', demoJournalEnabled ? '−$44.80' : '—', 'Sum of losing trades', 'text-red-300'],
+              ['Closed trades', demoJournalEnabled ? '3' : '—', 'Completed deals only', 'text-amber-200'],
             ].map(([label, value, note, tone]) => (
               <Card key={label} className="border-sky-300/15 bg-[linear-gradient(145deg,rgba(56,189,248,.055),rgba(5,18,32,.78))]" size="sm">
                 <CardContent>
@@ -2881,7 +2877,7 @@ export default function Home() {
                 <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Previous ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(-1)}>←</Button>
                 <div className="text-center">
                   <p className="text-sm font-semibold text-sky-50">{journalCalendarMode === 'month' ? `${journalMonthNames[journalCalendarCursor.month]} ${journalCalendarCursor.year}` : journalCalendarCursor.year}</p>
-                  <p className="mt-1 text-[9px] uppercase tracking-[.12em] text-muted-foreground">{demoJournalEnabled ? 'Fictional demo results' : 'No account data'}</p>
+                  <p className="mt-1 text-[9px] uppercase tracking-[.12em] text-muted-foreground">{demoJournalEnabled ? 'ACCM demo snapshot' : 'Demo hidden'}</p>
                 </div>
                 <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Next ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(1)}>→</Button>
               </div>
@@ -2906,12 +2902,12 @@ export default function Home() {
               ) : (
                 <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                   {journalMonthNames.map((month, monthIndex) => {
-                    const value = demoJournalEnabled && journalCalendarCursor.year === 2026 && monthIndex === 8 ? 13.96 : undefined;
+                    const value = demoJournalEnabled && journalCalendarCursor.year === 2026 && monthIndex === 8 ? 261.20 : undefined;
                     return (
                       <button key={month} type="button" onClick={() => { setJournalCalendarCursor({ year: journalCalendarCursor.year, month: monthIndex }); setJournalCalendarMode('month'); }} className={`rounded-xl border p-3 text-left transition hover:border-fuchsia-300/25 ${value === undefined ? 'border-white/8 bg-white/[.02]' : value >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.06]' : 'border-red-300/20 bg-red-300/[.06]'}`}>
                         <p className="text-[10px] font-medium text-muted-foreground">{month.slice(0, 3)}</p>
                         <p className={`mt-2 font-mono text-sm font-semibold ${value === undefined ? 'text-sky-100' : value >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{value === undefined ? '—' : `${value >= 0 ? '+' : '−'}$${Math.abs(value).toFixed(2)}`}</p>
-                        <p className="mt-1 text-[9px] text-muted-foreground">{value === undefined ? 'No trades' : '6 trades'}</p>
+                        <p className="mt-1 text-[9px] text-muted-foreground">{value === undefined ? 'No trades' : '3 trades'}</p>
                       </button>
                     );
                   })}
@@ -2924,7 +2920,7 @@ export default function Home() {
             <Card className="min-w-0 overflow-hidden border-sky-300/18">
               <CardHeader className="border-b border-white/7 pb-3">
                 <CardTitle className="flex items-center gap-2"><BookOpenCheck className="size-4 text-cyan-300" /> Trade history</CardTitle>
-                <CardDescription>{demoJournalEnabled ? 'Six fictional trades for interface testing' : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
+                <CardDescription>{demoJournalEnabled ? 'Three closed trades from the masked ACCM demo snapshot' : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
                 <CardAction><Badge variant="outline" className={demoJournalEnabled ? 'border-fuchsia-300/20 text-fuchsia-200' : 'border-white/10 text-muted-foreground'}>{demoJournalEnabled ? 'DEMO' : 'All time'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="p-0">
@@ -2965,10 +2961,10 @@ export default function Home() {
                   <p className="text-xs font-semibold text-emerald-200">Daily performance</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {[
-                      ['Win rate', demoJournalEnabled ? '66.7%' : '—'],
-                      ['Profit factor', demoJournalEnabled ? '3.17' : '—'],
-                      ['Average win', demoJournalEnabled ? '$5.10' : '—'],
-                      ['Average loss', demoJournalEnabled ? '−$3.22' : '—'],
+                      ['Win rate', demoJournalEnabled ? '33.3%' : '—'],
+                      ['Profit factor', demoJournalEnabled ? '6.83' : '—'],
+                      ['Average win', demoJournalEnabled ? '$306.00' : '—'],
+                      ['Average loss', demoJournalEnabled ? '−$22.40' : '—'],
                     ].map(([metric, value]) => (
                       <div key={metric} className="rounded-lg border border-white/8 bg-white/[.025] p-2.5">
                         <p className="text-[9px] text-muted-foreground">{metric}</p>
@@ -2992,7 +2988,7 @@ export default function Home() {
           </div>
 
           <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] px-4 py-3 text-[10px] leading-5 text-muted-foreground">
-            {demoJournalEnabled ? 'Demo mode uses fictional XAUUSD trades and resets when the page reloads. It is not connected to your installed bridge, ACCM account or MT5 history.' : 'Deposits and withdrawals will be recorded separately from trading results, preventing added funds from being mistaken for profit. The live journal will use broker-reported closed-deal data rather than estimating P/L from chart prices.'}
+            {demoJournalEnabled ? 'Public demo snapshot from ACCMIntl-Demo, captured September 10, 2026. The login is masked, the bridge token is not included, and these values do not update continuously yet.' : 'Deposits and withdrawals are excluded from trading results, preventing added funds from being mistaken for profit. Show the demo to inspect the masked broker-reported snapshot.'}
           </div>
         </section>
 
