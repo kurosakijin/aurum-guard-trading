@@ -27,6 +27,7 @@ yarn-error.log*
 .pnpm-debug.log*
 __pycache__/
 *.pyc
+*.tsbuildinfo
 
 # local environment
 .env*
@@ -46,3 +47,6 @@ public/downloads/aurum-guard-ai/replay_*.json
 tools/local-journal/.bridge-token
 tools/local-journal/journal.local.db
 tools/local-journal/*.log
+
+.vercel
+.env*

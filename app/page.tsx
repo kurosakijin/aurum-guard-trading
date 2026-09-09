@@ -52,17 +52,30 @@ const liveMarkets = [
   { key: 'silver', label: 'Silver', short: 'XAG / USD', symbol: 'OANDA:XAGUSD' },
 ] as const;
 
-const demoJournalTrades = [
-  { closed: 'Sep 10 · 01:45', symbol: 'XAUUSD', side: 'BUY', volume: '1.00', prices: '4,414.14 → 4,413.71', costs: '$0.00', net: -43.00 },
-  { closed: 'Sep 10 · 01:41', symbol: 'XAUUSD', side: 'BUY', volume: '1.00', prices: '4,412.97 → 4,416.03', costs: '$0.00', net: 306.00 },
-  { closed: 'Sep 10 · 01:36', symbol: 'XAUUSD', side: 'SELL', volume: '0.30', prices: '4,413.33 → 4,413.39', costs: '$0.00', net: -1.80 },
-] as const;
-
-const journalMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
-const demoDailyJournal: Record<string, number> = {
-  '2026-09-10': 261.20,
+type JournalTrade = { closed: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; entryPrice: number; exitPrice: number; costs: number; net: number };
+type JournalData = {
+  connected: boolean;
+  mode: 'demo';
+  account: { provider: string; brokerServer: string; loginMasked: string; company: string; currency: string; balance: number; equity: number; freeMargin: number; floatingProfit: number; updatedAt: string };
+  summary: { net: number; grossProfit: number; grossLoss: number; closedTrades: number; winRate: number; profitFactor: number; averageWin: number; averageLoss: number };
+  trades: JournalTrade[];
+  daily: Record<string, number>;
 };
 
+const fallbackDemoJournal: JournalData = {
+  connected: true,
+  mode: 'demo',
+  account: { provider: 'ACCM', brokerServer: 'ACCMIntl-Demo', loginMasked: '316•••', company: 'ACCM Intl Limited', currency: 'USD', balance: 100261.20, equity: 100261.20, freeMargin: 100261.20, floatingProfit: 0, updatedAt: '2026-09-10T01:48:19+08:00' },
+  summary: { net: 261.20, grossProfit: 306, grossLoss: -44.80, closedTrades: 3, winRate: 33.3, profitFactor: 6.83, averageWin: 306, averageLoss: -22.40 },
+  trades: [
+    { closed: '2026-09-09T17:45:37.324Z', symbol: 'XAUUSD', side: 'BUY', volume: 1, entryPrice: 4414.14, exitPrice: 4413.71, costs: 0, net: -43 },
+    { closed: '2026-09-09T17:41:32.319Z', symbol: 'XAUUSD', side: 'BUY', volume: 1, entryPrice: 4412.97, exitPrice: 4416.03, costs: 0, net: 306 },
+    { closed: '2026-09-09T17:36:51.363Z', symbol: 'XAUUSD', side: 'SELL', volume: 0.3, entryPrice: 4413.33, exitPrice: 4413.39, costs: 0, net: -1.80 },
+  ],
+  daily: { '2026-09-10': 261.20 },
+};
+
+const journalMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
 const timeframes = [
   { label: '1m', value: '1' },
   { label: '3m', value: '3' },
@@ -2519,12 +2532,34 @@ export default function Home() {
   const [structureScriptCopied, setStructureScriptCopied] = useState(false);
   const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
   const [demoJournalEnabled, setDemoJournalEnabled] = useState(true);
+  const [journalData, setJournalData] = useState<JournalData>(fallbackDemoJournal);
+  const [journalFeedOnline, setJournalFeedOnline] = useState(false);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
   const [pineScriptView, setPineScriptView] = useState<'structure' | 'volume' | 'combined'>('structure');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
+
+  useEffect(() => {
+    let active = true;
+    const refreshJournal = async () => {
+      try {
+        const response = await fetch('/api/journal', { cache: 'no-store' });
+        if (!response.ok) throw new Error('journal unavailable');
+        const next = await response.json() as JournalData;
+        if (active && next.connected) {
+          setJournalData(next);
+          setJournalFeedOnline(true);
+        }
+      } catch {
+        if (active) setJournalFeedOnline(false);
+      }
+    };
+    void refreshJournal();
+    const timer = window.setInterval(refreshJournal, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     const syncPanelFromHash = () => {
@@ -2541,7 +2576,7 @@ export default function Home() {
     return () => window.removeEventListener('hashchange', syncPanelFromHash);
   }, []);
 
-  function openWorkspace(panel: WorkspacePanel, hash = panel) {
+  function openWorkspace(panel: WorkspacePanel, hash: string = panel) {
     setWorkspacePanel(panel);
     window.history.replaceState(null, '', `#${hash}`);
     window.requestAnimationFrame(() => {
@@ -2684,7 +2719,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-sky-200/15 bg-sky-300/[.055] px-3 py-2 text-[11px] text-sky-100">
               <span className="size-2 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(253,224,71,.7)]" />
-              ACCM demo snapshot connected
+              {journalFeedOnline ? 'ACCM demo journal live' : 'ACCM demo snapshot connected'}
             </div>
           </div>
         </section>
@@ -2719,16 +2754,16 @@ export default function Home() {
             <Card className="border-cyan-300/20">
               <CardHeader className="border-b border-sky-200/10 pb-3">
                 <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> MT5 / ACCM account</CardTitle>
-                <CardDescription>Public demo snapshot · read-only</CardDescription>
-                <CardAction><Badge variant="outline" className="border-emerald-300/25 text-emerald-200">DEMO</Badge></CardAction>
+                <CardDescription>Public demo journal · read-only</CardDescription>
+                <CardAction><Badge variant="outline" className="border-emerald-300/25 text-emerald-200">{journalFeedOnline ? 'LIVE DEMO' : 'DEMO'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
-                  <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> ACCMIntl-Demo · 316•••</div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Snapshot imported from the read-only combined advisor. It is demonstration data, not a live or real-money account connection.</p>
+                  <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {journalData.account.brokerServer} · {journalData.account.loginMasked}</div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">{journalFeedOnline ? 'Updating from the read-only combined advisor every few seconds.' : 'Showing the last demo snapshot while the hosted feed connects.'} This is not a real-money account.</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  {[['Balance', '$100,261.20'], ['Equity', '$100,261.20'], ['Free margin', '$100,261.20'], ['Open P/L', '$0.00']].map(([label, value]) => (
+                  {[['Balance', `$${journalData.account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Equity', `$${journalData.account.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Free margin', `$${journalData.account.freeMargin.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Open P/L', `${journalData.account.floatingProfit < 0 ? '−' : ''}$${Math.abs(journalData.account.floatingProfit).toFixed(2)}`]].map(([label, value]) => (
                     <div key={label} className="rounded-lg border border-sky-200/10 bg-white/[.025] p-2.5">
                       <p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">{label}</p>
                       <p className="mt-1 font-mono text-sm text-sky-100">{value}</p>
@@ -2780,7 +2815,7 @@ export default function Home() {
               <Button variant="outline" size="sm" className={demoJournalEnabled ? 'border-red-300/20 bg-red-300/[.04] text-red-200' : 'border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100'} onClick={() => setDemoJournalEnabled((enabled) => !enabled)}>
                 {demoJournalEnabled ? 'Hide demo' : 'Show ACCM demo'}
               </Button>
-              <Badge variant="outline" className={demoJournalEnabled ? 'w-fit border-fuchsia-300/25 bg-fuchsia-300/[.08] px-3 py-1.5 text-fuchsia-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{demoJournalEnabled ? 'ACCM DEMO SNAPSHOT' : 'DEMO HIDDEN'}</Badge>
+              <Badge variant="outline" className={demoJournalEnabled ? 'w-fit border-fuchsia-300/25 bg-fuchsia-300/[.08] px-3 py-1.5 text-fuchsia-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{demoJournalEnabled ? (journalFeedOnline ? 'ACCM LIVE DEMO' : 'ACCM DEMO SNAPSHOT') : 'DEMO HIDDEN'}</Badge>
             </div>
           </div>
 
@@ -2845,10 +2880,10 @@ export default function Home() {
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Net P/L', demoJournalEnabled ? '+$261.20' : '—', 'Profit − loss − costs', 'text-sky-100'],
-              ['Gross profit', demoJournalEnabled ? '$306.00' : '—', 'Sum of winning trades', 'text-emerald-300'],
-              ['Gross loss', demoJournalEnabled ? '−$44.80' : '—', 'Sum of losing trades', 'text-red-300'],
-              ['Closed trades', demoJournalEnabled ? '3' : '—', 'Completed deals only', 'text-amber-200'],
+              ['Net P/L', demoJournalEnabled ? `${journalData.summary.net >= 0 ? '+' : '−'}$${Math.abs(journalData.summary.net).toFixed(2)}` : '—', 'Profit − loss − costs', 'text-sky-100'],
+              ['Gross profit', demoJournalEnabled ? `$${journalData.summary.grossProfit.toFixed(2)}` : '—', 'Sum of winning trades', 'text-emerald-300'],
+              ['Gross loss', demoJournalEnabled ? `−$${Math.abs(journalData.summary.grossLoss).toFixed(2)}` : '—', 'Sum of losing trades', 'text-red-300'],
+              ['Closed trades', demoJournalEnabled ? String(journalData.summary.closedTrades) : '—', 'Completed deals only', 'text-amber-200'],
             ].map(([label, value, note, tone]) => (
               <Card key={label} className="border-sky-300/15 bg-[linear-gradient(145deg,rgba(56,189,248,.055),rgba(5,18,32,.78))]" size="sm">
                 <CardContent>
@@ -2890,10 +2925,11 @@ export default function Home() {
                   <div className="mt-1.5 grid grid-cols-7 gap-1.5">
                     {journalCalendarCells.map((day, index) => {
                       const dateKey = day ? `${journalCalendarCursor.year}-${String(journalCalendarCursor.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
-                      const result = demoJournalEnabled ? demoDailyJournal[dateKey] : undefined;
+                      const result = demoJournalEnabled ? journalData.daily[dateKey] : undefined;
+                      const tradeCount = journalData.trades.filter((trade) => new Date(trade.closed).toLocaleDateString('en-CA') === dateKey).length;
                       return (
                         <div key={`${index}-${day ?? 'blank'}`} className={`min-h-16 rounded-lg border p-2 sm:min-h-20 ${day === null ? 'border-transparent bg-transparent' : result === undefined ? 'border-white/7 bg-white/[.018]' : result >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-red-300/20 bg-red-300/[.07]'}`}>
-                          {day !== null && <><p className="text-[10px] text-muted-foreground">{day}</p>{result !== undefined && <><p className={`mt-2 font-mono text-[11px] font-semibold ${result >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{result >= 0 ? '+' : '−'}${Math.abs(result).toFixed(2)}</p><p className="mt-1 text-[8px] text-muted-foreground">{day === 7 ? '3 trades' : '3 trades'}</p></>}</>}
+                          {day !== null && <><p className="text-[10px] text-muted-foreground">{day}</p>{result !== undefined && <><p className={`mt-2 font-mono text-[11px] font-semibold ${result >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{result >= 0 ? '+' : '−'}${Math.abs(result).toFixed(2)}</p><p className="mt-1 text-[8px] text-muted-foreground">{tradeCount} {tradeCount === 1 ? 'trade' : 'trades'}</p></>}</>}
                         </div>
                       );
                     })}
@@ -2902,7 +2938,9 @@ export default function Home() {
               ) : (
                 <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                   {journalMonthNames.map((month, monthIndex) => {
-                    const value = demoJournalEnabled && journalCalendarCursor.year === 2026 && monthIndex === 8 ? 261.20 : undefined;
+                    const monthPrefix = `${journalCalendarCursor.year}-${String(monthIndex + 1).padStart(2, '0')}-`;
+                    const monthResults = Object.entries(journalData.daily).filter(([date]) => date.startsWith(monthPrefix));
+                    const value = demoJournalEnabled && monthResults.length ? monthResults.reduce((sum, [, result]) => sum + result, 0) : undefined;
                     return (
                       <button key={month} type="button" onClick={() => { setJournalCalendarCursor({ year: journalCalendarCursor.year, month: monthIndex }); setJournalCalendarMode('month'); }} className={`rounded-xl border p-3 text-left transition hover:border-fuchsia-300/25 ${value === undefined ? 'border-white/8 bg-white/[.02]' : value >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.06]' : 'border-red-300/20 bg-red-300/[.06]'}`}>
                         <p className="text-[10px] font-medium text-muted-foreground">{month.slice(0, 3)}</p>
@@ -2930,14 +2968,14 @@ export default function Home() {
                   </div>
                   {demoJournalEnabled ? (
                     <div className="min-w-[760px] divide-y divide-white/6">
-                      {demoJournalTrades.map((trade) => (
+                      {journalData.trades.map((trade) => (
                         <div key={`${trade.closed}-${trade.side}`} className="grid grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 px-4 py-3 text-[10px] text-sky-50">
-                          <span className="text-muted-foreground">{trade.closed}</span>
+                          <span className="text-muted-foreground">{new Date(trade.closed).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                           <span>{trade.symbol}</span>
                           <span className={trade.side === 'BUY' ? 'text-emerald-300' : 'text-red-300'}>{trade.side}</span>
-                          <span className="font-mono">{trade.volume}</span>
-                          <span className="font-mono text-muted-foreground">{trade.prices}</span>
-                          <span className="font-mono text-muted-foreground">{trade.costs}</span>
+                          <span className="font-mono">{trade.volume.toFixed(2)}</span>
+                          <span className="font-mono text-muted-foreground">{trade.entryPrice.toLocaleString()} → {trade.exitPrice.toLocaleString()}</span>
+                          <span className="font-mono text-muted-foreground">{trade.costs < 0 ? '−' : ''}${Math.abs(trade.costs).toFixed(2)}</span>
                           <span className={`text-right font-mono font-semibold ${trade.net >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{trade.net >= 0 ? '+' : '−'}${Math.abs(trade.net).toFixed(2)}</span>
                         </div>
                       ))}
@@ -2961,10 +2999,10 @@ export default function Home() {
                   <p className="text-xs font-semibold text-emerald-200">Daily performance</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {[
-                      ['Win rate', demoJournalEnabled ? '33.3%' : '—'],
-                      ['Profit factor', demoJournalEnabled ? '6.83' : '—'],
-                      ['Average win', demoJournalEnabled ? '$306.00' : '—'],
-                      ['Average loss', demoJournalEnabled ? '−$22.40' : '—'],
+                      ['Win rate', demoJournalEnabled ? `${journalData.summary.winRate.toFixed(1)}%` : '—'],
+                      ['Profit factor', demoJournalEnabled ? journalData.summary.profitFactor.toFixed(2) : '—'],
+                      ['Average win', demoJournalEnabled ? `$${journalData.summary.averageWin.toFixed(2)}` : '—'],
+                      ['Average loss', demoJournalEnabled ? `−$${Math.abs(journalData.summary.averageLoss).toFixed(2)}` : '—'],
                     ].map(([metric, value]) => (
                       <div key={metric} className="rounded-lg border border-white/8 bg-white/[.025] p-2.5">
                         <p className="text-[9px] text-muted-foreground">{metric}</p>
@@ -2988,7 +3026,7 @@ export default function Home() {
           </div>
 
           <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.035] px-4 py-3 text-[10px] leading-5 text-muted-foreground">
-            {demoJournalEnabled ? 'Public demo snapshot from ACCMIntl-Demo, captured September 10, 2026. The login is masked, the bridge token is not included, and these values do not update continuously yet.' : 'Deposits and withdrawals are excluded from trading results, preventing added funds from being mistaken for profit. Show the demo to inspect the masked broker-reported snapshot.'}
+            {demoJournalEnabled ? (journalFeedOnline ? `Live read-only demo feed · last broker sync ${new Date(journalData.account.updatedAt).toLocaleString()}. The login is masked and deposits are excluded from trading P/L.` : 'Showing the last safe ACCM demo snapshot until the hosted journal feed becomes available. The login and bridge token are not exposed.') : 'Deposits and withdrawals are excluded from trading results, preventing added funds from being mistaken for profit. Show the demo to inspect the masked broker-reported journal.'}
           </div>
         </section>
 

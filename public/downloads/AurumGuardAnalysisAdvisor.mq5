@@ -120,7 +120,7 @@ input bool   FailClosedWhenCalendarUnavailable = true;
 // --- Read-only Asheparte journal synchronization
 input bool   EnableJournalSync              = true;
 input string JournalProvider                = "ACCM";
-input string JournalEndpoint                = "http://127.0.0.1:8765/api/mt5/ingest";
+input string JournalEndpoint                = "https://asheparte-ai.vercel.app/api/mt5/ingest";
 input string JournalBridgeToken             = "";
 input int    JournalSyncSeconds             = 60;
 input int    JournalInitialDays             = 30;
