@@ -54,6 +54,8 @@ const liveMarkets = [
 ] as const;
 
 type JournalTrade = { closed: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; entryPrice: number; exitPrice: number; costs: number; net: number };
+type BridgeAccount = { provider: string; server: string; loginMasked: string };
+type BridgeBindingStatus = 'unpaired' | 'pending' | 'linked';
 type JournalData = {
   connected: boolean;
   mode: 'demo';
@@ -2540,6 +2542,9 @@ export default function Home() {
   const [bridgeTokenBusy, setBridgeTokenBusy] = useState(false);
   const [bridgeTokenCopied, setBridgeTokenCopied] = useState(false);
   const [bridgeTokenError, setBridgeTokenError] = useState('');
+  const [bridgeBindingStatus, setBridgeBindingStatus] = useState<BridgeBindingStatus>('unpaired');
+  const [bridgeAccount, setBridgeAccount] = useState<BridgeAccount | null>(null);
+  const [bridgeSyncCode, setBridgeSyncCode] = useState('');
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
@@ -2592,6 +2597,9 @@ export default function Home() {
           setBridgeTokenHasToken(false);
           setBridgeTokenLastFour('');
           setBridgeTokenReveal('');
+          setBridgeBindingStatus('unpaired');
+          setBridgeAccount(null);
+          setBridgeSyncCode('');
         }
         return;
       }
@@ -2599,17 +2607,21 @@ export default function Home() {
         const token = await getToken();
         const response = await fetch('/api/bridge-token', { cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : {} });
         if (!response.ok) return;
-        const status = await response.json() as { hasToken: boolean; lastFour?: string };
+        const status = await response.json() as { hasToken: boolean; lastFour?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string };
         if (active) {
           setBridgeTokenHasToken(status.hasToken);
           setBridgeTokenLastFour(status.lastFour ?? '');
+          setBridgeBindingStatus(status.bindingStatus ?? 'unpaired');
+          setBridgeAccount(status.account ?? null);
+          setBridgeSyncCode(status.syncCode ?? '');
         }
       } catch {
         // Keep the token card available for retry without exposing authentication details.
       }
     };
     void refreshBridgeToken();
-    return () => { active = false; };
+    const timer = window.setInterval(refreshBridgeToken, 5000);
+    return () => { active = false; window.clearInterval(timer); };
   }, [getToken, isSignedIn]);
 
   async function rotateUserBridgeToken() {
@@ -2628,6 +2640,32 @@ export default function Home() {
       setBridgeTokenHasToken(true);
     } catch {
       setBridgeTokenError('Could not generate a key. Please try again.');
+    } finally {
+      setBridgeTokenBusy(false);
+    }
+  }
+
+  async function updateBridgePairing(action: 'approve' | 'reject') {
+    if (!isSignedIn || bridgeTokenBusy) return;
+    setBridgeTokenBusy(true);
+    setBridgeTokenError('');
+    try {
+      const sessionToken = await getToken();
+      const response = await fetch('/api/bridge-token', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) },
+        body: JSON.stringify({ action }),
+      });
+      const result = await response.json() as { error?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string };
+      if (!response.ok) throw new Error(result.error ?? 'pairing unavailable');
+      setBridgeBindingStatus(result.bindingStatus ?? 'unpaired');
+      setBridgeAccount(result.account ?? null);
+      setBridgeSyncCode(result.syncCode ?? '');
+    } catch (error) {
+      const message = error instanceof Error && error.message === 'account_already_linked'
+        ? 'That MT5 account is already paired with another Asheparte user.'
+        : 'Could not update the account pairing. Please try again.';
+      setBridgeTokenError(message);
     } finally {
       setBridgeTokenBusy(false);
     }
@@ -2937,7 +2975,7 @@ export default function Home() {
               <p className="mt-1 text-sm text-muted-foreground">Your private ACCM / MT5 performance and trade history.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={journalFeedOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{journalFeedOnline ? 'JOURNAL LIVE' : 'AWAITING BRIDGE'}</Badge>
+              <Badge variant="outline" className={journalFeedOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{journalFeedOnline ? 'JOURNAL LIVE' : bridgeBindingStatus === 'pending' ? 'APPROVAL REQUIRED' : 'AWAITING BRIDGE'}</Badge>
             </div>
           </div>
 
@@ -3087,11 +3125,37 @@ export default function Home() {
                       <Button variant="outline" size="sm" className="mt-3 h-8 border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" onClick={copyUserBridgeToken}><Clipboard className="size-3.5" /> {bridgeTokenCopied ? 'Copied' : 'Copy key'}</Button>
                     </div>
                   )}
+                  {bridgeBindingStatus === 'pending' && bridgeAccount && (
+                    <div className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/[.06] p-3">
+                      <p className="flex items-center gap-2 text-[10px] font-semibold text-amber-200"><TriangleAlert className="size-3.5" /> Confirm detected MT5 account</p>
+                      <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
+                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
+                      <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Approve only if this matches your current MT5 account. No trades are accepted before approval.</p>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Button size="sm" className="h-8 bg-emerald-300 text-[10px] text-[#03121f] hover:bg-emerald-200" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('approve')}><Check className="size-3.5" /> Approve</Button>
+                        <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('reject')}>Reject</Button>
+                      </div>
+                    </div>
+                  )}
+                  {bridgeBindingStatus === 'linked' && bridgeAccount && (
+                    <div className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/[.05] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="flex items-center gap-2 text-[10px] font-semibold text-emerald-200"><Check className="size-3.5" /> Account paired</p>
+                        {bridgeSyncCode && <Badge variant="outline" className="border-cyan-300/20 font-mono text-[9px] text-cyan-200">{bridgeSyncCode}</Badge>}
+                      </div>
+                      <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
+                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
+                      <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Only this exact provider, server and MT5 login can write to your journal.</p>
+                    </div>
+                  )}
+                  {bridgeTokenHasToken && bridgeBindingStatus === 'unpaired' && (
+                    <p className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[.04] p-3 text-[9px] leading-4 text-muted-foreground">Waiting for MT5 detection. Keep the advisor running; this card checks for the account every 5 seconds.</p>
+                  )}
                   <Button variant="outline" size="sm" className="mt-3 h-9 w-full border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" disabled={bridgeTokenBusy} onClick={rotateUserBridgeToken}>
                     <RotateCcw className={bridgeTokenBusy ? 'size-3.5 animate-spin' : 'size-3.5'} /> {bridgeTokenBusy ? 'Generating…' : bridgeTokenHasToken ? 'Replace bridge key' : 'Generate bridge key'}
                   </Button>
                   {bridgeTokenError && <p className="mt-2 text-[9px] text-red-300">{bridgeTokenError}</p>}
-                  {bridgeTokenHasToken && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Replacing it revokes the previous key immediately.</p>}
+                  {bridgeTokenHasToken && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Replacing it revokes the previous key immediately while keeping the approved MT5 account lock.</p>}
                 </CardContent>
               </Card>
 

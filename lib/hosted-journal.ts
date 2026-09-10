@@ -111,14 +111,14 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
     const ticket = text(deal.ticket, 64);
     const dealType = Math.trunc(finiteNumber(deal.type));
     if (!ticket || (dealType !== 0 && dealType !== 1)) continue;
-    await sql`INSERT INTO journal_deals
+    const inserted = await sql`INSERT INTO journal_deals
       (account_key,owner_user_id,ticket,position_id,time_msc,deal_type,deal_entry,symbol,volume,price,commission,swap,fee,profit)
       VALUES (${key},${ownerUserId},${ticket},${text(deal.positionId, 64)},${Math.trunc(finiteNumber(deal.timeMsc))},
         ${dealType},${Math.trunc(finiteNumber(deal.entry))},${text(deal.symbol, 64)},${finiteNumber(deal.volume)},
         ${finiteNumber(deal.price)},${finiteNumber(deal.commission)},${finiteNumber(deal.swap)},
         ${finiteNumber(deal.fee)},${finiteNumber(deal.profit)})
-      ON CONFLICT (account_key,ticket) DO NOTHING`;
-    accepted += 1;
+      ON CONFLICT (account_key,ticket) DO NOTHING RETURNING ticket`;
+    accepted += inserted.length;
   }
   return { accepted };
 }
