@@ -2553,6 +2553,7 @@ export default function Home() {
   const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
   const [demoJournalEnabled, setDemoJournalEnabled] = useState(false);
   const [journalData, setJournalData] = useState<JournalData>(emptyJournal);
+  const [journalOwnerId, setJournalOwnerId] = useState('');
   const [journalFeedOnline, setJournalFeedOnline] = useState(false);
   const [bridgeTokenHasToken, setBridgeTokenHasToken] = useState(false);
   const [bridgeTokenLastFour, setBridgeTokenLastFour] = useState('');
@@ -2591,13 +2592,18 @@ export default function Home() {
   const journalTotalPages = Math.max(1, Math.ceil(journalData.trades.length / journalPageSize));
   const journalPageTrades = journalData.trades.slice((journalPage - 1) * journalPageSize, journalPage * journalPageSize);
   const signUpPasswordStrength = [signUpPassword.length >= 8, /[A-Z]/.test(signUpPassword), /[a-z]/.test(signUpPassword), /\d/.test(signUpPassword), /[^A-Za-z0-9]/.test(signUpPassword)].filter(Boolean).length;
+  const journalBelongsToSignedInUser = Boolean(isSignedIn && user?.id && journalOwnerId === user.id);
+  const currentJournalEnabled = demoJournalEnabled && journalBelongsToSignedInUser;
+  const signedInUserLabel = user?.username ? `@${user.username}` : user?.primaryEmailAddress?.emailAddress ?? 'Signed-in user';
+  const signedInEmail = user?.primaryEmailAddress?.emailAddress ?? '';
 
   useEffect(() => {
     let active = true;
     const refreshJournal = async () => {
-      if (!isSignedIn) {
+      if (!isSignedIn || !user?.id) {
         if (active) {
           setJournalData(emptyJournal);
+          setJournalOwnerId('');
           setJournalFeedOnline(false);
           setDemoJournalEnabled(false);
         }
@@ -2613,6 +2619,7 @@ export default function Home() {
         const next = await response.json() as JournalData;
         if (active) {
           setJournalData(next.connected ? next : emptyJournal);
+          setJournalOwnerId(user.id);
           setJournalFeedOnline(Boolean(next.connected));
           setDemoJournalEnabled(Boolean(next.connected));
         }
@@ -2623,7 +2630,7 @@ export default function Home() {
     void refreshJournal();
     const timer = window.setInterval(refreshJournal, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [getToken, isSignedIn]);
+  }, [getToken, isSignedIn, user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -2658,7 +2665,7 @@ export default function Home() {
     void refreshBridgeToken();
     const timer = window.setInterval(refreshBridgeToken, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [getToken, isSignedIn]);
+  }, [getToken, isSignedIn, user?.id]);
 
   async function rotateUserBridgeToken() {
     if (!isSignedIn || bridgeTokenBusy) return;
@@ -3200,17 +3207,18 @@ export default function Home() {
           <div className="grid content-start gap-4">
             <Card className="border-cyan-300/20">
               <CardHeader className="border-b border-sky-200/10 pb-3">
-                <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> MT5 / ACCM account</CardTitle>
-                <CardDescription>Private account journal · read-only analytics</CardDescription>
-                <CardAction><Badge variant="outline" className="border-emerald-300/25 text-emerald-200">{journalFeedOnline ? 'LIVE' : isSignedIn ? 'READY' : 'LOCKED'}</Badge></CardAction>
+                <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> Current account connection</CardTitle>
+                <CardDescription>{isSignedIn ? `Signed in as ${signedInUserLabel}` : 'Sign in to view your private journal'}</CardDescription>
+                <CardAction><Badge variant="outline" className={journalBelongsToSignedInUser && journalFeedOnline ? 'border-emerald-300/25 text-emerald-200' : 'border-amber-300/25 text-amber-200'}>{journalBelongsToSignedInUser && journalFeedOnline ? 'SYNCED' : isSignedIn ? 'NOT LINKED' : 'LOCKED'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
-                  <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {journalData.account.brokerServer} · {journalData.account.loginMasked}</div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">{journalFeedOnline ? 'Updating from your read-only journal bridge every few seconds.' : isSignedIn ? 'Generate your bridge key in the Journal tab to connect an account.' : 'Log in to access an isolated account journal.'}</p>
+                <div className="space-y-2 rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
+                  <div className="flex items-start justify-between gap-3"><span className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Asheparte account</span><span className="min-w-0 text-right"><span className="block max-w-[175px] truncate font-mono text-[10px] text-cyan-200">{isSignedIn ? signedInUserLabel : 'Not signed in'}</span>{isSignedIn && signedInEmail && signedInEmail !== signedInUserLabel && <span className="mt-0.5 block max-w-[175px] truncate text-[9px] text-muted-foreground">{signedInEmail}</span>}</span></div>
+                  <div className="border-t border-white/8 pt-2"><p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Linked broker account</p><div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {journalBelongsToSignedInUser && journalFeedOnline ? `${journalData.account.provider} · ${journalData.account.brokerServer} · ${journalData.account.loginMasked}` : 'No account linked to this user'}</div></div>
+                  <p className="border-t border-white/8 pt-2 text-[10px] leading-4 text-muted-foreground">{journalBelongsToSignedInUser && journalFeedOnline ? `Verified for this signed-in user · last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()}` : isSignedIn ? 'Open Journal to connect this Asheparte account to MT5 or ACCM.' : 'Log in to access an isolated account journal.'}</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  {[['Balance', `$${journalData.account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Equity', `$${journalData.account.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Free margin', `$${journalData.account.freeMargin.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Open P/L', `${journalData.account.floatingProfit < 0 ? '−' : ''}$${Math.abs(journalData.account.floatingProfit).toFixed(2)}`]].map(([label, value]) => (
+                  {[['Balance', journalBelongsToSignedInUser && journalFeedOnline ? `$${journalData.account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Equity', journalBelongsToSignedInUser && journalFeedOnline ? `$${journalData.account.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Free margin', journalBelongsToSignedInUser && journalFeedOnline ? `$${journalData.account.freeMargin.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Open P/L', journalBelongsToSignedInUser && journalFeedOnline ? `${journalData.account.floatingProfit < 0 ? '−' : ''}$${Math.abs(journalData.account.floatingProfit).toFixed(2)}` : '—']].map(([label, value]) => (
                     <div key={label} className="rounded-lg border border-sky-200/10 bg-white/[.025] p-2.5">
                       <p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">{label}</p>
                       <p className="mt-1 font-mono text-sm text-sky-100">{value}</p>
@@ -3273,18 +3281,19 @@ export default function Home() {
               </div>
               <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Trading journal</h1>
               <p className="mt-1 text-sm text-muted-foreground">Your private ACCM / MT5 performance and trade history.</p>
+              <p className="mt-1.5 font-mono text-[10px] text-cyan-200">{signedInUserLabel} → {journalBelongsToSignedInUser && journalFeedOnline ? `${journalData.account.provider} / ${journalData.account.brokerServer} / ${journalData.account.loginMasked}` : 'no broker account linked'}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={journalFeedOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{journalFeedOnline ? 'JOURNAL LIVE' : bridgeBindingStatus === 'pending' ? 'APPROVAL REQUIRED' : 'AWAITING BRIDGE'}</Badge>
+              <Badge variant="outline" className={journalBelongsToSignedInUser && journalFeedOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{journalBelongsToSignedInUser && journalFeedOnline ? 'CURRENT USER · LIVE' : bridgeBindingStatus === 'pending' ? 'APPROVAL REQUIRED' : 'AWAITING BRIDGE'}</Badge>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Net P/L', demoJournalEnabled ? `${journalData.summary.net >= 0 ? '+' : '−'}$${Math.abs(journalData.summary.net).toFixed(2)}` : '—', 'Profit − loss − costs', 'text-sky-100'],
-              ['Gross profit', demoJournalEnabled ? `$${journalData.summary.grossProfit.toFixed(2)}` : '—', 'Sum of winning trades', 'text-emerald-300'],
-              ['Gross loss', demoJournalEnabled ? `−$${Math.abs(journalData.summary.grossLoss).toFixed(2)}` : '—', 'Sum of losing trades', 'text-red-300'],
-              ['Closed trades', demoJournalEnabled ? String(journalData.summary.closedTrades) : '—', 'Completed deals only', 'text-amber-200'],
+              ['Net P/L', currentJournalEnabled ? `${journalData.summary.net >= 0 ? '+' : '−'}$${Math.abs(journalData.summary.net).toFixed(2)}` : '—', 'Profit − loss − costs', 'text-sky-100'],
+              ['Gross profit', currentJournalEnabled ? `$${journalData.summary.grossProfit.toFixed(2)}` : '—', 'Sum of winning trades', 'text-emerald-300'],
+              ['Gross loss', currentJournalEnabled ? `−$${Math.abs(journalData.summary.grossLoss).toFixed(2)}` : '—', 'Sum of losing trades', 'text-red-300'],
+              ['Closed trades', currentJournalEnabled ? String(journalData.summary.closedTrades) : '—', 'Completed deals only', 'text-amber-200'],
             ].map(([label, value, note, tone]) => (
               <Card key={label} className="border-sky-300/15 bg-[linear-gradient(145deg,rgba(56,189,248,.055),rgba(5,18,32,.78))]" size="sm">
                 <CardContent>
@@ -3313,7 +3322,7 @@ export default function Home() {
                 <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Previous ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(-1)}>←</Button>
                 <div className="text-center">
                   <p className="text-sm font-semibold text-sky-50">{journalCalendarMode === 'month' ? `${journalMonthNames[journalCalendarCursor.month]} ${journalCalendarCursor.year}` : journalCalendarCursor.year}</p>
-                  <p className="mt-1 text-[9px] uppercase tracking-[.12em] text-muted-foreground">{demoJournalEnabled ? 'Private account journal' : 'Awaiting linked data'}</p>
+                  <p className="mt-1 text-[9px] uppercase tracking-[.12em] text-muted-foreground">{currentJournalEnabled ? 'Private account journal' : 'Awaiting linked data'}</p>
                 </div>
                 <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Next ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(1)}>→</Button>
               </div>
@@ -3326,7 +3335,7 @@ export default function Home() {
                   <div className="mt-1.5 grid grid-cols-7 gap-1.5">
                     {journalCalendarCells.map((day, index) => {
                       const dateKey = day ? `${journalCalendarCursor.year}-${String(journalCalendarCursor.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
-                      const result = demoJournalEnabled ? journalData.daily[dateKey] : undefined;
+                      const result = currentJournalEnabled ? journalData.daily[dateKey] : undefined;
                       const tradeCount = journalData.trades.filter((trade) => new Date(trade.closed).toLocaleDateString('en-CA') === dateKey).length;
                       return (
                         <div key={`${index}-${day ?? 'blank'}`} className={`min-h-16 rounded-lg border p-2 sm:min-h-20 ${day === null ? 'border-transparent bg-transparent' : result === undefined ? 'border-white/7 bg-white/[.018]' : result >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-red-300/20 bg-red-300/[.07]'}`}>
@@ -3341,7 +3350,7 @@ export default function Home() {
                   {journalMonthNames.map((month, monthIndex) => {
                     const monthPrefix = `${journalCalendarCursor.year}-${String(monthIndex + 1).padStart(2, '0')}-`;
                     const monthResults = Object.entries(journalData.daily).filter(([date]) => date.startsWith(monthPrefix));
-                    const value = demoJournalEnabled && monthResults.length ? monthResults.reduce((sum, [, result]) => sum + result, 0) : undefined;
+                    const value = currentJournalEnabled && monthResults.length ? monthResults.reduce((sum, [, result]) => sum + result, 0) : undefined;
                     return (
                       <button key={month} type="button" onClick={() => { setJournalCalendarCursor({ year: journalCalendarCursor.year, month: monthIndex }); setJournalCalendarMode('month'); }} className={`rounded-xl border p-3 text-left transition hover:border-fuchsia-300/25 ${value === undefined ? 'border-white/8 bg-white/[.02]' : value >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.06]' : 'border-red-300/20 bg-red-300/[.06]'}`}>
                         <p className="text-[10px] font-medium text-muted-foreground">{month.slice(0, 3)}</p>
@@ -3359,15 +3368,15 @@ export default function Home() {
             <Card className="min-w-0 overflow-hidden border-sky-300/18">
               <CardHeader className="border-b border-white/7 pb-3">
                 <CardTitle className="flex items-center gap-2"><BookOpenCheck className="size-4 text-cyan-300" /> Trade history</CardTitle>
-                <CardDescription>{demoJournalEnabled ? `Showing 10 trades per page · ${journalData.trades.length} closed trades` : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
-                <CardAction><Badge variant="outline" className={demoJournalEnabled ? 'border-fuchsia-300/20 text-fuchsia-200' : 'border-white/10 text-muted-foreground'}>{demoJournalEnabled ? `PAGE ${journalPage} / ${journalTotalPages}` : 'All time'}</Badge></CardAction>
+                <CardDescription>{currentJournalEnabled ? `Showing 10 trades per page · ${journalData.trades.length} closed trades` : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
+                <CardAction><Badge variant="outline" className={currentJournalEnabled ? 'border-fuchsia-300/20 text-fuchsia-200' : 'border-white/10 text-muted-foreground'}>{currentJournalEnabled ? `PAGE ${journalPage} / ${journalTotalPages}` : 'All time'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
                   <div className="grid min-w-[760px] grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 border-b border-white/7 bg-white/[.025] px-4 py-2.5 text-[9px] font-semibold uppercase tracking-[.1em] text-muted-foreground">
                     <span>Closed</span><span>Symbol</span><span>Side</span><span>Volume</span><span>Entry → exit</span><span>Costs</span><span className="text-right">Net P/L</span>
                   </div>
-                  {demoJournalEnabled ? (
+                  {currentJournalEnabled ? (
                     <div className="min-w-[760px] divide-y divide-white/6">
                       {journalPageTrades.map((trade, index) => (
                         <div key={`${trade.closed}-${trade.side}-${trade.symbol}-${index}`} className="grid grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 px-4 py-3 text-[10px] text-sky-50">
@@ -3391,7 +3400,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                {demoJournalEnabled && journalData.trades.length > 0 && (
+                {currentJournalEnabled && journalData.trades.length > 0 && (
                   <div className="flex flex-col gap-2 border-t border-white/7 bg-white/[.018] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-[10px] text-muted-foreground">
                       Showing {(journalPage - 1) * journalPageSize + 1}–{Math.min(journalPage * journalPageSize, journalData.trades.length)} of {journalData.trades.length}
@@ -3427,10 +3436,10 @@ export default function Home() {
                   <p className="text-xs font-semibold text-emerald-200">Daily performance</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {[
-                      ['Win rate', demoJournalEnabled ? `${journalData.summary.winRate.toFixed(1)}%` : '—'],
-                      ['Profit factor', demoJournalEnabled ? journalData.summary.profitFactor.toFixed(2) : '—'],
-                      ['Average win', demoJournalEnabled ? `$${journalData.summary.averageWin.toFixed(2)}` : '—'],
-                      ['Average loss', demoJournalEnabled ? `−$${Math.abs(journalData.summary.averageLoss).toFixed(2)}` : '—'],
+                      ['Win rate', currentJournalEnabled ? `${journalData.summary.winRate.toFixed(1)}%` : '—'],
+                      ['Profit factor', currentJournalEnabled ? journalData.summary.profitFactor.toFixed(2) : '—'],
+                      ['Average win', currentJournalEnabled ? `$${journalData.summary.averageWin.toFixed(2)}` : '—'],
+                      ['Average loss', currentJournalEnabled ? `−$${Math.abs(journalData.summary.averageLoss).toFixed(2)}` : '—'],
                     ].map(([metric, value]) => (
                       <div key={metric} className="rounded-lg border border-white/8 bg-white/[.025] p-2.5">
                         <p className="text-[9px] text-muted-foreground">{metric}</p>
@@ -3445,7 +3454,7 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[.02] px-4 py-2.5 text-[10px] text-muted-foreground">
-            <span>{demoJournalEnabled && journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()} · refreshes every 5s` : 'Awaiting your journal bridge · checking every 5s'}</span>
+            <span>{currentJournalEnabled && journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()} · refreshes every 5s` : 'Awaiting your journal bridge · checking every 5s'}</span>
             <span className="text-sky-100">Deposits excluded from P/L</span>
           </div>
           </>}
