@@ -111,7 +111,7 @@ bool PostPayload(const string payload)
       return false;
    }
 
-   Print("Asheparte Journal: account snapshot synchronized. HTTP ", status);
+   Print("Asheparte Journal: account snapshot synchronized. HTTP ", status, " ", response);
    return true;
 }
 
@@ -208,8 +208,14 @@ void SynchronizeJournal()
 int OnInit()
 {
    const long login = AccountInfoInteger(ACCOUNT_LOGIN);
-   g_time_key = "AsheparteJournalTime_" + IntegerToString(login);
-   g_ticket_key = "AsheparteJournalTicket_" + IntegerToString(login);
+   // Each private bridge key gets its own cursor so replacing a key (or moving
+   // from localhost to the hosted journal) triggers the intended history backfill.
+   const int token_length = StringLen(InpBridgeToken);
+   const string token_scope = token_length > 8
+      ? StringSubstr(InpBridgeToken, token_length - 8)
+      : InpBridgeToken;
+   g_time_key = "AsheparteJournalTime_" + IntegerToString(login) + "_" + token_scope;
+   g_ticket_key = "AsheparteJournalTicket_" + IntegerToString(login) + "_" + token_scope;
    EventSetTimer(MathMax(15, InpSyncSeconds));
    Print("Asheparte Journal Bridge loaded in READ-ONLY mode. It contains no trade functions.");
    SynchronizeJournal();

@@ -2318,7 +2318,8 @@ bool JournalPostPayload(const string payload)
             CharArrayToString(responseData,0,WHOLE_ARRAY,CP_UTF8));
       return false;
      }
-   Print("Asheparte Journal: account snapshot synchronized. HTTP ",status);
+   Print("Asheparte Journal: account snapshot synchronized. HTTP ",status," ",
+         CharArrayToString(responseData,0,WHOLE_ARRAY,CP_UTF8));
    return true;
   }
 
@@ -2434,8 +2435,13 @@ int OnInit()
 
     g_symbol=TradeSymbol=="" ? _Symbol : TradeSymbol;
     const long journalLogin=AccountInfoInteger(ACCOUNT_LOGIN);
-    g_journalTimeKey="AsheparteCombinedJournalTime_"+IntegerToString(journalLogin);
-    g_journalTicketKey="AsheparteCombinedJournalTicket_"+IntegerToString(journalLogin);
+    // Scope the upload cursor to the private bridge key. A newly generated key
+    // must perform its own historical backfill instead of inheriting the cursor
+    // from an earlier localhost or user connection on the same MT5 account.
+    const int tokenLength=StringLen(JournalBridgeToken);
+    const string tokenScope=tokenLength>8 ? StringSubstr(JournalBridgeToken,tokenLength-8) : JournalBridgeToken;
+    g_journalTimeKey="AsheparteCombinedTime_"+IntegerToString(journalLogin)+"_"+tokenScope;
+    g_journalTicketKey="AsheparteCombinedTicket_"+IntegerToString(journalLogin)+"_"+tokenScope;
     ApplyAurumChartTheme();
     if(!SymbolSelect(g_symbol,true))
      {
