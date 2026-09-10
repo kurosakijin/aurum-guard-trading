@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Show, SignInButton, SignUpButton, UserButton, useAuth } from '@clerk/react';
+import { Show, SignInButton, UserButton, useAuth, useSignUp, useUser } from '@clerk/react';
 import {
   ArrowUpRight,
   BarChart3,
@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/card';
 import { TradingViewChart } from '@/components/tradingview-chart';
 import { NewsSpikeRadar } from '@/components/news-spike-radar';
+import { usernameIsAllowed } from '@/lib/username-policy';
 import {
   TradingViewSymbolInfo,
   TradingViewTechnicalAnalysis,
@@ -2528,6 +2529,8 @@ if barstate.islast
 
 export default function Home() {
   const { getToken, isLoaded: authLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
   const workspaceScrollRef = useRef<HTMLDivElement>(null);
   const journalScrollPosition = useRef(0);
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>('desk');
@@ -2552,6 +2555,20 @@ export default function Home() {
   const [journalResetArmed, setJournalResetArmed] = useState(false);
   const [journalResetEmail, setJournalResetEmail] = useState('');
   const [manageAccountOpen, setManageAccountOpen] = useState(false);
+  const [signUpOpen, setSignUpOpen] = useState(false);
+  const [signUpStep, setSignUpStep] = useState<'details' | 'verify'>('details');
+  const [signUpUsername, setSignUpUsername] = useState('');
+  const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpPassword, setSignUpPassword] = useState('');
+  const [signUpCode, setSignUpCode] = useState('');
+  const [signUpError, setSignUpError] = useState('');
+  const [signUpBusy, setSignUpBusy] = useState(false);
+  const [emailChangeStep, setEmailChangeStep] = useState<'idle' | 'email' | 'code'>('idle');
+  const [newAccountEmail, setNewAccountEmail] = useState('');
+  const [emailVerificationCode, setEmailVerificationCode] = useState('');
+  const [pendingEmailId, setPendingEmailId] = useState('');
+  const [accountChangeError, setAccountChangeError] = useState('');
+  const [accountChangeBusy, setAccountChangeBusy] = useState(false);
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
@@ -2562,6 +2579,7 @@ export default function Home() {
   const journalPageSize = 10;
   const journalTotalPages = Math.max(1, Math.ceil(journalData.trades.length / journalPageSize));
   const journalPageTrades = journalData.trades.slice((journalPage - 1) * journalPageSize, journalPage * journalPageSize);
+  const signUpPasswordStrength = [signUpPassword.length >= 8, /[A-Z]/.test(signUpPassword), /[a-z]/.test(signUpPassword), /\d/.test(signUpPassword), /[^A-Za-z0-9]/.test(signUpPassword)].filter(Boolean).length;
 
   useEffect(() => {
     let active = true;
@@ -2728,6 +2746,118 @@ export default function Home() {
     }
   }
 
+  function readableAccountError(error: unknown, fallback: string) {
+    if (typeof error === 'object' && error && 'errors' in error) {
+      const errors = (error as { errors?: Array<{ longMessage?: string; message?: string }> }).errors;
+      return errors?.[0]?.longMessage ?? errors?.[0]?.message ?? fallback;
+    }
+    return fallback;
+  }
+
+  async function createAsheparteAccount() {
+    if (!signUp || signUpFetchStatus === 'fetching' || signUpBusy) return;
+    setSignUpError('');
+    if (!usernameIsAllowed(signUpUsername)) {
+      setSignUpError('Choose a clean username between 3 and 24 characters.');
+      return;
+    }
+    setSignUpBusy(true);
+    try {
+      const created = await signUp.create({ username: signUpUsername.trim(), emailAddress: signUpEmail.trim(), password: signUpPassword });
+      if (created.error) throw created.error;
+      const sent = await signUp.verifications.sendEmailCode();
+      if (sent.error) throw sent.error;
+      setSignUpStep('verify');
+    } catch (error) {
+      setSignUpError(readableAccountError(error, 'Account creation could not be completed.'));
+    } finally {
+      setSignUpBusy(false);
+    }
+  }
+
+  async function verifyAsheparteAccount() {
+    if (!signUp || signUpFetchStatus === 'fetching' || signUpBusy) return;
+    setSignUpBusy(true);
+    setSignUpError('');
+    try {
+      const verified = await signUp.verifications.verifyEmailCode({ code: signUpCode.trim() });
+      if (verified.error) throw verified.error;
+      const finalized = await signUp.finalize();
+      if (finalized.error) throw finalized.error;
+      setSignUpOpen(false);
+      setSignUpStep('details');
+      setSignUpUsername('');
+      setSignUpEmail('');
+      setSignUpPassword('');
+      setSignUpCode('');
+    } catch (error) {
+      setSignUpError(readableAccountError(error, 'The verification code is invalid or expired.'));
+    } finally {
+      setSignUpBusy(false);
+    }
+  }
+
+  async function requestEmailChange() {
+    if (!user || accountChangeBusy) return;
+    setAccountChangeBusy(true);
+    setAccountChangeError('');
+    try {
+      const email = await user.createEmailAddress({ email: newAccountEmail.trim() });
+      await email.prepareVerification({ strategy: 'email_code' });
+      setPendingEmailId(email.id);
+      setEmailChangeStep('code');
+    } catch (error) {
+      setAccountChangeError(readableAccountError(error, 'That email cannot be used.'));
+    } finally {
+      setAccountChangeBusy(false);
+    }
+  }
+
+  async function confirmEmailChange() {
+    if (!user || !pendingEmailId || accountChangeBusy) return;
+    setAccountChangeBusy(true);
+    setAccountChangeError('');
+    try {
+      const pendingEmail = user.emailAddresses.find((email) => email.id === pendingEmailId);
+      if (!pendingEmail) throw new Error('pending_email_missing');
+      const verified = await pendingEmail.attemptVerification({ code: emailVerificationCode.trim() });
+      if (verified.verification.status !== 'verified') throw new Error('email_not_verified');
+      const previousEmails = user.emailAddresses.filter((email) => email.id !== verified.id);
+      await user.update({ primaryEmailAddressId: verified.id });
+      await Promise.all(previousEmails.map((email) => email.destroy()));
+      await user.reload();
+      setEmailChangeStep('idle');
+      setNewAccountEmail('');
+      setEmailVerificationCode('');
+      setPendingEmailId('');
+    } catch (error) {
+      setAccountChangeError(readableAccountError(error, 'The verification code is invalid or expired.'));
+    } finally {
+      setAccountChangeBusy(false);
+    }
+  }
+
+  async function cancelEmailChange() {
+    if (!user || accountChangeBusy) return;
+    setAccountChangeBusy(true);
+    setAccountChangeError('');
+    try {
+      if (pendingEmailId) {
+        await user.reload();
+        const pendingEmail = user.emailAddresses.find((email) => email.id === pendingEmailId);
+        if (pendingEmail && pendingEmail.id !== user.primaryEmailAddressId) await pendingEmail.destroy();
+      }
+      setEmailChangeStep('idle');
+      setNewAccountEmail('');
+      setEmailVerificationCode('');
+      setPendingEmailId('');
+    } catch (error) {
+      setAccountChangeError(readableAccountError(error, 'Could not cancel the email change. Please try again.'));
+    } finally {
+      setAccountChangeBusy(false);
+    }
+  }
+
   async function copyUserBridgeToken() {
     if (!bridgeTokenReveal) return;
     await navigator.clipboard.writeText(bridgeTokenReveal);
@@ -2867,15 +2997,13 @@ export default function Home() {
               <SignInButton mode="modal">
                 <button type="button" className="hidden h-9 items-center rounded-lg border border-cyan-300/25 bg-cyan-300/[.06] px-3 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/10 sm:inline-flex">Log in</button>
               </SignInButton>
-              <SignUpButton mode="modal">
-                <button type="button" className="inline-flex h-9 items-center rounded-lg bg-cyan-300 px-3 text-xs font-semibold text-[#03121f] transition hover:bg-cyan-200">Register</button>
-              </SignUpButton>
+              <button type="button" onClick={() => setSignUpOpen(true)} className="inline-flex h-9 items-center rounded-lg bg-cyan-300 px-3 text-xs font-semibold text-[#03121f] transition hover:bg-cyan-200">Register</button>
             </Show>
             <Show when="signed-in">
               <button type="button" onClick={() => setManageAccountOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[.045] px-2.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/[.08] sm:px-3">
                 <Settings2 className="size-3.5" /><span className="hidden sm:inline">Manage account</span><span className="sr-only sm:hidden">Manage account</span>
               </button>
-              <UserButton />
+              <UserButton userProfileMode="navigation" userProfileUrl="#trade-journal" />
             </Show>
           </div>
         </div>
@@ -2888,6 +3016,18 @@ export default function Home() {
             <DialogDescription className="text-[11px]">Private MT5 pairing, bridge credentials, and journal reset.</DialogDescription>
           </DialogHeader>
           <div className="px-5 pb-5">
+            <div className="mb-4 rounded-xl border border-sky-200/12 bg-white/[.025] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[.1em] text-cyan-200">Asheparte identity</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><p className="text-[9px] text-muted-foreground">Username · permanent</p><p className="mt-1 font-mono text-[11px] text-sky-100">{user?.username ?? '—'}</p></div>
+                <div className="rounded-lg border border-white/8 bg-black/15 p-2.5"><p className="text-[9px] text-muted-foreground">Verified email</p><p className="mt-1 truncate font-mono text-[11px] text-sky-100">{user?.primaryEmailAddress?.emailAddress ?? '—'}</p></div>
+              </div>
+              {emailChangeStep === 'idle' && <Button variant="outline" size="sm" className="mt-3 h-8 border-cyan-300/20 bg-cyan-300/[.04] text-[10px] text-cyan-100" onClick={() => { setEmailChangeStep('email'); setAccountChangeError(''); }}>Change email</Button>}
+              {emailChangeStep === 'email' && <div className="mt-3"><label htmlFor="new-account-email" className="text-[10px] font-medium text-sky-100">New email address</label><Input id="new-account-email" type="email" autoComplete="email" value={newAccountEmail} onChange={(event) => setNewAccountEmail(event.target.value)} className="mt-1.5 border-cyan-300/15 bg-black/15 text-[11px]" /><div className="mt-2 flex gap-2"><Button size="sm" className="h-8 bg-cyan-300 text-[10px] text-[#03121f]" disabled={accountChangeBusy || !newAccountEmail.trim()} onClick={requestEmailChange}>Send verification code</Button><Button variant="outline" size="sm" className="h-8 border-white/10 text-[10px]" disabled={accountChangeBusy} onClick={cancelEmailChange}>Cancel</Button></div></div>}
+              {emailChangeStep === 'code' && <div className="mt-3"><label htmlFor="email-change-code" className="text-[10px] font-medium text-sky-100">Code sent to {newAccountEmail}</label><Input id="email-change-code" inputMode="numeric" autoComplete="one-time-code" value={emailVerificationCode} onChange={(event) => setEmailVerificationCode(event.target.value)} className="mt-1.5 border-cyan-300/15 bg-black/15 font-mono text-[11px]" /><div className="mt-2 flex gap-2"><Button size="sm" className="h-8 bg-emerald-300 text-[10px] text-[#03121f]" disabled={accountChangeBusy || !emailVerificationCode.trim()} onClick={confirmEmailChange}>Verify &amp; replace</Button><Button variant="outline" size="sm" className="h-8 border-white/10 text-[10px]" disabled={accountChangeBusy} onClick={cancelEmailChange}>Cancel</Button></div></div>}
+              {accountChangeError && <p className="mt-2 text-[9px] text-red-300">{accountChangeError}</p>}
+              <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Usernames cannot be changed. A replacement email becomes active only after its verification code succeeds; the previous email is then removed.</p>
+            </div>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><KeyRound className="size-3.5 text-cyan-300" /> Journal bridge key</p>
@@ -2947,6 +3087,33 @@ export default function Home() {
               <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Deletes journal history, unpairs MT5, revokes the old key, and creates a fresh key. This cannot be undone.</p>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={signUpOpen} onOpenChange={(open) => { setSignUpOpen(open); if (!open) { setSignUpError(''); setSignUpStep('details'); } }}>
+        <DialogContent className="border border-cyan-300/20 bg-[#061525]/98 shadow-[0_30px_100px_rgba(0,0,0,.7)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sky-50">Create Asheparte account</DialogTitle>
+            <DialogDescription className="text-[11px]">One permanent username and one verified email per account.</DialogDescription>
+          </DialogHeader>
+          {signUpStep === 'details' ? (
+            <div className="grid gap-3">
+              <div><label htmlFor="signup-username" className="text-[10px] font-medium text-sky-100">Username</label><Input id="signup-username" autoComplete="username" maxLength={24} value={signUpUsername} onChange={(event) => setSignUpUsername(event.target.value)} className="mt-1.5 border-cyan-300/15 bg-black/15" /><p className="mt-1 text-[9px] text-muted-foreground">Permanent after registration. Explicit or abusive names are rejected.</p></div>
+              <div><label htmlFor="signup-email" className="text-[10px] font-medium text-sky-100">Email</label><Input id="signup-email" type="email" autoComplete="email" value={signUpEmail} onChange={(event) => setSignUpEmail(event.target.value)} className="mt-1.5 border-cyan-300/15 bg-black/15" /></div>
+              <div><label htmlFor="signup-password" className="text-[10px] font-medium text-sky-100">Password</label><Input id="signup-password" type="password" autoComplete="new-password" value={signUpPassword} onChange={(event) => setSignUpPassword(event.target.value)} className="mt-1.5 border-cyan-300/15 bg-black/15" /><div className="mt-2 grid grid-cols-5 gap-1" aria-label={`Password strength ${signUpPasswordStrength} of 5`}>{Array.from({ length: 5 }, (_, index) => <span key={index} className={`h-1 rounded-full ${index < signUpPasswordStrength ? signUpPasswordStrength >= 5 ? 'bg-emerald-300' : 'bg-amber-300' : 'bg-white/10'}`} />)}</div></div>
+              <div id="clerk-captcha" className="min-h-1" />
+              {signUpError && <p className="text-[10px] leading-4 text-red-300">{signUpError}</p>}
+              <Button className="bg-cyan-300 text-[#03121f] hover:bg-cyan-200" disabled={signUpBusy || !signUpUsername.trim() || !signUpEmail.trim() || signUpPasswordStrength < 5} onClick={createAsheparteAccount}>{signUpBusy ? 'Creating…' : 'Create & verify email'}</Button>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              <p className="text-[11px] leading-5 text-muted-foreground">Enter the verification code sent to <span className="text-sky-100">{signUpEmail}</span>.</p>
+              <Input inputMode="numeric" autoComplete="one-time-code" value={signUpCode} onChange={(event) => setSignUpCode(event.target.value)} placeholder="Verification code" className="border-cyan-300/15 bg-black/15 font-mono" />
+              {signUpError && <p className="text-[10px] leading-4 text-red-300">{signUpError}</p>}
+              <Button className="bg-emerald-300 text-[#03121f] hover:bg-emerald-200" disabled={signUpBusy || !signUpCode.trim()} onClick={verifyAsheparteAccount}>{signUpBusy ? 'Verifying…' : 'Verify email & sign in'}</Button>
+              <Button variant="ghost" size="sm" className="text-[10px] text-muted-foreground" onClick={() => { setSignUpStep('details'); setSignUpCode(''); setSignUpError(''); }}>Back</Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -3087,7 +3254,7 @@ export default function Home() {
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">Register with your email, username and password, then verify your email. Your account history and bridge key remain isolated from every other user.</p>
                 <div className="mt-6 flex justify-center gap-2">
                   <SignInButton mode="modal"><Button variant="outline" className="border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100">Log in</Button></SignInButton>
-                  <SignUpButton mode="modal"><Button className="bg-cyan-300 text-[#03121f] hover:bg-cyan-200">Create account</Button></SignUpButton>
+                  <Button className="bg-cyan-300 text-[#03121f] hover:bg-cyan-200" onClick={() => setSignUpOpen(true)}>Create account</Button>
                 </div>
                 <p className="mt-4 text-[10px] text-muted-foreground">Smart bot protection and email verification are enabled.</p>
               </CardContent>
