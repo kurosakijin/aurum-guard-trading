@@ -98,6 +98,9 @@ has now been observed and is no longer an untouched test.
 2. Confirm that Market Watch contains your broker's exact `XAUUSD` and `XAGUSD`
    symbols. Edit the two `.cmd` files if your broker uses suffixes.
 3. Run `install_ai.cmd` once.
+   It detects the Windows Python launcher, `python`, `python3`, or the bundled
+   Codex Python runtime. Windows' placeholder Store alias is rejected instead
+   of being mistaken for a working Python installation. Python 3.10+ is needed.
 4. Run `train_ai.cmd`. It uses the fixed 52.5% protected-outcome threshold chosen
    on older development windows, then reports a newest-period quarantine test. If the gate
    fails, the model is marked `FAILED RESEARCH GATE - SHADOW ONLY` and cannot
