@@ -79,6 +79,10 @@ const emptyJournal: JournalData = {
   daily: {},
 };
 
+// The advisor normally sends a snapshot every 60 seconds. Allow enough time for
+// network/server jitter without leaving a stopped terminal marked as online.
+const BRIDGE_HEARTBEAT_TIMEOUT_MS = 135_000;
+
 const journalMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
 const timeframes = [
   { label: '1m', value: '1' },
@@ -2595,6 +2599,10 @@ export default function Home() {
   const signUpPasswordStrength = [signUpPassword.length >= 8, /[A-Z]/.test(signUpPassword), /[a-z]/.test(signUpPassword), /\d/.test(signUpPassword), /[^A-Za-z0-9]/.test(signUpPassword)].filter(Boolean).length;
   const journalBelongsToSignedInUser = Boolean(isSignedIn && user?.id && journalOwnerId === user.id);
   const currentJournalEnabled = demoJournalEnabled && journalBelongsToSignedInUser;
+  const bridgeHeartbeatOnline = bridgeBindingStatus === 'linked' && journalBelongsToSignedInUser && journalFeedOnline;
+  const bridgeLastSeen = journalBelongsToSignedInUser && journalData.account.updatedAt
+    ? new Date(journalData.account.updatedAt).toLocaleTimeString()
+    : '';
   const signedInUserLabel = user?.username ? `@${user.username}` : user?.primaryEmailAddress?.emailAddress ?? 'Signed-in user';
   const signedInEmail = user?.primaryEmailAddress?.emailAddress ?? '';
 
@@ -2619,9 +2627,15 @@ export default function Home() {
         if (!response.ok) throw new Error('journal unavailable');
         const next = await response.json() as JournalData;
         if (active) {
+          const heartbeatAt = next.connected ? Date.parse(next.account.updatedAt) : Number.NaN;
+          const heartbeatAge = Date.now() - heartbeatAt;
+          const heartbeatFresh = Boolean(next.connected)
+            && Number.isFinite(heartbeatAt)
+            && heartbeatAge >= -30_000
+            && heartbeatAge <= BRIDGE_HEARTBEAT_TIMEOUT_MS;
           setJournalData(next.connected ? next : emptyJournal);
           setJournalOwnerId(user.id);
-          setJournalFeedOnline(Boolean(next.connected));
+          setJournalFeedOnline(heartbeatFresh);
           setDemoJournalEnabled(Boolean(next.connected));
         }
       } catch {
@@ -3077,14 +3091,21 @@ export default function Home() {
               </div>
             )}
             {bridgeBindingStatus === 'linked' && bridgeAccount && (
-              <div className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/[.05] p-3">
+              <div className={`mt-3 rounded-lg border p-3 ${bridgeHeartbeatOnline ? 'border-emerald-300/20 bg-emerald-300/[.05]' : 'border-red-300/20 bg-red-300/[.045]'}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="flex items-center gap-2 text-[10px] font-semibold text-emerald-200"><Check className="size-3.5" /> Account paired</p>
-                  {bridgeSyncCode && <Badge variant="outline" className="border-cyan-300/20 font-mono text-[9px] text-cyan-200">{bridgeSyncCode}</Badge>}
+                  <p className={`flex items-center gap-2 text-[10px] font-semibold ${bridgeHeartbeatOnline ? 'text-emerald-200' : 'text-red-200'}`}>
+                    <span className={`size-2 rounded-full ${bridgeHeartbeatOnline ? 'animate-pulse bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,.75)]' : 'bg-red-300'}`} />
+                    {bridgeHeartbeatOnline ? 'Bridge online' : 'Bridge offline'}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className={bridgeHeartbeatOnline ? 'border-emerald-300/20 text-[9px] text-emerald-200' : 'border-red-300/20 text-[9px] text-red-200'}>{bridgeHeartbeatOnline ? 'MT5 RUNNING' : 'NO HEARTBEAT'}</Badge>
+                    {bridgeSyncCode && <Badge variant="outline" className="border-cyan-300/20 font-mono text-[9px] text-cyan-200">{bridgeSyncCode}</Badge>}
+                  </div>
                 </div>
                 <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
                 <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
-                <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Only this exact provider, server, and MT5 login can write to the journal.</p>
+                <p className="mt-2 text-[9px] leading-4 text-muted-foreground">{bridgeHeartbeatOnline ? 'Recent snapshots are arriving from the paired terminal.' : 'No recent snapshot. MT5 may be closed, disconnected, or its WebRequest may be blocked.'}{bridgeLastSeen ? ` Last seen ${bridgeLastSeen}.` : ''}</p>
+                <p className="mt-1 text-[9px] leading-4 text-muted-foreground">Only this exact provider, server, and MT5 login can write to the journal.</p>
               </div>
             )}
             {bridgeTokenHasToken && bridgeBindingStatus === 'unpaired' && <p className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[.04] p-3 text-[9px] leading-4 text-muted-foreground">Waiting for MT5 detection. The account is checked every five seconds.</p>}
@@ -3183,8 +3204,8 @@ export default function Home() {
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Chart context, guarded setups and account-aware analytics in one blue-glass workspace.</p>
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-sky-200/15 bg-sky-300/[.055] px-3 py-2 text-[11px] text-sky-100">
-              <span className="size-2 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(253,224,71,.7)]" />
-              {isSignedIn ? (journalFeedOnline ? 'Private journal live' : 'Account ready · connect bridge') : 'Sign in for private journal'}
+              <span className={`size-2 rounded-full ${bridgeHeartbeatOnline ? 'animate-pulse bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,.7)]' : bridgeBindingStatus === 'linked' ? 'bg-red-300 shadow-[0_0_10px_rgba(252,165,165,.5)]' : 'bg-amber-300 shadow-[0_0_12px_rgba(253,224,71,.7)]'}`} />
+              {isSignedIn ? (bridgeHeartbeatOnline ? 'MT5 bridge online' : bridgeBindingStatus === 'linked' ? 'MT5 bridge offline' : 'Account ready · connect bridge') : 'Sign in for private journal'}
             </div>
           </div>
         </section>
@@ -3220,16 +3241,16 @@ export default function Home() {
               <CardHeader className="border-b border-sky-200/10 pb-3">
                 <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> Current account connection</CardTitle>
                 <CardDescription>{isSignedIn ? `Signed in as ${signedInUserLabel}` : 'Sign in to view your private journal'}</CardDescription>
-                <CardAction><Badge variant="outline" className={journalBelongsToSignedInUser && journalFeedOnline ? 'border-emerald-300/25 text-emerald-200' : 'border-amber-300/25 text-amber-200'}>{journalBelongsToSignedInUser && journalFeedOnline ? 'SYNCED' : isSignedIn ? 'NOT LINKED' : 'LOCKED'}</Badge></CardAction>
+                <CardAction><Badge variant="outline" className={bridgeHeartbeatOnline ? 'border-emerald-300/25 text-emerald-200' : bridgeBindingStatus === 'linked' ? 'border-red-300/25 text-red-200' : 'border-amber-300/25 text-amber-200'}>{bridgeHeartbeatOnline ? 'ONLINE' : bridgeBindingStatus === 'linked' ? 'OFFLINE' : isSignedIn ? 'NOT LINKED' : 'LOCKED'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="space-y-2 rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
                   <div className="flex items-start justify-between gap-3"><span className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Asheparte account</span><span className="min-w-0 text-right"><span className="block max-w-[175px] truncate font-mono text-[10px] text-cyan-200">{isSignedIn ? signedInUserLabel : 'Not signed in'}</span>{isSignedIn && signedInEmail && signedInEmail !== signedInUserLabel && <span className="mt-0.5 block max-w-[175px] truncate text-[9px] text-muted-foreground">{signedInEmail}</span>}</span></div>
-                  <div className="border-t border-white/8 pt-2"><p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Linked broker account</p><div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {journalBelongsToSignedInUser && journalFeedOnline ? `${journalData.account.provider} · ${journalData.account.brokerServer} · ${journalData.account.loginMasked}` : 'No account linked to this user'}</div></div>
-                  <p className="border-t border-white/8 pt-2 text-[10px] leading-4 text-muted-foreground">{journalBelongsToSignedInUser && journalFeedOnline ? `Verified for this signed-in user · last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()}` : isSignedIn ? 'Open Journal to connect this Asheparte account to MT5 or ACCM.' : 'Log in to access an isolated account journal.'}</p>
+                  <div className="border-t border-white/8 pt-2"><p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Linked broker account</p><div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {currentJournalEnabled ? `${journalData.account.provider} · ${journalData.account.brokerServer} · ${journalData.account.loginMasked}` : 'No account linked to this user'}</div></div>
+                  <p className="border-t border-white/8 pt-2 text-[10px] leading-4 text-muted-foreground">{currentJournalEnabled ? `${bridgeHeartbeatOnline ? 'Online' : 'Offline'} · verified for this user${bridgeLastSeen ? ` · last seen ${bridgeLastSeen}` : ''}` : isSignedIn ? 'Open Journal to connect this Asheparte account to MT5 or ACCM.' : 'Log in to access an isolated account journal.'}</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  {[['Balance', journalBelongsToSignedInUser && journalFeedOnline ? `$${journalData.account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Equity', journalBelongsToSignedInUser && journalFeedOnline ? `$${journalData.account.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Free margin', journalBelongsToSignedInUser && journalFeedOnline ? `$${journalData.account.freeMargin.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Open P/L', journalBelongsToSignedInUser && journalFeedOnline ? `${journalData.account.floatingProfit < 0 ? '−' : ''}$${Math.abs(journalData.account.floatingProfit).toFixed(2)}` : '—']].map(([label, value]) => (
+                  {[['Balance', currentJournalEnabled ? `$${journalData.account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Equity', currentJournalEnabled ? `$${journalData.account.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Free margin', currentJournalEnabled ? `$${journalData.account.freeMargin.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'], ['Open P/L', currentJournalEnabled ? `${journalData.account.floatingProfit < 0 ? '−' : ''}$${Math.abs(journalData.account.floatingProfit).toFixed(2)}` : '—']].map(([label, value]) => (
                     <div key={label} className="rounded-lg border border-sky-200/10 bg-white/[.025] p-2.5">
                       <p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">{label}</p>
                       <p className="mt-1 font-mono text-sm text-sky-100">{value}</p>
@@ -3292,10 +3313,10 @@ export default function Home() {
               </div>
               <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Trading journal</h1>
               <p className="mt-1 text-sm text-muted-foreground">Your private ACCM / MT5 performance and trade history.</p>
-              <p className="mt-1.5 font-mono text-[10px] text-cyan-200">{signedInUserLabel} → {journalBelongsToSignedInUser && journalFeedOnline ? `${journalData.account.provider} / ${journalData.account.brokerServer} / ${journalData.account.loginMasked}` : 'no broker account linked'}</p>
+              <p className="mt-1.5 font-mono text-[10px] text-cyan-200">{signedInUserLabel} → {currentJournalEnabled ? `${journalData.account.provider} / ${journalData.account.brokerServer} / ${journalData.account.loginMasked}` : 'no broker account linked'}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={journalBelongsToSignedInUser && journalFeedOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{journalBelongsToSignedInUser && journalFeedOnline ? 'CURRENT USER · LIVE' : bridgeBindingStatus === 'pending' ? 'APPROVAL REQUIRED' : 'AWAITING BRIDGE'}</Badge>
+              <Badge variant="outline" className={bridgeHeartbeatOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : bridgeBindingStatus === 'linked' ? 'w-fit border-red-300/25 bg-red-300/[.06] px-3 py-1.5 text-red-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{bridgeHeartbeatOnline ? 'BRIDGE ONLINE' : bridgeBindingStatus === 'linked' ? 'BRIDGE OFFLINE' : bridgeBindingStatus === 'pending' ? 'APPROVAL REQUIRED' : 'AWAITING BRIDGE'}</Badge>
             </div>
           </div>
 
@@ -3452,7 +3473,7 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[.02] px-4 py-2.5 text-[10px] text-muted-foreground">
-            <span>{currentJournalEnabled && journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()} · refreshes every 5s` : 'Awaiting your journal bridge · checking every 5s'}</span>
+            <span>{currentJournalEnabled ? `${bridgeHeartbeatOnline ? 'Bridge online' : 'Bridge offline'}${bridgeLastSeen ? ` · last seen ${bridgeLastSeen}` : ''} · checks every 5s` : 'Awaiting your journal bridge · checking every 5s'}</span>
             <span className="text-sky-100">Deposits excluded from P/L</span>
           </div>
           </>}
