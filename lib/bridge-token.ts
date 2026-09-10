@@ -11,7 +11,7 @@ export function hashBridgeToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-async function ensureBridgeTokens() {
+async function initializeBridgeTokens() {
   const sql = database();
   await sql`CREATE TABLE IF NOT EXISTS journal_bridge_tokens (
     user_id TEXT PRIMARY KEY,
@@ -36,6 +36,18 @@ async function ensureBridgeTokens() {
   return sql;
 }
 
+let bridgeSchemaPromise: ReturnType<typeof initializeBridgeTokens> | null = null;
+
+function ensureBridgeTokens() {
+  if (!bridgeSchemaPromise) {
+    bridgeSchemaPromise = initializeBridgeTokens().catch((error) => {
+      bridgeSchemaPromise = null;
+      throw error;
+    });
+  }
+  return bridgeSchemaPromise;
+}
+
 export type BridgeAccountIdentity = { provider: string; server: string; login: string };
 
 function cleanIdentity(identity: BridgeAccountIdentity) {
@@ -51,7 +63,7 @@ function maskedLogin(login: string) {
 }
 
 export async function bridgeTokenStatus(userId: string) {
-  const sql = await ensureBridgeTokens();
+  const sql = database();
   const rows = await sql`SELECT token_last_four, created_at, rotated_at,
       bound_provider,bound_server,bound_login,pending_provider,pending_server,pending_login,pending_at,sync_code
     FROM journal_bridge_tokens WHERE user_id=${userId} LIMIT 1`;

@@ -28,34 +28,7 @@ function database() {
   return neon(url);
 }
 
-function finiteNumber(value: unknown) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function text(value: unknown, maximum: number) {
-  return String(value ?? '').slice(0, maximum);
-}
-
-function accountKey(provider: string, server: string, login: string) {
-  return createHash('sha256').update(`${provider}|${server}|${login}`).digest('hex').slice(0, 32);
-}
-
-function maskLogin(login: string) {
-  return login.length <= 3 ? '•••' : `${login.slice(0, 3)}•••`;
-}
-
-export async function ingestJournal(payload: BridgePayload, ownerUserId: string) {
-  const account = payload.account;
-  const provider = text(payload.provider || 'MT5', 24) || 'MT5';
-  if (!account || typeof account !== 'object') throw new Error('account_required');
-  const login = text(account.login, 64);
-  const server = text(account.server, 160);
-  const tradeMode = Math.trunc(finiteNumber(account.tradeMode));
-  if (!login || !server) throw new Error('account_identity_required');
-  if (tradeMode !== 0 || !server.toLowerCase().includes('demo')) throw new Error('demo_accounts_only');
-  if (!Array.isArray(payload.deals) || payload.deals.length > 1000) throw new Error('invalid_deals');
-
+async function initializeJournalSchema() {
   const sql = database();
   await sql`CREATE TABLE IF NOT EXISTS journal_accounts (
     account_key TEXT PRIMARY KEY,
@@ -90,9 +63,52 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
     profit DOUBLE PRECISION NOT NULL,
     PRIMARY KEY(account_key, ticket)
   )`;
-
   await sql`ALTER TABLE journal_accounts ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
   await sql`ALTER TABLE journal_deals ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
+  return sql;
+}
+
+let journalSchemaPromise: ReturnType<typeof initializeJournalSchema> | null = null;
+
+function ensureJournalSchema() {
+  if (!journalSchemaPromise) {
+    journalSchemaPromise = initializeJournalSchema().catch((error) => {
+      journalSchemaPromise = null;
+      throw error;
+    });
+  }
+  return journalSchemaPromise;
+}
+
+function finiteNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function text(value: unknown, maximum: number) {
+  return String(value ?? '').slice(0, maximum);
+}
+
+function accountKey(provider: string, server: string, login: string) {
+  return createHash('sha256').update(`${provider}|${server}|${login}`).digest('hex').slice(0, 32);
+}
+
+function maskLogin(login: string) {
+  return login.length <= 3 ? '•••' : `${login.slice(0, 3)}•••`;
+}
+
+export async function ingestJournal(payload: BridgePayload, ownerUserId: string) {
+  const account = payload.account;
+  const provider = text(payload.provider || 'MT5', 24) || 'MT5';
+  if (!account || typeof account !== 'object') throw new Error('account_required');
+  const login = text(account.login, 64);
+  const server = text(account.server, 160);
+  const tradeMode = Math.trunc(finiteNumber(account.tradeMode));
+  if (!login || !server) throw new Error('account_identity_required');
+  if (tradeMode !== 0 || !server.toLowerCase().includes('demo')) throw new Error('demo_accounts_only');
+  if (!Array.isArray(payload.deals) || payload.deals.length > 1000) throw new Error('invalid_deals');
+
+  const sql = await ensureJournalSchema();
 
   const key = accountKey(ownerUserId, `${provider}|${server}`, login);
   await sql`INSERT INTO journal_accounts
@@ -125,8 +141,6 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
 
 export async function readJournal(ownerUserId: string) {
   const sql = database();
-  await sql`ALTER TABLE journal_accounts ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
-  await sql`ALTER TABLE journal_deals ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
   const accounts = await sql`SELECT * FROM journal_accounts WHERE owner_user_id=${ownerUserId} ORDER BY updated_at DESC LIMIT 1`;
   if (!accounts.length) return { connected: false };
   const account = accounts[0];

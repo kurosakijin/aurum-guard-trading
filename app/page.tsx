@@ -93,6 +93,16 @@ const timeframes = [
 type LiveMarketKey = (typeof liveMarkets)[number]['key'];
 type WorkspacePanel = 'desk' | 'charts' | 'pine' | 'mt5' | 'journal' | 'guides' | 'risk';
 
+function workspacePanelFromHash(hash: string): WorkspacePanel {
+  if (hash === '#live-chart') return 'charts';
+  if (hash === '#pine-script') return 'pine';
+  if (hash === '#mt5-bot') return 'mt5';
+  if (hash === '#journal' || hash === '#trade-journal') return 'journal';
+  if (hash === '#chart-guide' || hash === '#pattern-playbook' || hash === '#fibonacci-guide' || hash === '#reversal-playbook') return 'guides';
+  if (hash === '#risk-plan' || hash === '#news' || hash === '#news-radar') return 'risk';
+  return 'desk';
+}
+
 type GuideCandle = readonly [x: number, openY: number, closeY: number, lowY: number, highY: number];
 
 function GuideCandles({ candles }: { candles: readonly GuideCandle[] }) {
@@ -2533,7 +2543,8 @@ export default function Home() {
   const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
   const workspaceScrollRef = useRef<HTMLDivElement>(null);
   const journalScrollPosition = useRef(0);
-  const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>('desk');
+  const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>(() =>
+    typeof window === 'undefined' ? 'desk' : workspacePanelFromHash(window.location.hash));
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
   const [widgetRefresh, setWidgetRefresh] = useState(0);
@@ -2871,15 +2882,8 @@ export default function Home() {
 
   useEffect(() => {
     const syncPanelFromHash = () => {
-      const hash = window.location.hash;
-      if (hash === '#live-chart') setWorkspacePanel('charts');
-      else if (hash === '#pine-script') setWorkspacePanel('pine');
-      else if (hash === '#mt5-bot') setWorkspacePanel('mt5');
-      else if (hash === '#journal' || hash === '#trade-journal') setWorkspacePanel('journal');
-      else if (hash === '#chart-guide' || hash === '#pattern-playbook' || hash === '#fibonacci-guide' || hash === '#reversal-playbook') setWorkspacePanel('guides');
-      else if (hash === '#risk-plan' || hash === '#news' || hash === '#news-radar') setWorkspacePanel('risk');
+      setWorkspacePanel(workspacePanelFromHash(window.location.hash));
     };
-    syncPanelFromHash();
     window.addEventListener('hashchange', syncPanelFromHash);
     return () => window.removeEventListener('hashchange', syncPanelFromHash);
   }, []);
@@ -3183,12 +3187,12 @@ export default function Home() {
             </CardHeader>
             <CardContent className="p-2 sm:p-3">
               <div className="overflow-hidden rounded-xl border border-sky-200/12 bg-[#071525]/85">
-                <TradingViewChart
-                  key={`desk-${widgetRefresh}`}
-                  symbol="OANDA:XAUUSD"
-                  interval="60"
-                  label="Gold"
-                />
+                {workspacePanel === 'desk' && <TradingViewChart
+                    key={`desk-${widgetRefresh}`}
+                    symbol="OANDA:XAUUSD"
+                    interval="60"
+                    label="Gold"
+                  />}
               </div>
             </CardContent>
           </Card>
@@ -3242,7 +3246,7 @@ export default function Home() {
         </section>
 
         <div className={workspacePanel === 'risk' ? 'block' : 'hidden'}>
-          <NewsSpikeRadar />
+          {workspacePanel === 'risk' && <NewsSpikeRadar />}
         </div>
 
         <section id="trade-journal" className={workspacePanel === 'journal' ? 'space-y-4' : 'hidden'} aria-labelledby="trade-journal-heading">
@@ -4026,7 +4030,7 @@ export default function Home() {
             </CardHeader>
             <CardContent className="p-3 sm:p-4">
               <div className="grid gap-4 lg:grid-cols-2">
-                {liveMarkets.map((market) => (
+                {workspacePanel === 'charts' && liveMarkets.map((market) => (
                   <div key={market.key} className={`min-w-0 overflow-hidden rounded-xl border bg-black/15 ${liveMarket === market.key ? 'border-primary/35' : 'border-white/10'}`}>
                     <div className="flex min-h-14 items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -4081,7 +4085,7 @@ export default function Home() {
                 <CardAction><Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">LIVE</Badge></CardAction>
               </CardHeader>
               <CardContent className="px-2 py-3">
-                <TradingViewSymbolInfo key={`${activeLiveMarket.symbol}-${widgetRefresh}`} symbol={activeLiveMarket.symbol} />
+                {workspacePanel === 'pine' && <TradingViewSymbolInfo key={`${activeLiveMarket.symbol}-${widgetRefresh}`} symbol={activeLiveMarket.symbol} />}
                 <div className="flex items-center justify-between border-t border-white/7 px-3 pt-3 text-[10px] text-muted-foreground">
                   <span>Last refreshed {lastScan}</span>
                   <span>Provider latency may apply</span>
@@ -4096,11 +4100,11 @@ export default function Home() {
                 <CardAction><Badge variant="outline" className="border-primary/25 text-primary">{timeframes.find((item) => item.value === timeframe)?.label}</Badge></CardAction>
               </CardHeader>
               <CardContent className="px-2 py-3">
-                <TradingViewTechnicalAnalysis
+                {workspacePanel === 'pine' && <TradingViewTechnicalAnalysis
                   key={`${activeLiveMarket.symbol}-${timeframe}-${widgetRefresh}`}
                   symbol={activeLiveMarket.symbol}
                   interval={timeframe}
-                />
+                />}
                 <p className="border-t border-white/7 px-3 pt-3 text-[10px] leading-4 text-muted-foreground">This rating summarizes current indicators. Treat it as context, not an instruction or probability of profit.</p>
               </CardContent>
             </Card>
