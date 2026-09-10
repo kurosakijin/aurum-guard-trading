@@ -44,6 +44,7 @@ next-env.d.ts
 public/downloads/aurum-guard-ai/aurum_guard_learning_dataset.csv
 public/downloads/aurum-guard-ai/deterministic_*.json
 public/downloads/aurum-guard-ai/replay_*.json
+public/downloads/aurum-guard-ai/.venv-research/
 tools/local-journal/.bridge-token
 tools/local-journal/journal.local.db
 tools/local-journal/*.log

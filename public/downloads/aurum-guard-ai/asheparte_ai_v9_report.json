@@ -1,0 +1,710 @@
+{
+  "model_type": "Asheparte v9 calibrated chronological model search",
+  "model_id": "asheparte-v9-shadow-20260910-165811",
+  "trained_at_utc": "2026-09-10T16:58:11+00:00",
+  "analysis_only": true,
+  "synchronized_bars": 74996,
+  "defended_candidates": 3824,
+  "feature_count": 52,
+  "selected_spec": {
+    "family": "logistic",
+    "C": 0.4
+  },
+  "deployment_threshold": 0.375,
+  "minimum_selection_trades": 45,
+  "development_period_utc": [
+    "2026-07-23T07:27:00+00:00",
+    "2026-08-31T05:16:00+00:00"
+  ],
+  "development_result": {
+    "spec": {
+      "family": "logistic",
+      "C": 0.4
+    },
+    "threshold": 0.375,
+    "aggregate": {
+      "probability_approvals": 1654,
+      "trades": 1186,
+      "wins": 508,
+      "win_rate": 0.42833052276559863,
+      "net_r": 28.901897735360993,
+      "mean_r": 0.024369222373828832,
+      "lower_confidence_r": -0.021369242130128543,
+      "profit_factor": 1.0706993584524487,
+      "max_drawdown_r": 30.815613005685393,
+      "threshold": 0.375,
+      "win_rate_lower_90": 0.40488339901928333
+    },
+    "folds": [
+      {
+        "probability_approvals": 490,
+        "trades": 345,
+        "wins": 159,
+        "win_rate": 0.4608695652173913,
+        "net_r": 12.07864350408277,
+        "mean_r": 0.03501056088139933,
+        "lower_confidence_r": -0.05039922085162774,
+        "profit_factor": 1.100992002542499,
+        "max_drawdown_r": 20.65632535917484,
+        "fold": 1,
+        "period_utc": [
+          "2026-07-23T07:27:00+00:00",
+          "2026-08-04T11:58:00+00:00"
+        ]
+      },
+      {
+        "probability_approvals": 596,
+        "trades": 436,
+        "wins": 184,
+        "win_rate": 0.42201834862385323,
+        "net_r": 12.395011038256555,
+        "mean_r": 0.028428924399671,
+        "lower_confidence_r": -0.04959003691079086,
+        "profit_factor": 1.0793534637532427,
+        "max_drawdown_r": 20.218903955116893,
+        "fold": 2,
+        "period_utc": [
+          "2026-08-04T12:20:00+00:00",
+          "2026-08-18T03:30:00+00:00"
+        ]
+      },
+      {
+        "probability_approvals": 568,
+        "trades": 405,
+        "wins": 165,
+        "win_rate": 0.4074074074074074,
+        "net_r": 4.428243193021665,
+        "mean_r": 0.010933933809930036,
+        "lower_confidence_r": -0.06403506212405465,
+        "profit_factor": 1.0332950616016667,
+        "max_drawdown_r": 14.09197105587372,
+        "fold": 3,
+        "period_utc": [
+          "2026-08-18T03:32:00+00:00",
+          "2026-08-31T05:16:00+00:00"
+        ]
+      }
+    ],
+    "positive_folds": 3,
+    "robust": false
+  },
+  "newest_confirmation": {
+    "probability_approvals": 463,
+    "trades": 345,
+    "wins": 144,
+    "win_rate": 0.41739130434782606,
+    "net_r": 10.471931881216385,
+    "mean_r": 0.030353425742656186,
+    "lower_confidence_r": -0.05426588454213507,
+    "profit_factor": 1.0886700413312127,
+    "max_drawdown_r": 10.820292168722304,
+    "period_utc": [
+      "2026-08-31T06:26:00+00:00",
+      "2026-09-10T15:06:00+00:00"
+    ],
+    "calibration": {
+      "brier_score": 0.24386867141438606,
+      "log_loss": 0.680905274144803,
+      "expected_calibration_error": 0.023614065335689632,
+      "mean_predicted_probability": 0.3962465618420107,
+      "observed_positive_rate": 0.41986062717770034
+    }
+  },
+  "candidate_count": 20,
+  "candidate_leaderboard": [
+    {
+      "spec": {
+        "family": "extra_trees",
+        "max_depth": 8,
+        "min_samples_leaf": 20,
+        "max_features": 0.45
+      },
+      "threshold": 0.4750000000000001,
+      "aggregate": {
+        "probability_approvals": 472,
+        "trades": 357,
+        "wins": 161,
+        "win_rate": 0.45098039215686275,
+        "net_r": 20.88060992411094,
+        "mean_r": 0.05848910342888218,
+        "lower_confidence_r": -0.02744175648168258,
+        "profit_factor": 1.1703149259715404,
+        "max_drawdown_r": 16.122634615887968,
+        "threshold": 0.4750000000000001,
+        "win_rate_lower_90": 0.40818923817143904
+      },
+      "folds": [
+        {
+          "probability_approvals": 0,
+          "trades": 0,
+          "wins": 0,
+          "win_rate": 0.0,
+          "net_r": 0.0,
+          "mean_r": -999.0,
+          "lower_confidence_r": -999.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 0.0,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 472,
+          "trades": 357,
+          "wins": 161,
+          "win_rate": 0.45098039215686275,
+          "net_r": 20.88060992411094,
+          "mean_r": 0.05848910342888218,
+          "lower_confidence_r": -0.02744175648168258,
+          "profit_factor": 1.1703149259715404,
+          "max_drawdown_r": 16.122634615887968,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 0,
+          "trades": 0,
+          "wins": 0,
+          "win_rate": 0.0,
+          "net_r": 0.0,
+          "mean_r": -999.0,
+          "lower_confidence_r": -999.0,
+          "profit_factor": 0.0,
+          "max_drawdown_r": 0.0,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 1,
+      "robust": false
+    },
+    {
+      "spec": {
+        "family": "logistic",
+        "C": 0.4
+      },
+      "threshold": 0.375,
+      "aggregate": {
+        "probability_approvals": 1654,
+        "trades": 1186,
+        "wins": 508,
+        "win_rate": 0.42833052276559863,
+        "net_r": 28.901897735360993,
+        "mean_r": 0.024369222373828832,
+        "lower_confidence_r": -0.021369242130128543,
+        "profit_factor": 1.0706993584524487,
+        "max_drawdown_r": 30.815613005685393,
+        "threshold": 0.375,
+        "win_rate_lower_90": 0.40488339901928333
+      },
+      "folds": [
+        {
+          "probability_approvals": 490,
+          "trades": 345,
+          "wins": 159,
+          "win_rate": 0.4608695652173913,
+          "net_r": 12.07864350408277,
+          "mean_r": 0.03501056088139933,
+          "lower_confidence_r": -0.05039922085162774,
+          "profit_factor": 1.100992002542499,
+          "max_drawdown_r": 20.65632535917484,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 436,
+          "wins": 184,
+          "win_rate": 0.42201834862385323,
+          "net_r": 12.395011038256555,
+          "mean_r": 0.028428924399671,
+          "lower_confidence_r": -0.04959003691079086,
+          "profit_factor": 1.0793534637532427,
+          "max_drawdown_r": 20.218903955116893,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 568,
+          "trades": 405,
+          "wins": 165,
+          "win_rate": 0.4074074074074074,
+          "net_r": 4.428243193021665,
+          "mean_r": 0.010933933809930036,
+          "lower_confidence_r": -0.06403506212405465,
+          "profit_factor": 1.0332950616016667,
+          "max_drawdown_r": 14.09197105587372,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 3,
+      "robust": false
+    },
+    {
+      "spec": {
+        "family": "random_forest",
+        "max_depth": 8,
+        "min_samples_leaf": 24,
+        "max_features": 0.55
+      },
+      "threshold": 0.375,
+      "aggregate": {
+        "probability_approvals": 1785,
+        "trades": 1272,
+        "wins": 542,
+        "win_rate": 0.4261006289308176,
+        "net_r": 20.911868584828305,
+        "mean_r": 0.016440148258512817,
+        "lower_confidence_r": -0.027634440458010237,
+        "profit_factor": 1.0473119198751772,
+        "max_drawdown_r": 38.241050089081845,
+        "threshold": 0.375,
+        "win_rate_lower_90": 0.4034727113691625
+      },
+      "folds": [
+        {
+          "probability_approvals": 595,
+          "trades": 415,
+          "wins": 188,
+          "win_rate": 0.4530120481927711,
+          "net_r": 9.332067699445794,
+          "mean_r": 0.02248691011914649,
+          "lower_confidence_r": -0.054684489949704145,
+          "profit_factor": 1.0649413201074869,
+          "max_drawdown_r": 21.450907985968296,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 436,
+          "wins": 184,
+          "win_rate": 0.42201834862385323,
+          "net_r": 12.395011038256555,
+          "mean_r": 0.028428924399671,
+          "lower_confidence_r": -0.04959003691079086,
+          "profit_factor": 1.0793534637532427,
+          "max_drawdown_r": 20.218903955116893,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 594,
+          "trades": 421,
+          "wins": 170,
+          "win_rate": 0.40380047505938244,
+          "net_r": -0.815210152874041,
+          "mean_r": -0.001936366158845703,
+          "lower_confidence_r": -0.07570901308079891,
+          "profit_factor": 0.9942631234843488,
+          "max_drawdown_r": 19.791971055873578,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 2,
+      "robust": false
+    },
+    {
+      "spec": {
+        "family": "extra_trees",
+        "max_depth": 4,
+        "min_samples_leaf": 36,
+        "max_features": 0.65
+      },
+      "threshold": 0.35,
+      "aggregate": {
+        "probability_approvals": 1787,
+        "trades": 1273,
+        "wins": 542,
+        "win_rate": 0.4257659073055774,
+        "net_r": 19.811868584828304,
+        "mean_r": 0.015563133216675807,
+        "lower_confidence_r": -0.028500443229263275,
+        "profit_factor": 1.0447119579887798,
+        "max_drawdown_r": 38.241050089081845,
+        "threshold": 0.35,
+        "win_rate_lower_90": 0.40314981338631406
+      },
+      "folds": [
+        {
+          "probability_approvals": 595,
+          "trades": 415,
+          "wins": 188,
+          "win_rate": 0.4530120481927711,
+          "net_r": 9.332067699445794,
+          "mean_r": 0.02248691011914649,
+          "lower_confidence_r": -0.054684489949704145,
+          "profit_factor": 1.0649413201074869,
+          "max_drawdown_r": 21.450907985968296,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 436,
+          "wins": 184,
+          "win_rate": 0.42201834862385323,
+          "net_r": 12.395011038256555,
+          "mean_r": 0.028428924399671,
+          "lower_confidence_r": -0.04959003691079086,
+          "profit_factor": 1.0793534637532427,
+          "max_drawdown_r": 20.218903955116893,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 422,
+          "wins": 170,
+          "win_rate": 0.4028436018957346,
+          "net_r": -1.9152101528740415,
+          "mean_r": -0.004538412684535644,
+          "lower_confidence_r": -0.07826040119773217,
+          "profit_factor": 0.9866256274240639,
+          "max_drawdown_r": 19.791971055873578,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 2,
+      "robust": false
+    },
+    {
+      "spec": {
+        "family": "extra_trees",
+        "max_depth": 6,
+        "min_samples_leaf": 20,
+        "max_features": 0.45
+      },
+      "threshold": 0.35,
+      "aggregate": {
+        "probability_approvals": 1787,
+        "trades": 1273,
+        "wins": 542,
+        "win_rate": 0.4257659073055774,
+        "net_r": 19.811868584828304,
+        "mean_r": 0.015563133216675807,
+        "lower_confidence_r": -0.028500443229263275,
+        "profit_factor": 1.0447119579887798,
+        "max_drawdown_r": 38.241050089081845,
+        "threshold": 0.35,
+        "win_rate_lower_90": 0.40314981338631406
+      },
+      "folds": [
+        {
+          "probability_approvals": 595,
+          "trades": 415,
+          "wins": 188,
+          "win_rate": 0.4530120481927711,
+          "net_r": 9.332067699445794,
+          "mean_r": 0.02248691011914649,
+          "lower_confidence_r": -0.054684489949704145,
+          "profit_factor": 1.0649413201074869,
+          "max_drawdown_r": 21.450907985968296,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 436,
+          "wins": 184,
+          "win_rate": 0.42201834862385323,
+          "net_r": 12.395011038256555,
+          "mean_r": 0.028428924399671,
+          "lower_confidence_r": -0.04959003691079086,
+          "profit_factor": 1.0793534637532427,
+          "max_drawdown_r": 20.218903955116893,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 422,
+          "wins": 170,
+          "win_rate": 0.4028436018957346,
+          "net_r": -1.9152101528740415,
+          "mean_r": -0.004538412684535644,
+          "lower_confidence_r": -0.07826040119773217,
+          "profit_factor": 0.9866256274240639,
+          "max_drawdown_r": 19.791971055873578,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 2,
+      "robust": false
+    },
+    {
+      "spec": {
+        "family": "extra_trees",
+        "max_depth": 8,
+        "min_samples_leaf": 32,
+        "max_features": 0.65
+      },
+      "threshold": 0.35,
+      "aggregate": {
+        "probability_approvals": 1787,
+        "trades": 1273,
+        "wins": 542,
+        "win_rate": 0.4257659073055774,
+        "net_r": 19.811868584828304,
+        "mean_r": 0.015563133216675807,
+        "lower_confidence_r": -0.028500443229263275,
+        "profit_factor": 1.0447119579887798,
+        "max_drawdown_r": 38.241050089081845,
+        "threshold": 0.35,
+        "win_rate_lower_90": 0.40314981338631406
+      },
+      "folds": [
+        {
+          "probability_approvals": 595,
+          "trades": 415,
+          "wins": 188,
+          "win_rate": 0.4530120481927711,
+          "net_r": 9.332067699445794,
+          "mean_r": 0.02248691011914649,
+          "lower_confidence_r": -0.054684489949704145,
+          "profit_factor": 1.0649413201074869,
+          "max_drawdown_r": 21.450907985968296,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 436,
+          "wins": 184,
+          "win_rate": 0.42201834862385323,
+          "net_r": 12.395011038256555,
+          "mean_r": 0.028428924399671,
+          "lower_confidence_r": -0.04959003691079086,
+          "profit_factor": 1.0793534637532427,
+          "max_drawdown_r": 20.218903955116893,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 422,
+          "wins": 170,
+          "win_rate": 0.4028436018957346,
+          "net_r": -1.9152101528740415,
+          "mean_r": -0.004538412684535644,
+          "lower_confidence_r": -0.07826040119773217,
+          "profit_factor": 0.9866256274240639,
+          "max_drawdown_r": 19.791971055873578,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 2,
+      "robust": false
+    },
+    {
+      "spec": {
+        "family": "extra_trees",
+        "max_depth": 8,
+        "min_samples_leaf": 48,
+        "max_features": 0.8
+      },
+      "threshold": 0.35,
+      "aggregate": {
+        "probability_approvals": 1787,
+        "trades": 1273,
+        "wins": 542,
+        "win_rate": 0.4257659073055774,
+        "net_r": 19.811868584828304,
+        "mean_r": 0.015563133216675807,
+        "lower_confidence_r": -0.028500443229263275,
+        "profit_factor": 1.0447119579887798,
+        "max_drawdown_r": 38.241050089081845,
+        "threshold": 0.35,
+        "win_rate_lower_90": 0.40314981338631406
+      },
+      "folds": [
+        {
+          "probability_approvals": 595,
+          "trades": 415,
+          "wins": 188,
+          "win_rate": 0.4530120481927711,
+          "net_r": 9.332067699445794,
+          "mean_r": 0.02248691011914649,
+          "lower_confidence_r": -0.054684489949704145,
+          "profit_factor": 1.0649413201074869,
+          "max_drawdown_r": 21.450907985968296,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 436,
+          "wins": 184,
+          "win_rate": 0.42201834862385323,
+          "net_r": 12.395011038256555,
+          "mean_r": 0.028428924399671,
+          "lower_confidence_r": -0.04959003691079086,
+          "profit_factor": 1.0793534637532427,
+          "max_drawdown_r": 20.218903955116893,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 422,
+          "wins": 170,
+          "win_rate": 0.4028436018957346,
+          "net_r": -1.9152101528740415,
+          "mean_r": -0.004538412684535644,
+          "lower_confidence_r": -0.07826040119773217,
+          "profit_factor": 0.9866256274240639,
+          "max_drawdown_r": 19.791971055873578,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 2,
+      "robust": false
+    },
+    {
+      "spec": {
+        "family": "random_forest",
+        "max_depth": 4,
+        "min_samples_leaf": 18,
+        "max_features": 0.45
+      },
+      "threshold": 0.35,
+      "aggregate": {
+        "probability_approvals": 1787,
+        "trades": 1273,
+        "wins": 542,
+        "win_rate": 0.4257659073055774,
+        "net_r": 19.811868584828304,
+        "mean_r": 0.015563133216675807,
+        "lower_confidence_r": -0.028500443229263275,
+        "profit_factor": 1.0447119579887798,
+        "max_drawdown_r": 38.241050089081845,
+        "threshold": 0.35,
+        "win_rate_lower_90": 0.40314981338631406
+      },
+      "folds": [
+        {
+          "probability_approvals": 595,
+          "trades": 415,
+          "wins": 188,
+          "win_rate": 0.4530120481927711,
+          "net_r": 9.332067699445794,
+          "mean_r": 0.02248691011914649,
+          "lower_confidence_r": -0.054684489949704145,
+          "profit_factor": 1.0649413201074869,
+          "max_drawdown_r": 21.450907985968296,
+          "fold": 1,
+          "period_utc": [
+            "2026-07-23T07:27:00+00:00",
+            "2026-08-04T11:58:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 436,
+          "wins": 184,
+          "win_rate": 0.42201834862385323,
+          "net_r": 12.395011038256555,
+          "mean_r": 0.028428924399671,
+          "lower_confidence_r": -0.04959003691079086,
+          "profit_factor": 1.0793534637532427,
+          "max_drawdown_r": 20.218903955116893,
+          "fold": 2,
+          "period_utc": [
+            "2026-08-04T12:20:00+00:00",
+            "2026-08-18T03:30:00+00:00"
+          ]
+        },
+        {
+          "probability_approvals": 596,
+          "trades": 422,
+          "wins": 170,
+          "win_rate": 0.4028436018957346,
+          "net_r": -1.9152101528740415,
+          "mean_r": -0.004538412684535644,
+          "lower_confidence_r": -0.07826040119773217,
+          "profit_factor": 0.9866256274240639,
+          "max_drawdown_r": 19.791971055873578,
+          "fold": 3,
+          "period_utc": [
+            "2026-08-18T03:32:00+00:00",
+            "2026-08-31T05:16:00+00:00"
+          ]
+        }
+      ],
+      "positive_folds": 2,
+      "robust": false
+    }
+  ],
+  "research_gate_passed": false,
+  "deployment_eligible": false,
+  "deployment_status": "ANALYSIS ONLY - FORWARD SHADOW REQUIRED",
+  "warning": "Selection maximizes robust precision, not certainty. Historical probability is not a future win guarantee."
+}

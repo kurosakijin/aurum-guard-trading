@@ -71,6 +71,27 @@ V8's newest diagnostic produced 16 equity-controlled trades, 62.5% winners,
 two of three earlier walk-forward periods, so `deployment_eligible` remains
 false. Run `run_v8_shadow.cmd` only on demo to collect genuinely new evidence.
 
+## V9 stability-first shadow challenger
+
+`train_ai_v9.py` refreshes a separately named research snapshot and compares 20
+calibrated Extra Trees, Random Forest, histogram-gradient-boosting and logistic
+candidates. Architecture and threshold selection use three purged, expanding
+chronological development folds. The newest 15% is opened exactly once after
+selection. A one-regime precision spike cannot beat a candidate that repeats
+across time, and fewer than 45 development trades cannot qualify.
+
+The selected regularized logistic candidate produced 1,186 non-overlapping
+development trades, 42.8% winners, +28.90R and three positive folds. On 345
+untouched newest-period trades it produced 41.7% winners, +10.47R and a 1.09
+profit factor. That is more stable than the earlier high-win, tiny-sample
+results, but it still failed the predeclared promotion gate because profit
+factor remained below 1.15 and drawdown exceeded the 8R ceiling.
+
+It is therefore stored as `asheparte_ai_v9_shadow.joblib` with
+`deployment_eligible=false`. Run `run_v9_shadow.cmd` to collect new forward
+evidence. Do not retune against `asheparte_ai_v9_report.json`; that newest period
+has now been observed and is no longer an untouched test.
+
 ## Safe first run
 
 1. Use a MetaTrader 5 demo account and keep MT5 open.

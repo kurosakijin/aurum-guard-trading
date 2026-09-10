@@ -3503,7 +3503,7 @@ export default function Home() {
                         <Download className="size-4" /> Download advisor v3.20
                       </a>
                       <a
-                        href="./downloads/AurumGuardAI.zip?v=3.20"
+                        href="./downloads/AurumGuardAI.zip?v=9.0"
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/15"
                       >
@@ -3545,7 +3545,27 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">The AI now reports directional confidence, model health and regime drift in the chart panel. Its score is context—not a prediction, execution command or guarantee.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">The AI reports directional confidence, model health and regime drift in the chart panel. Its score is context—not a prediction, execution command or guarantee.</p>
+                  <div className="mt-3 rounded-lg border border-amber-300/20 bg-black/20 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-amber-100">V9 stability research</p>
+                      <Badge variant="outline" className="border-amber-300/25 text-amber-200">SHADOW · HOLD</Badge>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {[
+                        ['20', 'Models checked'],
+                        ['3 / 3', 'Positive dev folds'],
+                        ['41.7%', 'Untouched win rate'],
+                        ['+10.47R', 'Untouched net'],
+                      ].map(([value, label]) => (
+                        <div key={label} className="rounded-md border border-white/7 bg-white/[.025] p-2">
+                          <p className="font-heading text-sm font-semibold text-amber-100">{value}</p>
+                          <p className="mt-0.5 text-muted-foreground">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Better consistency, but not promoted: the untouched profit factor was 1.09 and drawdown was 10.82R. Use <span className="font-mono text-foreground">run_v9_shadow.cmd</span> only to gather fresh evidence.</p>
+                  </div>
                 </div>
               </div>
 
