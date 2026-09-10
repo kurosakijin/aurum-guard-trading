@@ -3482,28 +3482,28 @@ export default function Home() {
         <section id="mt5-bot" className={workspacePanel === 'mt5' ? 'mb-4' : 'hidden'} aria-labelledby="mt5-bot-heading">
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Asheparte AI MT5 Auto Trader</CardTitle>
-              <CardDescription>MT5 v1.90 · M15/M30/H1 consolidation/POC → sweep → displacement → POC-return entry · fixed 0.01 lot · 2.14R target</CardDescription>
-              <CardAction><Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-200">DEMO ENTRIES ON</Badge></CardAction>
+              <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Asheparte AI Analysis Advisor</CardTitle>
+              <CardDescription>MT5 v3.20 · Gold structure, POC sequence, multi-timeframe confirmation, manual plan and AI research context</CardDescription>
+              <CardAction><Badge className="border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">ANALYSIS ONLY · NO ORDERS</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
               <div className="grid content-start gap-4">
                 <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[.045] p-4">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-2xl">
-                      <p className="text-sm font-semibold text-emerald-100">MT5 Expert Advisor for demo testing</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Trades M15–H1 POC pullbacks with 0.01 lot, structural SL and a 2.14R target. M1 entries, martingale and revenge trading are disabled.</p>
+                      <p className="text-sm font-semibold text-emerald-100">Decision support inside your Gold chart</p>
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Maps the setup, checks M15/H1/D1 agreement, watches M1 timing and displays a manual entry, invalidation and target plan. It cannot open, modify or close a trade.</p>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <a
-                        href="./downloads/AurumGuardAutoTrader.mq5"
+                        href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.20"
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
                       >
-                        <Download className="size-4" /> Download MT5 v1.90
+                        <Download className="size-4" /> Download advisor v3.20
                       </a>
                       <a
-                        href="./downloads/AurumGuardAI.zip"
+                        href="./downloads/AurumGuardAI.zip?v=3.20"
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/15"
                       >
@@ -3515,10 +3515,10 @@ export default function Home() {
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[
-                    ['1 · Range', 'Find consolidation and estimate its tick-volume POC.'],
-                    ['2 · Sweep', 'Wait for price to take liquidity beyond the range.'],
-                    ['3 · Move', 'Confirm displacement; do not chase the breakout candle.'],
-                    ['4 · Entry', 'Enter only after a defended return to POC.'],
+                    ['1 · Context', 'Read M15/H1/D1 trend, RSI, volatility and Gold/Silver agreement.'],
+                    ['2 · Structure', 'Map consolidation, tick-volume POC, liquidity sweep and displacement.'],
+                    ['3 · Timing', 'Use completed M1 candles only after the higher-timeframe idea is valid.'],
+                    ['4 · Manual plan', 'Display entry, invalidation and targets for your review—never place an order.'],
                   ].map(([title, description]) => (
                     <div key={title} className="rounded-xl border border-white/8 bg-black/15 p-3">
                       <p className="text-[10px] font-semibold text-emerald-200">{title}</p>
@@ -3529,15 +3529,15 @@ export default function Home() {
 
                 <div className="rounded-xl border border-violet-300/20 bg-violet-300/[.045] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-xs font-semibold text-violet-100"><Sparkles className="size-3.5" /> AI research status</p>
-                    <Badge variant="outline" className="border-amber-300/25 text-amber-200">SHADOW ONLY</Badge>
+                    <p className="flex items-center gap-2 text-xs font-semibold text-violet-100"><Sparkles className="size-3.5" /> AI confidence layer</p>
+                    <Badge variant="outline" className="border-violet-300/25 text-violet-200">SECOND OPINION</Badge>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
                     {[
-                      ['95', 'Test trades'],
-                      ['48.4%', 'Win rate'],
-                      ['+7.11R', 'Net after costs'],
-                      ['1.30', 'Profit factor'],
+                      ['BUY / SELL / WAIT', 'Research bias'],
+                      ['Closed M1', 'Update timing'],
+                      ['Gold + Silver', 'Market inputs'],
+                      ['Fail closed', 'Stale / drift lock'],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
                         <p className="font-heading text-sm font-semibold text-violet-100">{value}</p>
@@ -3545,19 +3545,19 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">Promising recent results, but the full research gate still failed. Keep <span className="font-mono">AIShadowMode = true</span>; AI approval must not place orders yet.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">The AI now reports directional confidence, model health and regime drift in the chart panel. Its score is context—not a prediction, execution command or guarantee.</p>
                 </div>
               </div>
 
               <div className="grid content-start gap-4">
                 <div className="rounded-xl border border-white/9 bg-black/15 p-4">
-                  <p className="text-xs font-semibold">Safe defaults included</p>
+                  <p className="text-xs font-semibold">What the advisor checks</p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
                     {[
-                      ['0.01', 'Fixed lot size'],
-                      ['$7.50', 'Default planned SL'],
-                      ['$20', 'Final TP per trade'],
-                      ['$7.50', 'One-loss daily lock'],
+                      ['M15', 'Setup + safety'],
+                      ['H1 + D1', 'Directional context'],
+                      ['M1 close', 'Timing confirmation'],
+                      ['XAU + XAG', 'Metals synchronization'],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/8 bg-white/[.025] p-3">
                         <p className="font-heading text-base font-semibold text-primary">{value}</p>
@@ -3565,21 +3565,21 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">Broker support for 0.01 lot is required. Slippage, gaps and commission can change the actual result.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">A setup stays in WAIT when required data is missing, the spread is abnormal, high-impact USD news is near, or the market is in shock.</p>
                 </div>
 
                 <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold text-amber-100">Broad M1 research result</p>
-                    <Badge variant="outline" className="border-red-300/25 text-red-200">NOT LIVE READY</Badge>
+                    <p className="text-xs font-semibold text-amber-100">How to use the AI reading</p>
+                    <Badge variant="outline" className="border-amber-300/25 text-amber-200">RESEARCH CONTEXT</Badge>
                   </div>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">XAUUSD M1 · January–September 2026 · every tick</p>
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Read it only after the rule-based setup has formed.</p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
                     {[
-                      ['+$0.04', 'Net result'],
-                      ['1.00', 'Profit factor'],
-                      ['0.19%', 'Max equity drawdown'],
-                      ['7', 'Total trades'],
+                      ['BUY', 'Bullish candidate'],
+                      ['SELL', 'Bearish candidate'],
+                      ['WAIT', 'No usable edge'],
+                      ['LOCK', 'Stale data or drift'],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
                         <p className="font-heading text-sm font-semibold text-amber-100">{value}</p>
@@ -3587,22 +3587,22 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] leading-4 text-red-100/85">Failed validation: too few trades and no measured edge. This is not a profit forecast.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-red-100/85">Confidence is not win probability. Your own chart reading and risk decision remain final.</p>
                 </div>
 
                 <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-4">
                   <p className="text-xs font-semibold text-cyan-100">Install in MetaTrader 5</p>
                   <ol className="mt-2 space-y-2 text-[10px] leading-4 text-muted-foreground">
                     <li><span className="mr-2 font-semibold text-cyan-200">1.</span>Download the EA and copy it to <span className="font-mono text-foreground">MQL5/Experts</span>.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">2.</span>Compile it in MetaEditor with F7.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">2.</span>Refresh Navigator and attach it to a Gold chart.</li>
                     <li><span className="mr-2 font-semibold text-cyan-200">3.</span>Attach it to a Gold chart and enter the correct Silver symbol.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>On demo only, enable Algo Trading and <span className="font-mono text-foreground">EnableNewEntries</span>.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Keep <span className="font-mono text-foreground">AIShadowMode = true</span> and monitor Experts/Journal.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>Download the optional AI layer and run its installer, then its analysis runner.</li>
+                    <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Keep <span className="font-mono text-foreground">AIShadowMode = true</span>; Algo Trading is not required.</li>
                   </ol>
                 </div>
 
                 <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-3 text-[10px] leading-4 text-muted-foreground">
-                  <p><span className="font-semibold text-amber-200">Keep MT5 running:</span> the website cannot place orders. MT5 must stay connected on your PC or VPS. No EA guarantees profit.</p>
+                  <p><span className="font-semibold text-amber-200">Manual execution only:</span> the advisor and website cannot press Buy or Sell. MT5 must stay open for live analysis, AI scores and journal heartbeat.</p>
                 </div>
               </div>
             </CardContent>

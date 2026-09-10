@@ -1,4 +1,4 @@
-"""Score each completed M1 bar and publish a fail-closed AI approval for MT5."""
+"""Score each completed M1 bar and publish analysis-only context for MT5."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from aurum_guard_ai_core import AurumProbabilityModel, FEATURE_COLUMNS, build_fe
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Aurum Guard AI approval gate")
+    parser = argparse.ArgumentParser(description="Run the Asheparte AI analysis layer")
     parser.add_argument("--terminal", default=r"C:\Program Files\MetaTrader 5\terminal64.exe")
     parser.add_argument("--gold", default="XAUUSD")
     parser.add_argument("--silver", default="XAGUSD")
@@ -83,7 +83,7 @@ def main() -> int:
     history_path = Path(terminal.commondata_path) / "Files" / args.history_file if args.history_file else None
     last_bar_time = 0
     peak_equity = 0.0
-    print(f"Aurum Guard AI connected. Publishing closed-bar scores to {signal_path}")
+    print(f"Asheparte AI analysis layer connected. Publishing closed-bar context to {signal_path}")
 
     try:
         while True:
@@ -116,8 +116,8 @@ def main() -> int:
                     if equity_guard:
                         health_code = "EQUITY_GUARD"
                     deployment_eligible = bool(model.metadata.get("deployment_eligible", False))
-                    # Failed research models remain visible for shadow review but
-                    # cannot approve an automated order in strict mode.
+                    # Research models remain visible as context. The eligibility
+                    # bit stays fail-closed for compatibility with older EAs.
                     direction = raw_direction if deployment_eligible and not equity_guard else 0
                     generated_at = int(time.time())
                     write_signal(
@@ -163,7 +163,7 @@ def main() -> int:
                     raise
             time.sleep(max(args.poll_seconds, 0.5))
     except KeyboardInterrupt:
-        print("Aurum Guard AI stopped by user")
+        print("Asheparte AI analysis layer stopped by user")
     finally:
         mt5.shutdown()
     return 0

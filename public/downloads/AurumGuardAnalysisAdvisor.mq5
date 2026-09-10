@@ -3,10 +3,10 @@
 //|   M15 POC setup + M1 timing + MTF RSI confirmation              |
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
-#property copyright "Aurum Guard"
-#property version   "3.15"
+#property copyright "Asheparte AI"
+#property version   "3.20"
 #property strict
-#property description "Aurum Guard analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
+#property description "Asheparte AI analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
 
 // --- Analysis controls. Execution constants are retained only for source compatibility;
 // the analysis edition has no reachable order path.
@@ -19,11 +19,11 @@ input double MaxSpreadAsATR                = 0.08;
 
 const double FIXED_LOTS                    = 0.01;
 
-// --- Local AI approval layer (Python scores; this EA keeps execution and risk control)
-input bool   UseAIApprovalGate             = true;
-input bool   AIShadowMode                  = true;  // observe decisions without blocking or approving orders
-input string AIApprovalFile                = "aurum_guard_ai_signal.csv";
-input double MinimumAIApprovalProbability  = 0.525; // calibrated for the protected-outcome model; not a claimed win rate
+// --- Local AI analysis layer (Python scores; context only, never execution)
+input bool   UseAIAnalysisLayer            = true;
+const bool   AIShadowMode                  = true;  // permanently locked to observation-only mode
+input string AIAnalysisFile                = "aurum_guard_ai_signal.csv";
+input double MinimumAIConfidence           = 0.525; // research threshold; not a claimed win rate
 input int    MaximumAISignalAgeSeconds      = 180;
 input bool   AIRequireMatchingSymbol       = true;
 
@@ -160,6 +160,7 @@ bool     g_pendingTouched = false;
 datetime g_pendingTouchBar = 0;
 datetime g_pendingLastCheckedBar = 0;
 string   g_aiStatus = "SHADOW - WAITING FOR SCORE";
+string   g_aiPanelStatus = "WAITING FOR AI SCORE";
 double   g_aiProbability = 0.0;
 string   g_aiModel = "NONE";
 int      g_pocStage = 0; // 0=find range, 1=wait sweep, 2=wait displacement, 3=wait POC return
@@ -1276,7 +1277,7 @@ bool SpreadAllowsEntry(const double atrValue,string &reason)
 
 bool AIAllowsEntry(const int direction,string &reason)
   {
-   if(!UseAIApprovalGate)
+   if(!UseAIAnalysisLayer)
      {
       g_aiStatus="OFF";
       g_aiProbability=0.0;
@@ -1291,7 +1292,7 @@ bool AIAllowsEntry(const int direction,string &reason)
      }
 
    ResetLastError();
-   int file=FileOpen(AIApprovalFile,FILE_READ|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_COMMON,',');
+   int file=FileOpen(AIAnalysisFile,FILE_READ|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_COMMON,',');
    if(file==INVALID_HANDLE)
      {
       reason="AI SCORE FILE MISSING";
@@ -1323,7 +1324,7 @@ bool AIAllowsEntry(const int direction,string &reason)
    bool timeframeValid=(scoreTimeframe=="M1" && SignalTimeframe==PERIOD_M1);
    bool ageValid=(scoreAge>=-30 && scoreAge<=MaximumAISignalAgeSeconds);
    double oppositeProbability=direction>0 ? shortProbability : longProbability;
-   bool probabilityValid=(g_aiProbability>=MinimumAIApprovalProbability && g_aiProbability>oppositeProbability && g_aiProbability>noTradeProbability);
+   bool probabilityValid=(g_aiProbability>=MinimumAIConfidence && g_aiProbability>oppositeProbability && g_aiProbability>noTradeProbability);
    bool healthValid=(scoreHealth=="CANDIDATE_APPROVED" && driftShare<=0.15);
    bool approved=(structurallyValid && symbolValid && timeframeValid && ageValid && deploymentEligible==1 && healthValid && scoreDirection==direction && probabilityValid);
 
@@ -1352,6 +1353,83 @@ bool AIAllowsEntry(const int direction,string &reason)
 
    g_aiStatus=StringFormat("%s - %s %.0f%%",AIShadowMode ? "SHADOW WOULD BLOCK" : "BLOCK",reason,g_aiProbability*100.0);
    return AIShadowMode;
+  }
+
+void RefreshAIAnalysisContext()
+  {
+   if(!UseAIAnalysisLayer)
+     {
+      g_aiPanelStatus="OFF";
+      return;
+     }
+
+   ResetLastError();
+   int file=FileOpen(AIAnalysisFile,FILE_READ|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_COMMON,',');
+   if(file==INVALID_HANDLE)
+     {
+      g_aiPanelStatus="OFFLINE - START AI LAYER";
+      return;
+     }
+
+   int formatVersion=(int)FileReadNumber(file);
+   long generatedAt=(long)FileReadNumber(file);
+   string scoreSymbol=FileReadString(file);
+   string scoreTimeframe=FileReadString(file);
+   int scoreDirection=(int)FileReadNumber(file);
+   double longProbability=FileReadNumber(file);
+   double shortProbability=FileReadNumber(file);
+   double noTradeProbability=FileReadNumber(file);
+   string modelId=FileReadString(file);
+   long scoredBar=(long)FileReadNumber(file);
+   int deploymentEligible=FileIsEnding(file) ? 0 : (int)FileReadNumber(file);
+   string scoreHealth=FileIsEnding(file) ? "INVALID" : FileReadString(file);
+   double driftShare=FileIsEnding(file) ? 1.0 : FileReadNumber(file);
+   FileClose(file);
+
+   g_aiModel=modelId;
+   long scoreAge=(long)TimeGMT()-generatedAt;
+   if(formatVersion!=3 || generatedAt<=0 || scoredBar<=0 || modelId=="")
+     {
+      g_aiPanelStatus="INVALID SCORE FILE";
+      return;
+     }
+   if(AIRequireMatchingSymbol && scoreSymbol!=g_symbol)
+     {
+      g_aiPanelStatus="SYMBOL MISMATCH";
+      return;
+     }
+   if(scoreTimeframe!="M1")
+     {
+      g_aiPanelStatus="TIMEFRAME MISMATCH";
+      return;
+     }
+   if(scoreAge < -30 || scoreAge>MaximumAISignalAgeSeconds)
+     {
+      g_aiPanelStatus="STALE - CHECK AI RUNNER";
+      return;
+     }
+   if(scoreHealth=="EQUITY_GUARD")
+     {
+      g_aiPanelStatus="WAIT - EQUITY GUARD";
+      return;
+     }
+   if(scoreHealth=="REGIME_DRIFT" || driftShare>0.15)
+     {
+      g_aiPanelStatus=StringFormat("WAIT - REGIME DRIFT %.0f%%",driftShare*100.0);
+      return;
+     }
+   if(scoreHealth=="NO_CANDIDATE")
+     {
+      g_aiPanelStatus="WAIT - NO CANDIDATE";
+      return;
+     }
+
+   double directionalProbability=MathMax(longProbability,shortProbability);
+   string directionText=longProbability>shortProbability ? "BUY" : "SELL";
+   if(scoreDirection==0 || noTradeProbability>=directionalProbability || scoreHealth=="LOW_CONFIDENCE")
+      g_aiPanelStatus=StringFormat("WAIT - %s %.0f%%",directionText,directionalProbability*100.0);
+   else
+      g_aiPanelStatus=StringFormat("%s %s %.0f%%",deploymentEligible==1 ? "VALIDATED" : "RESEARCH",directionText,directionalProbability*100.0);
   }
 
 void SetGuideLine(const string name,const double price,const color lineColor,const ENUM_LINE_STYLE style,const int width)
@@ -2120,7 +2198,7 @@ void DrawAnalysisPanel()
    PanelRectangle("BODY",x,y,PanelWidth,438,panel,C'52,57,67');
    PanelRectangle("HEADER",x,y,PanelWidth,42,header,C'52,57,67');
    PanelRectangle("ACCENT",x,y,PanelWidth,3,section,section);
-   PanelLabel("TITLE","Aurum Guard Analysis",x+12,y+10,white,PanelFontSize+2);
+   PanelLabel("TITLE","Asheparte AI Analysis",x+12,y+10,white,PanelFontSize+2);
    PanelLabel("SYMBOL",g_symbol+" · "+EnumToString((ENUM_TIMEFRAMES)_Period),right,y+12,section,PanelFontSize,ANCHOR_RIGHT_UPPER);
 
    int row=y+54;
@@ -2171,22 +2249,23 @@ void DrawAnalysisPanel()
    PanelDivider("THREE",row);
 
    row+=13;
-   PanelLabel("SEC_GUARD","ENTRY GUARD",x+10,row,section,PanelFontSize);
+   PanelLabel("SEC_GUARD","ENTRY GUARD + AI",x+10,row,section,PanelFontSize);
    row+=22;
    string safety=TimeCurrent()<g_safetyPauseUntil ? "WAIT / PAUSED" : g_safetyStatus;
    color safetyColor=(TimeCurrent()<g_safetyPauseUntil || g_safetyStatus!="CLEAR") ? warning : good;
    PanelLabel("LAB_SAFETY","M15 safety",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_SAFETY",safety,right,row,safetyColor,PanelFontSize,ANCHOR_RIGHT_UPPER);
    row+=19;
+   PanelLabel("LAB_AI","AI context",x+10,row,muted,PanelFontSize);
+   color aiPanelColor=StringFind(g_aiPanelStatus,"WAIT")==0 ? warning : StringFind(g_aiPanelStatus,"BUY")>=0 ? good : StringFind(g_aiPanelStatus,"SELL")>=0 ? bad : warning;
+   PanelLabel("VAL_AI",g_aiPanelStatus,right,row,aiPanelColor,PanelFontSize-1,ANCHOR_RIGHT_UPPER);
+   row+=19;
    PanelLabel("LAB_DECISION","Current check",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_DECISION",CompactDecision(),right,row,white,PanelFontSize-1,ANCHOR_RIGHT_UPPER);
-   row+=19;
-   PanelLabel("LAB_EXECUTION","Execution",x+10,row,muted,PanelFontSize);
-   PanelLabel("VAL_EXECUTION","MANUAL ONLY",right,row,warning,PanelFontSize,ANCHOR_RIGHT_UPPER);
 
    PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.15",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.20",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2407,7 +2486,7 @@ int OnInit()
       Print("Aurum Guard: the Fibonacci reward multiple must exceed 1.0.");
       return INIT_PARAMETERS_INCORRECT;
      }
-   if(MinimumAIApprovalProbability<0.50 || MinimumAIApprovalProbability>0.99 || MaximumAISignalAgeSeconds<60)
+   if(MinimumAIConfidence<0.50 || MinimumAIConfidence>0.99 || MaximumAISignalAgeSeconds<60)
      {
       Print("Aurum Guard: invalid AI controls. Probability must be 0.50-0.99 and signal age must be at least 60 seconds.");
       return INIT_PARAMETERS_INCORRECT;
@@ -2488,6 +2567,7 @@ int OnInit()
     // Never block the panel behind an HTTP request during initialization. The
     // first timer event paints/rechecks the UI before starting journal sync.
     g_journalNextSyncMs=GetTickCount64()+1000;
+    RefreshAIAnalysisContext();
     UpdateChartPanel();
     ChartRedraw(0);
     Print("Aurum Guard Analysis Advisor initialized on ",g_symbol,". This edition never sends orders.");
@@ -2534,6 +2614,7 @@ void OnTimer()
     // Paint first. WebRequest can wait on DNS, a cold endpoint, or the network;
     // keeping it after the redraw prevents the dashboard from vanishing while
     // MT5 is waiting for the journal endpoint.
+    RefreshAIAnalysisContext();
     UpdateChartPanel();
     ChartRedraw(0);
     if(EnableJournalSync && GetTickCount64()>=g_journalNextSyncMs)

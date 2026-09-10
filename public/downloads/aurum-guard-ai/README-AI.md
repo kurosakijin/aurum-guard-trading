@@ -1,18 +1,17 @@
-# Aurum Guard AI Approval Layer
+# Asheparte AI Analysis Layer
 
-This package adds a local BUY / SELL / NO TRADE meta-label model to the Aurum
-Guard MT5 Expert Advisor. It does not guess on every candle: a causal defended
+This package adds a local BUY / SELL / WAIT research reading to the Asheparte
+MT5 Analysis Advisor. It does not guess on every candle: a causal defended
 trend/pullback candidate must exist first, then a regularized Extra Trees
-classifier estimates whether that candidate deserves approval. It does not bypass
-the EA's risk controls and it does not promise profit.
+classifier estimates confidence for that candidate. The result is displayed as
+context only. Neither this package nor the Analysis Advisor can place, modify,
+or close an MT5 order, and the score does not promise profit.
 
-EA v1.90 changes the entry engine to a four-stage M15/M30/H1 sequence: tight consolidation
-and tick-volume POC, liquidity sweep, directional displacement, then a defended
-return to POC. The structural stop is rejected when 0.01 lot would exceed the
-configured money-risk cap, and the final target is 2.14R. Daily profit/loss and
-trade-count quotas were removed; spread, news, higher-timeframe shock and one-position safety
-remain. These rules are not a guarantee; broker volume, gaps, slippage,
-commissions and latency can produce a different result.
+Advisor v3.20 studies a four-stage M15/M30/H1 sequence: tight consolidation and
+tick-volume POC, liquidity sweep, directional displacement, then a defended
+return to POC. It combines that structure with M15/H1/D1 confirmation, completed
+M1 timing, Gold/Silver agreement, spread, news, and shock checks. It draws a
+manual plan only; it contains no active order path.
 
 The POC sequence intentionally rejects M1 as an input timeframe. M1 noise can
 make consolidation and sweep labels misleading; use M15, M30 or H1 instead.
@@ -82,23 +81,23 @@ false. Run `run_v8_shadow.cmd` only on demo to collect genuinely new evidence.
    on older development windows, then reports a newest-period quarantine test. If the gate
    fails, the model is marked `FAILED RESEARCH GATE - SHADOW ONLY` and cannot
    approve an automated entry.
-5. Run `backtest_ai.cmd` to reproduce a fixed-threshold expanding walk-forward
-   shadow backtest. It rejects regime drift, prevents overlapping positions and
-   counts an ambiguous same-candle TP/SL as an SL.
-6. Run `run_ai_gate.cmd`. It publishes one score after each completed M1 candle.
-7. Attach the latest Aurum Guard EA with `UseAIApprovalGate=true`,
-   `AIShadowMode=true`, and `EnableNewEntries=false` first.
-8. Compare at least several weeks of shadow decisions with your demo feed.
+5. Run `backtest_ai.cmd` to reproduce the fixed-threshold expanding walk-forward
+   research check. It rejects regime drift and treats ambiguous same-candle
+   outcomes conservatively.
+6. Run `run_ai_gate.cmd`. It publishes one analysis score after each completed
+   M1 candle.
+7. Attach Asheparte Analysis Advisor v3.20 with `UseAIAnalysisLayer=true`.
+8. Compare its BUY / SELL / WAIT context with your own chart reading. You remain
+   responsible for every manual trade decision.
 
 Run `build_learning_dataset.cmd` to create a documented CSV from the frozen
 broker snapshot. Read `DATASET-GUIDE.md` before using it: future outcome columns
 are clearly marked `LABEL_ONLY` and must never enter a live model. `READING-LIST.md`
 contains books and authoritative dataset sources without copying copyrighted text.
 
-Only after acceptable out-of-sample and forward-demo evidence should you set
-`AIShadowMode=false`. A model that is not marked deployment-eligible remains
-fail-closed even if strict mode is selected. Keep `AllowLiveTrading=false`; the AI gate is research
-software and sudden moves, slippage, gaps, bad data, and regime changes remain.
+There is no execution mode in the Analysis Advisor. The AI layer remains
+observation-only regardless of its research status. Sudden moves, gaps, bad data,
+and regime changes can make its context wrong.
 
 The September 4 execution-aligned replay improved materially but still failed
 promotion. Its newest quarantine had 95 non-overlapping shadow trades, 48.4%
@@ -107,9 +106,9 @@ four development folds lost, the development profit factor was only 1.04, the
 confidence bounds stayed below zero, and drawdown exceeded the strict limit.
 The packaged EA therefore remains entry-disabled and the AI remains shadow-only.
 
-The signal file is written atomically to MetaTrader's shared Common/Files
-folder. If the runner stops or its score becomes stale, strict mode blocks new
-entries rather than trading without AI approval.
+The context file is written atomically to MetaTrader's shared Common/Files
+folder. If the runner stops or its score becomes stale, the panel changes to a
+WAIT/STALE state instead of presenting an old confidence reading.
 
 The first `train_ai.cmd` run freezes the exact Gold/Silver research window in
 `aurum_guard_ai_research_snapshot.joblib`. `backtest_ai.cmd` reuses that file,
