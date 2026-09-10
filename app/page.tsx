@@ -27,6 +27,7 @@ import {
   ScanLine,
   ShieldCheck,
   Sparkles,
+  Trash2,
   TriangleAlert,
   UserRound,
 } from 'lucide-react';
@@ -2545,6 +2546,7 @@ export default function Home() {
   const [bridgeBindingStatus, setBridgeBindingStatus] = useState<BridgeBindingStatus>('unpaired');
   const [bridgeAccount, setBridgeAccount] = useState<BridgeAccount | null>(null);
   const [bridgeSyncCode, setBridgeSyncCode] = useState('');
+  const [journalResetArmed, setJournalResetArmed] = useState(false);
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
@@ -2666,6 +2668,43 @@ export default function Home() {
         ? 'That MT5 account is already paired with another Asheparte user.'
         : 'Could not update the account pairing. Please try again.';
       setBridgeTokenError(message);
+    } finally {
+      setBridgeTokenBusy(false);
+    }
+  }
+
+  async function resetUserJournal() {
+    if (!isSignedIn || bridgeTokenBusy) return;
+    if (!journalResetArmed) {
+      setJournalResetArmed(true);
+      window.setTimeout(() => setJournalResetArmed(false), 10000);
+      return;
+    }
+    setBridgeTokenBusy(true);
+    setBridgeTokenError('');
+    try {
+      const sessionToken = await getToken();
+      const response = await fetch('/api/bridge-token', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) },
+        body: JSON.stringify({ confirmation: 'RESET JOURNAL' }),
+      });
+      const result = await response.json() as { token?: string; lastFour?: string; error?: string };
+      if (!response.ok || !result.token) throw new Error(result.error ?? 'reset unavailable');
+      setJournalData(emptyJournal);
+      setJournalFeedOnline(false);
+      setDemoJournalEnabled(false);
+      setBridgeTokenReveal(result.token);
+      setBridgeTokenLastFour(result.lastFour ?? '');
+      setBridgeTokenHasToken(true);
+      setBridgeBindingStatus('unpaired');
+      setBridgeAccount(null);
+      setBridgeSyncCode('');
+      setBridgeTokenCopied(false);
+      setJournalPage(1);
+      setJournalResetArmed(false);
+    } catch {
+      setBridgeTokenError('Could not reset the journal. Nothing else was changed; please try again.');
     } finally {
       setBridgeTokenBusy(false);
     }
@@ -3156,6 +3195,12 @@ export default function Home() {
                   </Button>
                   {bridgeTokenError && <p className="mt-2 text-[9px] text-red-300">{bridgeTokenError}</p>}
                   {bridgeTokenHasToken && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Replacing it revokes the previous key immediately while keeping the approved MT5 account lock.</p>}
+                  <div className="mt-4 border-t border-red-300/10 pt-3">
+                    <Button variant="outline" size="sm" className={`h-9 w-full text-[10px] ${journalResetArmed ? 'border-red-300/45 bg-red-300/15 text-red-100' : 'border-red-300/20 bg-red-300/[.035] text-red-300'}`} disabled={bridgeTokenBusy} onClick={resetUserJournal}>
+                      <Trash2 className="size-3.5" /> {journalResetArmed ? 'Confirm reset journal' : 'Reset journal & pairing'}
+                    </Button>
+                    <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Deletes your journal history and account snapshot, unpairs MT5, revokes the old key, and creates a fresh key. This cannot be undone.</p>
+                  </div>
                 </CardContent>
               </Card>
 

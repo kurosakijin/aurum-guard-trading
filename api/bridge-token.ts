@@ -1,5 +1,5 @@
 import { authenticatedUserId } from '../lib/auth.js';
-import { approveBridgeAccount, bridgeTokenStatus, rejectPendingBridgeAccount, rotateBridgeToken } from '../lib/bridge-token.js';
+import { approveBridgeAccount, bridgeTokenStatus, rejectPendingBridgeAccount, resetUserJournal, rotateBridgeToken } from '../lib/bridge-token.js';
 
 export default {
   async fetch(request: Request) {
@@ -17,6 +17,11 @@ export default {
         if (body.action === 'approve') return Response.json(await approveBridgeAccount(userId), { headers: { 'Cache-Control': 'no-store' } });
         if (body.action === 'reject') return Response.json(await rejectPendingBridgeAccount(userId), { headers: { 'Cache-Control': 'no-store' } });
         return Response.json({ error: 'invalid_action' }, { status: 400 });
+      }
+      if (request.method === 'DELETE') {
+        const body = await request.json().catch(() => ({})) as { confirmation?: string };
+        if (body.confirmation !== 'RESET JOURNAL') return Response.json({ error: 'confirmation_required' }, { status: 400 });
+        return Response.json(await resetUserJournal(userId), { headers: { 'Cache-Control': 'no-store' } });
       }
       return Response.json({ error: 'method_not_allowed' }, { status: 405 });
     } catch (error) {

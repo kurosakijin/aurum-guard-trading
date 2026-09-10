@@ -114,6 +114,37 @@ export async function rejectPendingBridgeAccount(userId: string) {
   return bridgeTokenStatus(userId);
 }
 
+export async function resetUserJournal(userId: string) {
+  const sql = await ensureBridgeTokens();
+  const token = `ash_live_${randomBytes(32).toString('base64url')}`;
+  const tokenHash = hashBridgeToken(token);
+  const lastFour = token.slice(-4);
+  const rows = await sql`WITH deleted_deals AS (
+      DELETE FROM journal_deals WHERE owner_user_id=${userId} RETURNING 1
+    ), deleted_accounts AS (
+      DELETE FROM journal_accounts WHERE owner_user_id=${userId} RETURNING 1
+    ), reset_token AS (
+      INSERT INTO journal_bridge_tokens
+        (user_id,token_hash,token_last_four,created_at,rotated_at,bound_provider,bound_server,bound_login,
+         pending_provider,pending_server,pending_login,pending_at,sync_code)
+      VALUES (${userId},${tokenHash},${lastFour},NOW(),NOW(),NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+      ON CONFLICT (user_id) DO UPDATE SET
+        token_hash=EXCLUDED.token_hash,token_last_four=EXCLUDED.token_last_four,
+        created_at=NOW(),rotated_at=NOW(),bound_provider=NULL,bound_server=NULL,bound_login=NULL,
+        pending_provider=NULL,pending_server=NULL,pending_login=NULL,pending_at=NULL,sync_code=NULL
+      RETURNING 1
+    ) SELECT
+      (SELECT COUNT(*) FROM deleted_deals) AS deleted_deals,
+      (SELECT COUNT(*) FROM deleted_accounts) AS deleted_accounts,
+      (SELECT COUNT(*) FROM reset_token) AS reset_tokens`;
+  return {
+    token,
+    lastFour,
+    deletedDeals: Number(rows[0]?.deleted_deals ?? 0),
+    deletedAccounts: Number(rows[0]?.deleted_accounts ?? 0),
+  };
+}
+
 export async function authorizeBridgeAccount(token: string | null, identityInput: BridgeAccountIdentity) {
   if (!token || token.length < 32) throw new Error('invalid_bridge_token');
   const identity = cleanIdentity(identityInput);
