@@ -3503,7 +3503,7 @@ export default function Home() {
                         <Download className="size-4" /> Download advisor v3.21
                       </a>
                       <a
-                        href="./downloads/AurumGuardAI.zip?v=9.1"
+                        href="./downloads/AurumGuardAI.zip?v=9.2"
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/15"
                       >

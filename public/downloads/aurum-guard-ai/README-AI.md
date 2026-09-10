@@ -89,7 +89,9 @@ factor remained below 1.15 and drawdown exceeded the 8R ceiling.
 
 It is therefore stored as `asheparte_ai_v9_shadow.joblib` with
 `deployment_eligible=false`. Run `run_v9_shadow.cmd` to collect new forward
-evidence. Do not retune against `asheparte_ai_v9_report.json`; that newest period
+evidence. The runner publishes to the advisor's stable
+`aurum_guard_ai_signal.csv` context file, so model-version filenames cannot make
+the MT5 panel appear stale. Do not retune against `asheparte_ai_v9_report.json`; that newest period
 has now been observed and is no longer an untouched test.
 
 ## Safe first run
