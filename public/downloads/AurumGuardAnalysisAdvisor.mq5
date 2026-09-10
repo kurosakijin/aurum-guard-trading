@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "3.13"
+#property version   "3.14"
 #property strict
 #property description "Aurum Guard analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
 
@@ -2186,7 +2186,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.12",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.14",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2443,6 +2443,7 @@ int OnInit()
     g_journalTimeKey="AsheparteCombinedTime_"+IntegerToString(journalLogin)+"_"+tokenScope;
     g_journalTicketKey="AsheparteCombinedTicket_"+IntegerToString(journalLogin)+"_"+tokenScope;
     ApplyAurumChartTheme();
+    ChartSetInteger(0,CHART_EVENT_OBJECT_DELETE,true);
     if(!SymbolSelect(g_symbol,true))
      {
       Print("Aurum Guard: cannot select trade symbol ",g_symbol);
@@ -2484,8 +2485,9 @@ int OnInit()
     // Draw immediately so the analysis dashboard remains visible on weekends,
     // disconnected terminals, and charts waiting for their next market tick.
     EventSetTimer(1);
-    SynchronizeJournal();
-    g_journalNextSyncMs=GetTickCount64()+(ulong)(MathMax(15,JournalSyncSeconds)*1000);
+    // Never block the panel behind an HTTP request during initialization. The
+    // first timer event paints/rechecks the UI before starting journal sync.
+    g_journalNextSyncMs=GetTickCount64()+1000;
     UpdateChartPanel();
     ChartRedraw(0);
     Print("Aurum Guard Analysis Advisor initialized on ",g_symbol,". This edition never sends orders.");
@@ -2522,13 +2524,35 @@ void OnDeinit(const int reason)
 
 void OnTimer()
    {
+    // Paint first. WebRequest can wait on DNS, a cold endpoint, or the network;
+    // keeping it after the redraw prevents the dashboard from vanishing while
+    // MT5 is waiting for the journal endpoint.
+    UpdateChartPanel();
+    ChartRedraw(0);
     if(EnableJournalSync && GetTickCount64()>=g_journalNextSyncMs)
       {
        SynchronizeJournal();
        g_journalNextSyncMs=GetTickCount64()+(ulong)(MathMax(15,JournalSyncSeconds)*1000);
       }
-    UpdateChartPanel();
-    ChartRedraw(0);
+   }
+
+void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
+   {
+    if(id==CHARTEVENT_CHART_CHANGE)
+      {
+       ApplyAurumChartTheme();
+       UpdateChartPanel();
+       ChartRedraw(0);
+       return;
+      }
+
+    // Templates and object-management actions can remove chart objects while
+    // leaving the EA attached. Recreate any missing panel object immediately.
+    if(id==CHARTEVENT_OBJECT_DELETE && ShowAnalysisPanel && StringFind(sparam,PANEL_PREFIX)==0)
+      {
+       UpdateChartPanel();
+       ChartRedraw(0);
+      }
    }
 
 void OnTick()
