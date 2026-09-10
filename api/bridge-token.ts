@@ -1,3 +1,4 @@
+import { createClerkClient } from '@clerk/backend';
 import { authenticatedUserId } from '../lib/auth.js';
 import { approveBridgeAccount, bridgeTokenStatus, rejectPendingBridgeAccount, resetUserJournal, rotateBridgeToken } from '../lib/bridge-token.js';
 
@@ -19,8 +20,16 @@ export default {
         return Response.json({ error: 'invalid_action' }, { status: 400 });
       }
       if (request.method === 'DELETE') {
-        const body = await request.json().catch(() => ({})) as { confirmation?: string };
+        const body = await request.json().catch(() => ({})) as { confirmation?: string; confirmationEmail?: string };
         if (body.confirmation !== 'RESET JOURNAL') return Response.json({ error: 'confirmation_required' }, { status: 400 });
+        const secretKey = process.env.CLERK_SECRET_KEY;
+        if (!secretKey) return Response.json({ error: 'account_service_unavailable' }, { status: 503 });
+        const user = await createClerkClient({ secretKey }).users.getUser(userId);
+        const registeredEmail = user.primaryEmailAddress?.emailAddress.trim().toLowerCase() ?? '';
+        const confirmationEmail = String(body.confirmationEmail ?? '').trim().toLowerCase();
+        if (!registeredEmail || confirmationEmail !== registeredEmail) {
+          return Response.json({ error: 'email_confirmation_mismatch' }, { status: 403 });
+        }
         return Response.json(await resetUserJournal(userId), { headers: { 'Cache-Control': 'no-store' } });
       }
       return Response.json({ error: 'method_not_allowed' }, { status: 405 });

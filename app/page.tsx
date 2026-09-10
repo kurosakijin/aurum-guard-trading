@@ -34,6 +34,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Card,
   CardAction,
@@ -2547,6 +2548,7 @@ export default function Home() {
   const [bridgeAccount, setBridgeAccount] = useState<BridgeAccount | null>(null);
   const [bridgeSyncCode, setBridgeSyncCode] = useState('');
   const [journalResetArmed, setJournalResetArmed] = useState(false);
+  const [journalResetEmail, setJournalResetEmail] = useState('');
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
@@ -2677,7 +2679,10 @@ export default function Home() {
     if (!isSignedIn || bridgeTokenBusy) return;
     if (!journalResetArmed) {
       setJournalResetArmed(true);
-      window.setTimeout(() => setJournalResetArmed(false), 10000);
+      return;
+    }
+    if (!journalResetEmail.trim()) {
+      setBridgeTokenError('Enter the email address registered to this Asheparte account.');
       return;
     }
     setBridgeTokenBusy(true);
@@ -2687,7 +2692,7 @@ export default function Home() {
       const response = await fetch('/api/bridge-token', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) },
-        body: JSON.stringify({ confirmation: 'RESET JOURNAL' }),
+        body: JSON.stringify({ confirmation: 'RESET JOURNAL', confirmationEmail: journalResetEmail }),
       });
       const result = await response.json() as { token?: string; lastFour?: string; error?: string };
       if (!response.ok || !result.token) throw new Error(result.error ?? 'reset unavailable');
@@ -2703,8 +2708,12 @@ export default function Home() {
       setBridgeTokenCopied(false);
       setJournalPage(1);
       setJournalResetArmed(false);
-    } catch {
-      setBridgeTokenError('Could not reset the journal. Nothing else was changed; please try again.');
+      setJournalResetEmail('');
+    } catch (error) {
+      const message = error instanceof Error && error.message === 'email_confirmation_mismatch'
+        ? 'That email does not match the signed-in Asheparte account.'
+        : 'Could not reset the journal. Nothing else was changed; please try again.';
+      setBridgeTokenError(message);
     } finally {
       setBridgeTokenBusy(false);
     }
@@ -3196,9 +3205,20 @@ export default function Home() {
                   {bridgeTokenError && <p className="mt-2 text-[9px] text-red-300">{bridgeTokenError}</p>}
                   {bridgeTokenHasToken && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Replacing it revokes the previous key immediately while keeping the approved MT5 account lock.</p>}
                   <div className="mt-4 border-t border-red-300/10 pt-3">
-                    <Button variant="outline" size="sm" className={`h-9 w-full text-[10px] ${journalResetArmed ? 'border-red-300/45 bg-red-300/15 text-red-100' : 'border-red-300/20 bg-red-300/[.035] text-red-300'}`} disabled={bridgeTokenBusy} onClick={resetUserJournal}>
-                      <Trash2 className="size-3.5" /> {journalResetArmed ? 'Confirm reset journal' : 'Reset journal & pairing'}
-                    </Button>
+                    {journalResetArmed ? (
+                      <div className="rounded-lg border border-red-300/25 bg-red-300/[.055] p-3">
+                        <label htmlFor="journal-reset-email" className="text-[10px] font-semibold text-red-100">Confirm with your registered email</label>
+                        <Input id="journal-reset-email" type="email" autoComplete="email" value={journalResetEmail} onChange={(event) => setJournalResetEmail(event.target.value)} placeholder="you@example.com" className="mt-2 border-red-300/20 bg-black/15 text-[11px]" />
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <Button size="sm" className="h-8 bg-red-400 text-[10px] text-[#210509] hover:bg-red-300" disabled={bridgeTokenBusy || !journalResetEmail.trim()} onClick={resetUserJournal}><Trash2 className="size-3.5" /> Permanently reset</Button>
+                          <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => { setJournalResetArmed(false); setJournalResetEmail(''); setBridgeTokenError(''); }}>Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button variant="outline" size="sm" className="h-9 w-full border-red-300/20 bg-red-300/[.035] text-[10px] text-red-300" disabled={bridgeTokenBusy} onClick={resetUserJournal}>
+                        <Trash2 className="size-3.5" /> Reset journal & pairing
+                      </Button>
+                    )}
                     <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Deletes your journal history and account snapshot, unpairs MT5, revokes the old key, and creates a fresh key. This cannot be undone.</p>
                   </div>
                 </CardContent>
