@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Show, SignInButton, SignUpButton, UserButton, useAuth } from '@clerk/react';
 import {
   ArrowUpRight,
   BarChart3,
@@ -16,6 +17,7 @@ import {
   Download,
   ExternalLink,
   Landmark,
+  KeyRound,
   LineChart,
   Newspaper,
   PlugZap,
@@ -61,17 +63,13 @@ type JournalData = {
   daily: Record<string, number>;
 };
 
-const fallbackDemoJournal: JournalData = {
-  connected: true,
+const emptyJournal: JournalData = {
+  connected: false,
   mode: 'demo',
-  account: { provider: 'ACCM', brokerServer: 'ACCMIntl-Demo', loginMasked: '316•••', company: 'ACCM Intl Limited', currency: 'USD', balance: 100261.20, equity: 100261.20, freeMargin: 100261.20, floatingProfit: 0, updatedAt: '2026-09-10T01:48:19+08:00' },
-  summary: { net: 261.20, grossProfit: 306, grossLoss: -44.80, closedTrades: 3, winRate: 33.3, profitFactor: 6.83, averageWin: 306, averageLoss: -22.40 },
-  trades: [
-    { closed: '2026-09-09T17:45:37.324Z', symbol: 'XAUUSD', side: 'BUY', volume: 1, entryPrice: 4414.14, exitPrice: 4413.71, costs: 0, net: -43 },
-    { closed: '2026-09-09T17:41:32.319Z', symbol: 'XAUUSD', side: 'BUY', volume: 1, entryPrice: 4412.97, exitPrice: 4416.03, costs: 0, net: 306 },
-    { closed: '2026-09-09T17:36:51.363Z', symbol: 'XAUUSD', side: 'SELL', volume: 0.3, entryPrice: 4413.33, exitPrice: 4413.39, costs: 0, net: -1.80 },
-  ],
-  daily: { '2026-09-10': 261.20 },
+  account: { provider: 'ACCM', brokerServer: 'Not connected', loginMasked: '—', company: '', currency: 'USD', balance: 0, equity: 0, freeMargin: 0, floatingProfit: 0, updatedAt: '' },
+  summary: { net: 0, grossProfit: 0, grossLoss: 0, closedTrades: 0, winRate: 0, profitFactor: 0, averageWin: 0, averageLoss: 0 },
+  trades: [],
+  daily: {},
 };
 
 const journalMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
@@ -2523,6 +2521,7 @@ if barstate.islast
                         array.remove(candidates, bestAt)`;
 
 export default function Home() {
+  const { getToken, isLoaded: authLoaded, isSignedIn } = useAuth();
   const workspaceScrollRef = useRef<HTMLDivElement>(null);
   const journalScrollPosition = useRef(0);
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>('desk');
@@ -2532,9 +2531,15 @@ export default function Home() {
   const [scriptCopied, setScriptCopied] = useState(false);
   const [structureScriptCopied, setStructureScriptCopied] = useState(false);
   const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
-  const [demoJournalEnabled, setDemoJournalEnabled] = useState(true);
-  const [journalData, setJournalData] = useState<JournalData>(fallbackDemoJournal);
+  const [demoJournalEnabled, setDemoJournalEnabled] = useState(false);
+  const [journalData, setJournalData] = useState<JournalData>(emptyJournal);
   const [journalFeedOnline, setJournalFeedOnline] = useState(false);
+  const [bridgeTokenHasToken, setBridgeTokenHasToken] = useState(false);
+  const [bridgeTokenLastFour, setBridgeTokenLastFour] = useState('');
+  const [bridgeTokenReveal, setBridgeTokenReveal] = useState('');
+  const [bridgeTokenBusy, setBridgeTokenBusy] = useState(false);
+  const [bridgeTokenCopied, setBridgeTokenCopied] = useState(false);
+  const [bridgeTokenError, setBridgeTokenError] = useState('');
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
@@ -2549,13 +2554,26 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     const refreshJournal = async () => {
+      if (!isSignedIn) {
+        if (active) {
+          setJournalData(emptyJournal);
+          setJournalFeedOnline(false);
+          setDemoJournalEnabled(false);
+        }
+        return;
+      }
       try {
-        const response = await fetch('/api/journal', { cache: 'no-store' });
+        const token = await getToken();
+        const response = await fetch('/api/journal', {
+          cache: 'no-store',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!response.ok) throw new Error('journal unavailable');
         const next = await response.json() as JournalData;
-        if (active && next.connected) {
-          setJournalData(next);
-          setJournalFeedOnline(true);
+        if (active) {
+          setJournalData(next.connected ? next : emptyJournal);
+          setJournalFeedOnline(Boolean(next.connected));
+          setDemoJournalEnabled(Boolean(next.connected));
         }
       } catch {
         if (active) setJournalFeedOnline(false);
@@ -2564,7 +2582,63 @@ export default function Home() {
     void refreshJournal();
     const timer = window.setInterval(refreshJournal, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [getToken, isSignedIn]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshBridgeToken = async () => {
+      if (!isSignedIn) {
+        if (active) {
+          setBridgeTokenHasToken(false);
+          setBridgeTokenLastFour('');
+          setBridgeTokenReveal('');
+        }
+        return;
+      }
+      try {
+        const token = await getToken();
+        const response = await fetch('/api/bridge-token', { cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (!response.ok) return;
+        const status = await response.json() as { hasToken: boolean; lastFour?: string };
+        if (active) {
+          setBridgeTokenHasToken(status.hasToken);
+          setBridgeTokenLastFour(status.lastFour ?? '');
+        }
+      } catch {
+        // Keep the token card available for retry without exposing authentication details.
+      }
+    };
+    void refreshBridgeToken();
+    return () => { active = false; };
+  }, [getToken, isSignedIn]);
+
+  async function rotateUserBridgeToken() {
+    if (!isSignedIn || bridgeTokenBusy) return;
+    setBridgeTokenBusy(true);
+    setBridgeTokenReveal('');
+    setBridgeTokenCopied(false);
+    setBridgeTokenError('');
+    try {
+      const sessionToken = await getToken();
+      const response = await fetch('/api/bridge-token', { method: 'POST', headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {} });
+      if (!response.ok) throw new Error('token unavailable');
+      const result = await response.json() as { token: string; lastFour: string };
+      setBridgeTokenReveal(result.token);
+      setBridgeTokenLastFour(result.lastFour);
+      setBridgeTokenHasToken(true);
+    } catch {
+      setBridgeTokenError('Could not generate a key. Please try again.');
+    } finally {
+      setBridgeTokenBusy(false);
+    }
+  }
+
+  async function copyUserBridgeToken() {
+    if (!bridgeTokenReveal) return;
+    await navigator.clipboard.writeText(bridgeTokenReveal);
+    setBridgeTokenCopied(true);
+    window.setTimeout(() => setBridgeTokenCopied(false), 1600);
+  }
 
   useEffect(() => {
     setJournalPage((page) => Math.min(page, journalTotalPages));
@@ -2694,6 +2768,17 @@ export default function Home() {
               <span className="hidden sm:inline">{scanning ? 'Refreshing' : 'Refresh live data'}</span>
               <span className="sm:hidden">{scanning ? 'Wait' : 'Refresh'}</span>
             </Button>
+            <Show when="signed-out">
+              <SignInButton mode="modal">
+                <button type="button" className="hidden h-9 items-center rounded-lg border border-cyan-300/25 bg-cyan-300/[.06] px-3 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/10 sm:inline-flex">Log in</button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button type="button" className="inline-flex h-9 items-center rounded-lg bg-cyan-300 px-3 text-xs font-semibold text-[#03121f] transition hover:bg-cyan-200">Register</button>
+              </SignUpButton>
+            </Show>
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
           </div>
         </div>
       </header>
@@ -2743,7 +2828,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-sky-200/15 bg-sky-300/[.055] px-3 py-2 text-[11px] text-sky-100">
               <span className="size-2 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(253,224,71,.7)]" />
-              {journalFeedOnline ? 'ACCM demo journal live' : 'ACCM demo snapshot connected'}
+              {isSignedIn ? (journalFeedOnline ? 'Private journal live' : 'Account ready · connect bridge') : 'Sign in for private journal'}
             </div>
           </div>
         </section>
@@ -2778,13 +2863,13 @@ export default function Home() {
             <Card className="border-cyan-300/20">
               <CardHeader className="border-b border-sky-200/10 pb-3">
                 <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> MT5 / ACCM account</CardTitle>
-                <CardDescription>Public demo journal · read-only</CardDescription>
-                <CardAction><Badge variant="outline" className="border-emerald-300/25 text-emerald-200">{journalFeedOnline ? 'LIVE DEMO' : 'DEMO'}</Badge></CardAction>
+                <CardDescription>Private account journal · read-only analytics</CardDescription>
+                <CardAction><Badge variant="outline" className="border-emerald-300/25 text-emerald-200">{journalFeedOnline ? 'LIVE' : isSignedIn ? 'READY' : 'LOCKED'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
                   <div className="flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {journalData.account.brokerServer} · {journalData.account.loginMasked}</div>
-                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">{journalFeedOnline ? 'Updating from the read-only combined advisor every few seconds.' : 'Showing the last demo snapshot while the hosted feed connects.'} This is not a real-money account.</p>
+                  <p className="mt-2 text-[10px] leading-4 text-muted-foreground">{journalFeedOnline ? 'Updating from your read-only journal bridge every few seconds.' : isSignedIn ? 'Generate your bridge key in the Journal tab to connect an account.' : 'Log in to access an isolated account journal.'}</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {[['Balance', `$${journalData.account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Equity', `$${journalData.account.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Free margin', `$${journalData.account.freeMargin.toLocaleString(undefined, { minimumFractionDigits: 2 })}`], ['Open P/L', `${journalData.account.floatingProfit < 0 ? '−' : ''}$${Math.abs(journalData.account.floatingProfit).toFixed(2)}`]].map(([label, value]) => (
@@ -2813,8 +2898,8 @@ export default function Home() {
                 <div className="flex items-start gap-3">
                   <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-300" />
                   <div>
-                    <p className="text-xs font-medium text-sky-100">Prepared for account isolation</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Future balances, orders and history will be scoped by the authenticated account—not shared globally or stored in this browser UI.</p>
+                    <p className="text-xs font-medium text-sky-100">Account isolation active</p>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Balances, orders and history are scoped to the authenticated user—not shared globally or stored in this browser UI.</p>
                   </div>
                 </div>
               </CardContent>
@@ -2827,19 +2912,32 @@ export default function Home() {
         </div>
 
         <section id="trade-journal" className={workspacePanel === 'journal' ? 'space-y-4' : 'hidden'} aria-labelledby="trade-journal-heading">
+          {authLoaded && !isSignedIn && (
+            <Card className="mx-auto mt-8 max-w-xl border-cyan-300/20 bg-[linear-gradient(145deg,rgba(34,211,238,.07),rgba(5,18,32,.92))]">
+              <CardContent className="px-6 py-10 text-center sm:px-10">
+                <div className="mx-auto grid size-12 place-items-center rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-200"><KeyRound className="size-6" /></div>
+                <h1 id="trade-journal-heading" className="mt-5 font-heading text-2xl font-semibold tracking-[-.03em]">Your private trading journal</h1>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">Register with your email, username and password, then verify your email. Your account history and bridge key remain isolated from every other user.</p>
+                <div className="mt-6 flex justify-center gap-2">
+                  <SignInButton mode="modal"><Button variant="outline" className="border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100">Log in</Button></SignInButton>
+                  <SignUpButton mode="modal"><Button className="bg-cyan-300 text-[#03121f] hover:bg-cyan-200">Create account</Button></SignUpButton>
+                </div>
+                <p className="mt-4 text-[10px] text-muted-foreground">Smart bot protection and email verification are enabled.</p>
+              </CardContent>
+            </Card>
+          )}
+          {!authLoaded && <div className="grid min-h-64 place-items-center text-sm text-muted-foreground">Loading secure account…</div>}
+          {authLoaded && isSignedIn && <>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-cyan-300">
                 <Database className="size-3.5" /> Account performance
               </div>
               <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Trading journal</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Live ACCM performance and trade history.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Your private ACCM / MT5 performance and trade history.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" className={demoJournalEnabled ? 'border-red-300/20 bg-red-300/[.04] text-red-200' : 'border-cyan-300/20 bg-cyan-300/[.05] text-cyan-100'} onClick={() => setDemoJournalEnabled((enabled) => !enabled)}>
-                {demoJournalEnabled ? 'Hide demo' : 'Show ACCM demo'}
-              </Button>
-              <Badge variant="outline" className={demoJournalEnabled ? 'w-fit border-fuchsia-300/25 bg-fuchsia-300/[.08] px-3 py-1.5 text-fuchsia-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{demoJournalEnabled ? (journalFeedOnline ? 'ACCM LIVE DEMO' : 'ACCM DEMO SNAPSHOT') : 'DEMO HIDDEN'}</Badge>
+              <Badge variant="outline" className={journalFeedOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{journalFeedOnline ? 'JOURNAL LIVE' : 'AWAITING BRIDGE'}</Badge>
             </div>
           </div>
 
@@ -2877,7 +2975,7 @@ export default function Home() {
                 <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Previous ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(-1)}>←</Button>
                 <div className="text-center">
                   <p className="text-sm font-semibold text-sky-50">{journalCalendarMode === 'month' ? `${journalMonthNames[journalCalendarCursor.month]} ${journalCalendarCursor.year}` : journalCalendarCursor.year}</p>
-                  <p className="mt-1 text-[9px] uppercase tracking-[.12em] text-muted-foreground">{demoJournalEnabled ? 'ACCM demo snapshot' : 'Demo hidden'}</p>
+                  <p className="mt-1 text-[9px] uppercase tracking-[.12em] text-muted-foreground">{demoJournalEnabled ? 'Private account journal' : 'Awaiting linked data'}</p>
                 </div>
                 <Button variant="outline" size="sm" className="size-8 border-white/10 bg-white/[.025] p-0" aria-label={`Next ${journalCalendarMode}`} onClick={() => shiftJournalCalendar(1)}>→</Button>
               </div>
@@ -2950,7 +3048,7 @@ export default function Home() {
                       <div>
                         <Database className="mx-auto size-7 text-cyan-300/65" />
                         <p className="mt-3 text-sm font-medium text-sky-100">Waiting for linked account history</p>
-                        <p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">No sample trades are shown. Load the demo journal to test this page, or connect the secure bridge later for real MT5 or ACCM history.</p>
+                        <p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">Generate your private bridge key, add it to the journal bridge, and your MT5 or ACCM history will begin syncing here.</p>
                       </div>
                     </div>
                   )}
@@ -2973,6 +3071,30 @@ export default function Home() {
             </Card>
 
             <div className="grid content-start gap-4">
+              <Card className="border-cyan-300/18" size="sm">
+                <CardContent>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><KeyRound className="size-3.5 text-cyan-300" /> Journal bridge key</p>
+                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Use this key in the Asheparte journal bridge. It is random and unrelated to your identity or device.</p>
+                    </div>
+                    {bridgeTokenHasToken && <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">•••• {bridgeTokenLastFour}</Badge>}
+                  </div>
+                  {bridgeTokenReveal && (
+                    <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/[.05] p-3">
+                      <p className="text-[9px] font-semibold uppercase tracking-[.12em] text-amber-200">Copy now — shown only this time</p>
+                      <p className="mt-2 break-all font-mono text-[10px] leading-5 text-sky-100">{bridgeTokenReveal}</p>
+                      <Button variant="outline" size="sm" className="mt-3 h-8 border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" onClick={copyUserBridgeToken}><Clipboard className="size-3.5" /> {bridgeTokenCopied ? 'Copied' : 'Copy key'}</Button>
+                    </div>
+                  )}
+                  <Button variant="outline" size="sm" className="mt-3 h-9 w-full border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" disabled={bridgeTokenBusy} onClick={rotateUserBridgeToken}>
+                    <RotateCcw className={bridgeTokenBusy ? 'size-3.5 animate-spin' : 'size-3.5'} /> {bridgeTokenBusy ? 'Generating…' : bridgeTokenHasToken ? 'Replace bridge key' : 'Generate bridge key'}
+                  </Button>
+                  {bridgeTokenError && <p className="mt-2 text-[9px] text-red-300">{bridgeTokenError}</p>}
+                  {bridgeTokenHasToken && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Replacing it revokes the previous key immediately.</p>}
+                </CardContent>
+              </Card>
+
               <Card className="border-emerald-300/15" size="sm">
                 <CardContent>
                   <p className="text-xs font-semibold text-emerald-200">Daily performance</p>
@@ -2996,9 +3118,10 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[.02] px-4 py-2.5 text-[10px] text-muted-foreground">
-            <span>{demoJournalEnabled ? (journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()} · refreshes every 5s` : 'Using saved demo snapshot · retrying every 5s') : 'Demo journal hidden'}</span>
+            <span>{demoJournalEnabled && journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()} · refreshes every 5s` : 'Awaiting your journal bridge · checking every 5s'}</span>
             <span className="text-sky-100">Deposits excluded from P/L</span>
           </div>
+          </>}
         </section>
 
         <section id="mt5-bot" className={workspacePanel === 'mt5' ? 'mb-4' : 'hidden'} aria-labelledby="mt5-bot-heading">

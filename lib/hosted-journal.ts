@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 
 type DealInput = {
@@ -28,12 +28,6 @@ function database() {
   return neon(url);
 }
 
-export function authorized(token: string | null) {
-  const expected = process.env.ASHEPARTE_BRIDGE_TOKEN ?? '';
-  if (!token || expected.length < 32 || token.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
-}
-
 function finiteNumber(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -51,7 +45,7 @@ function maskLogin(login: string) {
   return login.length <= 3 ? '•••' : `${login.slice(0, 3)}•••`;
 }
 
-export async function ingestJournal(payload: BridgePayload) {
+export async function ingestJournal(payload: BridgePayload, ownerUserId: string) {
   const account = payload.account;
   const provider = text(payload.provider || 'MT5', 24) || 'MT5';
   if (!account || typeof account !== 'object') throw new Error('account_required');
@@ -65,6 +59,7 @@ export async function ingestJournal(payload: BridgePayload) {
   const sql = database();
   await sql`CREATE TABLE IF NOT EXISTS journal_accounts (
     account_key TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo',
     provider TEXT NOT NULL,
     broker_server TEXT NOT NULL,
     login_masked TEXT NOT NULL,
@@ -80,6 +75,7 @@ export async function ingestJournal(payload: BridgePayload) {
   )`;
   await sql`CREATE TABLE IF NOT EXISTS journal_deals (
     account_key TEXT NOT NULL,
+    owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo',
     ticket TEXT NOT NULL,
     position_id TEXT NOT NULL,
     time_msc BIGINT NOT NULL,
@@ -95,10 +91,13 @@ export async function ingestJournal(payload: BridgePayload) {
     PRIMARY KEY(account_key, ticket)
   )`;
 
-  const key = accountKey(provider, server, login);
+  await sql`ALTER TABLE journal_accounts ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
+  await sql`ALTER TABLE journal_deals ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
+
+  const key = accountKey(ownerUserId, `${provider}|${server}`, login);
   await sql`INSERT INTO journal_accounts
-    (account_key,provider,broker_server,login_masked,company,currency,balance,equity,margin,free_margin,floating_profit,observed_at,updated_at)
-    VALUES (${key},${provider},${server},${maskLogin(login)},${text(account.company, 160)},${text(account.currency, 16)},
+    (account_key,owner_user_id,provider,broker_server,login_masked,company,currency,balance,equity,margin,free_margin,floating_profit,observed_at,updated_at)
+    VALUES (${key},${ownerUserId},${provider},${server},${maskLogin(login)},${text(account.company, 160)},${text(account.currency, 16)},
       ${finiteNumber(account.balance)},${finiteNumber(account.equity)},${finiteNumber(account.margin)},
       ${finiteNumber(account.freeMargin)},${finiteNumber(account.floatingProfit)},${Math.trunc(finiteNumber(account.observedAt))},NOW())
     ON CONFLICT (account_key) DO UPDATE SET
@@ -113,8 +112,8 @@ export async function ingestJournal(payload: BridgePayload) {
     const dealType = Math.trunc(finiteNumber(deal.type));
     if (!ticket || (dealType !== 0 && dealType !== 1)) continue;
     await sql`INSERT INTO journal_deals
-      (account_key,ticket,position_id,time_msc,deal_type,deal_entry,symbol,volume,price,commission,swap,fee,profit)
-      VALUES (${key},${ticket},${text(deal.positionId, 64)},${Math.trunc(finiteNumber(deal.timeMsc))},
+      (account_key,owner_user_id,ticket,position_id,time_msc,deal_type,deal_entry,symbol,volume,price,commission,swap,fee,profit)
+      VALUES (${key},${ownerUserId},${ticket},${text(deal.positionId, 64)},${Math.trunc(finiteNumber(deal.timeMsc))},
         ${dealType},${Math.trunc(finiteNumber(deal.entry))},${text(deal.symbol, 64)},${finiteNumber(deal.volume)},
         ${finiteNumber(deal.price)},${finiteNumber(deal.commission)},${finiteNumber(deal.swap)},
         ${finiteNumber(deal.fee)},${finiteNumber(deal.profit)})
@@ -124,12 +123,14 @@ export async function ingestJournal(payload: BridgePayload) {
   return { accepted };
 }
 
-export async function readJournal() {
+export async function readJournal(ownerUserId: string) {
   const sql = database();
-  const accounts = await sql`SELECT * FROM journal_accounts ORDER BY updated_at DESC LIMIT 1`;
+  await sql`ALTER TABLE journal_accounts ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
+  await sql`ALTER TABLE journal_deals ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
+  const accounts = await sql`SELECT * FROM journal_accounts WHERE owner_user_id=${ownerUserId} ORDER BY updated_at DESC LIMIT 1`;
   if (!accounts.length) return { connected: false };
   const account = accounts[0];
-  const rows = await sql`SELECT * FROM journal_deals WHERE account_key=${account.account_key}
+  const rows = await sql`SELECT * FROM journal_deals WHERE account_key=${account.account_key} AND owner_user_id=${ownerUserId}
     ORDER BY time_msc DESC LIMIT 500`;
 
   const opens = new Map<string, (typeof rows)[number]>();
