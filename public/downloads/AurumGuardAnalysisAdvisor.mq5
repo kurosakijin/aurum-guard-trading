@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.20"
+#property version   "3.21"
 #property strict
 #property description "Asheparte AI analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
 
@@ -86,6 +86,7 @@ input double DisplacementFromPOCATR           = 0.60;
 input double POCReturnToleranceATR            = 0.18;
 input double StructureStopBufferATR           = 0.12;
 input int    POCSetupExpiryBars               = 18;
+input int    CompletedCycleDisplayBars         = 18;   // remove a completed four-step map after this many setup bars
 input double FibonacciRewardMultiple          = 2.14;
 
 // --- M15 manipulation, blow-off and shock guard
@@ -701,6 +702,61 @@ void ResetPOCSequence(const string status="SEARCHING CONSOLIDATION")
    g_signalStopPrice=0.0;
    if(status!="")
       g_lastDecision=status;
+  }
+
+void ClearMarketCycleSnapshot()
+  {
+   g_cycleStage=0;
+   g_cycleDirection=0;
+   g_cyclePOC=0.0;
+   g_cycleRangeHigh=0.0;
+   g_cycleRangeLow=0.0;
+   g_cycleSweepExtreme=0.0;
+   g_cycleDistributionPrice=0.0;
+   g_cycleEntryPrice=0.0;
+   g_cycleATR=0.0;
+   g_cycleRangeStart=0;
+   g_cycleRangeEnd=0;
+   g_cycleSweepTime=0;
+   g_cycleDistributionTime=0;
+   g_cycleEntryTime=0;
+   DeleteMarketCycleBoxes();
+  }
+
+void RefreshMarketCycleLifecycle()
+  {
+   if(g_cycleStage<=0)
+      return;
+
+   int seconds=MathMax(60,PeriodSeconds(POCSetupTimeframe));
+   datetime currentOpen=iTime(g_symbol,POCSetupTimeframe,0);
+   if(currentOpen<=0)
+      return;
+
+   // An unfinished map must not survive beyond the same window used by the
+   // underlying POC signal sequence.
+   datetime unfinishedAnchor=g_cycleSweepTime>0 ? g_cycleSweepTime : g_cycleRangeEnd;
+   if(g_cycleStage<4 && unfinishedAnchor>0 && currentOpen>unfinishedAnchor+POCSetupExpiryBars*seconds)
+     {
+      ClearMarketCycleSnapshot();
+      return;
+     }
+
+   if(g_cycleStage<4 || g_cycleEntryTime<=0)
+      return;
+
+   // Keep the completed map long enough to review it, but retire it once a
+   // later completed setup candle decisively crosses the POC against the
+   // mapped direction. This prevents an old entry box and ray from remaining
+   // on-screen after price has already invalidated that opportunity.
+   double closedPrice=iClose(g_symbol,POCSetupTimeframe,1);
+   datetime closedTime=iTime(g_symbol,POCSetupTimeframe,1);
+   double invalidationBuffer=MathMax(SymbolInfoDouble(g_symbol,SYMBOL_POINT)*2.0,g_cycleATR*POCReturnToleranceATR);
+   bool invalidated=closedTime>g_cycleEntryTime && g_cycleDirection>0 && closedPrice<g_cyclePOC-invalidationBuffer;
+   invalidated=invalidated || (closedTime>g_cycleEntryTime && g_cycleDirection<0 && closedPrice>g_cyclePOC+invalidationBuffer);
+   bool expired=currentOpen>g_cycleEntryTime+MathMax(1,CompletedCycleDisplayBars)*seconds;
+   if(invalidated || expired)
+      ClearMarketCycleSnapshot();
   }
 
 bool BuildTickVolumePOC(const MqlRates &bars[],const int firstIndex,const int count,const double atrValue,double &rangeLow,double &rangeHigh,double &poc)
@@ -2265,7 +2321,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.20",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.21",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2561,6 +2617,7 @@ int OnInit()
     g_lastSafetyBar=iTime(g_symbol,SafetyTimeframe,0);
     EvaluateM15Safety();
     PrimeMarketCycleVisualization();
+    RefreshMarketCycleLifecycle();
     // Draw immediately so the analysis dashboard remains visible on weekends,
     // disconnected terminals, and charts waiting for their next market tick.
     EventSetTimer(1);
@@ -2615,6 +2672,7 @@ void OnTimer()
     // keeping it after the redraw prevents the dashboard from vanishing while
     // MT5 is waiting for the journal endpoint.
     RefreshAIAnalysisContext();
+    RefreshMarketCycleLifecycle();
     UpdateChartPanel();
     ChartRedraw(0);
     if(EnableJournalSync && GetTickCount64()>=g_journalNextSyncMs)
@@ -2650,6 +2708,7 @@ void OnTick()
    if(IsNewBar(g_symbol,SignalTimeframe,g_lastSignalBar))
       EvaluateNewEntry();
    EvaluatePendingEntry();
+   RefreshMarketCycleLifecycle();
    UpdateChartPanel();
   }
 
