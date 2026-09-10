@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   BarChart3,
@@ -2523,6 +2523,8 @@ if barstate.islast
                         array.remove(candidates, bestAt)`;
 
 export default function Home() {
+  const workspaceScrollRef = useRef<HTMLDivElement>(null);
+  const journalScrollPosition = useRef(0);
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>('desk');
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
@@ -2584,10 +2586,16 @@ export default function Home() {
   }, []);
 
   function openWorkspace(panel: WorkspacePanel, hash: string = panel) {
+    if (workspacePanel === 'journal' && workspaceScrollRef.current) {
+      journalScrollPosition.current = workspaceScrollRef.current.scrollTop;
+    }
     setWorkspacePanel(panel);
     window.history.replaceState(null, '', `#${hash}`);
     window.requestAnimationFrame(() => {
-      document.getElementById('workspace-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+      workspaceScrollRef.current?.scrollTo({
+        top: panel === 'journal' ? journalScrollPosition.current : 0,
+        behavior: panel === 'journal' ? 'auto' : 'smooth',
+      });
     });
   }
 
@@ -2714,7 +2722,16 @@ export default function Home() {
         </div>
       </nav>
 
-      <div id="workspace-scroll" className="mx-auto min-h-0 w-full max-w-[1800px] flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 lg:px-6">
+      <div
+        id="workspace-scroll"
+        ref={workspaceScrollRef}
+        onScroll={() => {
+          if (workspacePanel === 'journal' && workspaceScrollRef.current) {
+            journalScrollPosition.current = workspaceScrollRef.current.scrollTop;
+          }
+        }}
+        className="mx-auto min-h-0 w-full max-w-[1800px] flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 lg:px-6"
+      >
         <section className={workspacePanel === 'desk' ? 'mb-5' : 'hidden'}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -2979,7 +2996,7 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[.02] px-4 py-2.5 text-[10px] text-muted-foreground">
-            <span>{demoJournalEnabled ? (journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()}` : 'Using saved demo snapshot') : 'Demo journal hidden'}</span>
+            <span>{demoJournalEnabled ? (journalFeedOnline ? `Last sync ${new Date(journalData.account.updatedAt).toLocaleTimeString()} · refreshes every 5s` : 'Using saved demo snapshot · retrying every 5s') : 'Demo journal hidden'}</span>
             <span className="text-sky-100">Deposits excluded from P/L</span>
           </div>
         </section>
