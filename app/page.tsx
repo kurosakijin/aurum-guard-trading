@@ -36,7 +36,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   Card,
   CardAction,
@@ -2957,6 +2957,7 @@ export default function Home() {
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+      <Dialog open={manageAccountOpen} onOpenChange={setManageAccountOpen}>
       <header className="glass-chrome z-30 shrink-0 border-b border-sky-200/10">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between px-3 sm:px-5 lg:px-6">
           <div className="flex items-center gap-3">
@@ -3011,16 +3012,15 @@ export default function Home() {
               <button type="button" onClick={() => setSignUpOpen(true)} className="inline-flex h-9 items-center rounded-lg bg-cyan-300 px-3 text-xs font-semibold text-[#03121f] transition hover:bg-cyan-200">Register</button>
             </Show>
             <Show when="signed-in">
-              <button type="button" onClick={() => setManageAccountOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[.045] px-2.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/[.08] sm:px-3">
+              <DialogTrigger render={<button type="button" className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[.045] px-2.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/[.08] sm:px-3" />}>
                 <Settings2 className="size-3.5" /><span className="hidden sm:inline">Manage account</span><span className="sr-only sm:hidden">Manage account</span>
-              </button>
+              </DialogTrigger>
               <UserButton userProfileMode="navigation" userProfileUrl="#trade-journal" />
             </Show>
           </div>
         </div>
       </header>
 
-      <Dialog open={manageAccountOpen} onOpenChange={setManageAccountOpen}>
         <DialogContent className="max-h-[88vh] overflow-y-auto border border-cyan-300/20 bg-[#061525]/95 p-0 shadow-[0_30px_100px_rgba(0,0,0,.65)] sm:max-w-lg">
           <DialogHeader className="border-b border-white/8 px-5 py-4 pr-12">
             <DialogTitle className="flex items-center gap-2 text-sky-50"><Settings2 className="size-4 text-cyan-300" /> Manage account</DialogTitle>
@@ -3418,19 +3418,6 @@ export default function Home() {
             </Card>
 
             <div className="grid content-start gap-4">
-              <Card className={bridgeBindingStatus === 'pending' ? 'border-amber-300/20' : 'border-cyan-300/18'} size="sm">
-                <CardContent>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><KeyRound className="size-3.5 text-cyan-300" /> MT5 connection</p>
-                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{bridgeBindingStatus === 'linked' ? `${bridgeAccount?.server ?? 'MT5'} · ${bridgeAccount?.loginMasked ?? ''}` : bridgeBindingStatus === 'pending' ? 'Account detected · approval waiting' : 'No approved account'}</p>
-                    </div>
-                    <Badge variant="outline" className={bridgeBindingStatus === 'linked' ? 'border-emerald-300/20 text-emerald-200' : bridgeBindingStatus === 'pending' ? 'border-amber-300/25 text-amber-200' : 'border-white/10 text-muted-foreground'}>{bridgeBindingStatus === 'linked' ? 'PAIRED' : bridgeBindingStatus === 'pending' ? 'PENDING' : 'OFFLINE'}</Badge>
-                  </div>
-                  <Button variant="outline" size="sm" className="mt-3 h-9 w-full border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" onClick={() => setManageAccountOpen(true)}><Settings2 className="size-3.5" /> Manage account</Button>
-                </CardContent>
-              </Card>
-
               <Card className="border-emerald-300/15" size="sm">
                 <CardContent>
                   <p className="text-xs font-semibold text-emerald-200">Daily performance</p>
