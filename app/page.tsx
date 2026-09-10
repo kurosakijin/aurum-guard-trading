@@ -36,7 +36,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Card,
   CardAction,
@@ -2543,6 +2543,7 @@ export default function Home() {
   const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
   const workspaceScrollRef = useRef<HTMLDivElement>(null);
   const journalScrollPosition = useRef(0);
+  const accountReturnHash = useRef(typeof window !== 'undefined' && window.location.hash && window.location.hash !== '#manage-account' ? window.location.hash : '#desk');
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>(() =>
     typeof window === 'undefined' ? 'desk' : workspacePanelFromHash(window.location.hash));
   const [scanning, setScanning] = useState(false);
@@ -2889,11 +2890,24 @@ export default function Home() {
 
   useEffect(() => {
     const syncPanelFromHash = () => {
+      if (window.location.hash === '#manage-account') {
+        window.requestAnimationFrame(() => setManageAccountOpen(true));
+        return;
+      }
+      accountReturnHash.current = window.location.hash || '#desk';
       setWorkspacePanel(workspacePanelFromHash(window.location.hash));
     };
+    syncPanelFromHash();
     window.addEventListener('hashchange', syncPanelFromHash);
     return () => window.removeEventListener('hashchange', syncPanelFromHash);
   }, []);
+
+  function setAccountDialogOpen(open: boolean) {
+    setManageAccountOpen(open);
+    if (!open && window.location.hash === '#manage-account') {
+      window.history.replaceState(null, '', accountReturnHash.current);
+    }
+  }
 
   function openWorkspace(panel: WorkspacePanel, hash: string = panel) {
     if (workspacePanel === 'journal' && workspaceScrollRef.current) {
@@ -2957,7 +2971,7 @@ export default function Home() {
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <Dialog open={manageAccountOpen} onOpenChange={setManageAccountOpen}>
+      <Dialog open={manageAccountOpen} onOpenChange={setAccountDialogOpen}>
       <header className="glass-chrome z-30 shrink-0 border-b border-sky-200/10">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between px-3 sm:px-5 lg:px-6">
           <div className="flex items-center gap-3">
@@ -3012,10 +3026,7 @@ export default function Home() {
               <button type="button" onClick={() => setSignUpOpen(true)} className="inline-flex h-9 items-center rounded-lg bg-cyan-300 px-3 text-xs font-semibold text-[#03121f] transition hover:bg-cyan-200">Register</button>
             </Show>
             <Show when="signed-in">
-              <DialogTrigger render={<button type="button" className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[.045] px-2.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/[.08] sm:px-3" />}>
-                <Settings2 className="size-3.5" /><span className="hidden sm:inline">Manage account</span><span className="sr-only sm:hidden">Manage account</span>
-              </DialogTrigger>
-              <UserButton userProfileMode="navigation" userProfileUrl="#trade-journal" />
+              <UserButton userProfileMode="navigation" userProfileUrl="#manage-account" />
             </Show>
           </div>
         </div>
