@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Guard"
-#property version   "3.14"
+#property version   "3.15"
 #property strict
 #property description "Aurum Guard analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
 
@@ -2186,7 +2186,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.14",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.15",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2498,13 +2498,20 @@ void OnDeinit(const int reason)
    {
     EventKillTimer();
     Comment("");
-    DeleteAnalysisPanel();
-    DeleteMarketCycleBoxes();
-   ObjectDelete(0,"AG_ANALYSIS_ENTRY");
-   ObjectDelete(0,"AG_ANALYSIS_SL");
-   ObjectDelete(0,"AG_ANALYSIS_TP1");
-   ObjectDelete(0,"AG_ANALYSIS_TP2");
-   ObjectDelete(0,"AG_ANALYSIS_TP3");
+    // MT5 deinitializes and immediately initializes the EA when only the chart
+    // timeframe changes. Keep its objects in place for that handoff so the UI
+    // never flashes blank between H1, M30, M15, and other chart views.
+    const bool preserveChartUI=(reason==REASON_CHARTCHANGE);
+    if(!preserveChartUI)
+      {
+       DeleteAnalysisPanel();
+       DeleteMarketCycleBoxes();
+       ObjectDelete(0,"AG_ANALYSIS_ENTRY");
+       ObjectDelete(0,"AG_ANALYSIS_SL");
+       ObjectDelete(0,"AG_ANALYSIS_TP1");
+       ObjectDelete(0,"AG_ANALYSIS_TP2");
+       ObjectDelete(0,"AG_ANALYSIS_TP3");
+      }
    if(g_fastHandle!=INVALID_HANDLE) IndicatorRelease(g_fastHandle);
    if(g_slowHandle!=INVALID_HANDLE) IndicatorRelease(g_slowHandle);
    if(g_rsiHandle!=INVALID_HANDLE) IndicatorRelease(g_rsiHandle);
