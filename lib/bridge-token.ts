@@ -108,10 +108,14 @@ export async function approveBridgeAccount(userId: string) {
 
 export async function rejectPendingBridgeAccount(userId: string) {
   const sql = await ensureBridgeTokens();
+  const token = `ash_live_${randomBytes(32).toString('base64url')}`;
+  const tokenHash = hashBridgeToken(token);
+  const lastFour = token.slice(-4);
   await sql`UPDATE journal_bridge_tokens SET
+    token_hash=${tokenHash},token_last_four=${lastFour},rotated_at=NOW(),
     pending_provider=NULL,pending_server=NULL,pending_login=NULL,pending_at=NULL
     WHERE user_id=${userId} AND bound_login IS NULL`;
-  return bridgeTokenStatus(userId);
+  return { ...(await bridgeTokenStatus(userId)), token, lastFour };
 }
 
 export async function resetUserJournal(userId: string) {

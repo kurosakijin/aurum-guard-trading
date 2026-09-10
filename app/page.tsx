@@ -27,6 +27,7 @@ import {
   ScanLine,
   ShieldCheck,
   Sparkles,
+  Settings2,
   Trash2,
   TriangleAlert,
   UserRound,
@@ -35,6 +36,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Card,
   CardAction,
@@ -2549,6 +2551,7 @@ export default function Home() {
   const [bridgeSyncCode, setBridgeSyncCode] = useState('');
   const [journalResetArmed, setJournalResetArmed] = useState(false);
   const [journalResetEmail, setJournalResetEmail] = useState('');
+  const [manageAccountOpen, setManageAccountOpen] = useState(false);
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
@@ -2660,11 +2663,17 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) },
         body: JSON.stringify({ action }),
       });
-      const result = await response.json() as { error?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string };
+      const result = await response.json() as { error?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string; token?: string; lastFour?: string };
       if (!response.ok) throw new Error(result.error ?? 'pairing unavailable');
       setBridgeBindingStatus(result.bindingStatus ?? 'unpaired');
       setBridgeAccount(result.account ?? null);
       setBridgeSyncCode(result.syncCode ?? '');
+      if (result.token) {
+        setBridgeTokenReveal(result.token);
+        setBridgeTokenLastFour(result.lastFour ?? result.token.slice(-4));
+        setBridgeTokenHasToken(true);
+        setBridgeTokenCopied(false);
+      }
     } catch (error) {
       const message = error instanceof Error && error.message === 'account_already_linked'
         ? 'That MT5 account is already paired with another Asheparte user.'
@@ -2863,11 +2872,83 @@ export default function Home() {
               </SignUpButton>
             </Show>
             <Show when="signed-in">
+              <button type="button" onClick={() => setManageAccountOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[.045] px-2.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/[.08] sm:px-3">
+                <Settings2 className="size-3.5" /><span className="hidden sm:inline">Manage account</span><span className="sr-only sm:hidden">Manage account</span>
+              </button>
               <UserButton />
             </Show>
           </div>
         </div>
       </header>
+
+      <Dialog open={manageAccountOpen} onOpenChange={setManageAccountOpen}>
+        <DialogContent className="max-h-[88vh] overflow-y-auto border border-cyan-300/20 bg-[#061525]/95 p-0 shadow-[0_30px_100px_rgba(0,0,0,.65)] sm:max-w-lg">
+          <DialogHeader className="border-b border-white/8 px-5 py-4 pr-12">
+            <DialogTitle className="flex items-center gap-2 text-sky-50"><Settings2 className="size-4 text-cyan-300" /> Manage account</DialogTitle>
+            <DialogDescription className="text-[11px]">Private MT5 pairing, bridge credentials, and journal reset.</DialogDescription>
+          </DialogHeader>
+          <div className="px-5 pb-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><KeyRound className="size-3.5 text-cyan-300" /> Journal bridge key</p>
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Private to this Asheparte user and unrelated to the device.</p>
+              </div>
+              {bridgeTokenHasToken && <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">•••• {bridgeTokenLastFour}</Badge>}
+            </div>
+            {bridgeTokenReveal && (
+              <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/[.05] p-3">
+                <p className="text-[9px] font-semibold uppercase tracking-[.12em] text-amber-200">Copy now — shown only this time</p>
+                <p className="mt-2 break-all font-mono text-[10px] leading-5 text-sky-100">{bridgeTokenReveal}</p>
+                <Button variant="outline" size="sm" className="mt-3 h-8 border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" onClick={copyUserBridgeToken}><Clipboard className="size-3.5" /> {bridgeTokenCopied ? 'Copied' : 'Copy key'}</Button>
+              </div>
+            )}
+            {bridgeBindingStatus === 'pending' && bridgeAccount && (
+              <div className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/[.06] p-3">
+                <p className="flex items-center gap-2 text-[10px] font-semibold text-amber-200"><TriangleAlert className="size-3.5" /> Confirm detected MT5 account</p>
+                <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
+                <p className="mt-2 text-[9px] leading-4 text-muted-foreground">The running advisor requested this pairing. No trades are accepted until you approve it.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button size="sm" className="h-8 bg-emerald-300 text-[10px] text-[#03121f] hover:bg-emerald-200" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('approve')}><Check className="size-3.5" /> Approve</Button>
+                  <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('reject')}>Reject &amp; revoke</Button>
+                </div>
+              </div>
+            )}
+            {bridgeBindingStatus === 'linked' && bridgeAccount && (
+              <div className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/[.05] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-[10px] font-semibold text-emerald-200"><Check className="size-3.5" /> Account paired</p>
+                  {bridgeSyncCode && <Badge variant="outline" className="border-cyan-300/20 font-mono text-[9px] text-cyan-200">{bridgeSyncCode}</Badge>}
+                </div>
+                <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
+                <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Only this exact provider, server, and MT5 login can write to the journal.</p>
+              </div>
+            )}
+            {bridgeTokenHasToken && bridgeBindingStatus === 'unpaired' && <p className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[.04] p-3 text-[9px] leading-4 text-muted-foreground">Waiting for MT5 detection. The account is checked every five seconds.</p>}
+            <Button variant="outline" size="sm" className="mt-3 h-9 w-full border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" disabled={bridgeTokenBusy} onClick={rotateUserBridgeToken}>
+              <RotateCcw className={bridgeTokenBusy ? 'size-3.5 animate-spin' : 'size-3.5'} /> {bridgeTokenBusy ? 'Generating…' : bridgeTokenHasToken ? 'Replace bridge key' : 'Generate bridge key'}
+            </Button>
+            {bridgeTokenError && <p className="mt-2 text-[9px] text-red-300">{bridgeTokenError}</p>}
+            {bridgeTokenHasToken && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Replacing the key revokes the previous one while keeping the approved account lock.</p>}
+            <div className="mt-4 border-t border-red-300/10 pt-3">
+              {journalResetArmed ? (
+                <div className="rounded-lg border border-red-300/25 bg-red-300/[.055] p-3">
+                  <label htmlFor="journal-reset-email" className="text-[10px] font-semibold text-red-100">Confirm with your registered email</label>
+                  <Input id="journal-reset-email" type="email" autoComplete="email" value={journalResetEmail} onChange={(event) => setJournalResetEmail(event.target.value)} placeholder="you@example.com" className="mt-2 border-red-300/20 bg-black/15 text-[11px]" />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button size="sm" className="h-8 bg-red-400 text-[10px] text-[#210509] hover:bg-red-300" disabled={bridgeTokenBusy || !journalResetEmail.trim()} onClick={resetUserJournal}><Trash2 className="size-3.5" /> Permanently reset</Button>
+                    <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => { setJournalResetArmed(false); setJournalResetEmail(''); setBridgeTokenError(''); }}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" className="h-9 w-full border-red-300/20 bg-red-300/[.035] text-[10px] text-red-300" disabled={bridgeTokenBusy} onClick={resetUserJournal}><Trash2 className="size-3.5" /> Reset journal & pairing</Button>
+              )}
+              <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Deletes journal history, unpairs MT5, revokes the old key, and creates a fresh key. This cannot be undone.</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <nav className="glass-chrome shrink-0 border-b border-sky-200/10 px-2 py-2" aria-label="Trader workspace">
         <div className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto">
@@ -3157,70 +3238,16 @@ export default function Home() {
             </Card>
 
             <div className="grid content-start gap-4">
-              <Card className="border-cyan-300/18" size="sm">
+              <Card className={bridgeBindingStatus === 'pending' ? 'border-amber-300/20' : 'border-cyan-300/18'} size="sm">
                 <CardContent>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><KeyRound className="size-3.5 text-cyan-300" /> Journal bridge key</p>
-                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Use this key in the Asheparte journal bridge. It is random and unrelated to your identity or device.</p>
+                      <p className="flex items-center gap-2 text-xs font-semibold text-cyan-100"><KeyRound className="size-3.5 text-cyan-300" /> MT5 connection</p>
+                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{bridgeBindingStatus === 'linked' ? `${bridgeAccount?.server ?? 'MT5'} · ${bridgeAccount?.loginMasked ?? ''}` : bridgeBindingStatus === 'pending' ? 'Account detected · approval waiting' : 'No approved account'}</p>
                     </div>
-                    {bridgeTokenHasToken && <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">•••• {bridgeTokenLastFour}</Badge>}
+                    <Badge variant="outline" className={bridgeBindingStatus === 'linked' ? 'border-emerald-300/20 text-emerald-200' : bridgeBindingStatus === 'pending' ? 'border-amber-300/25 text-amber-200' : 'border-white/10 text-muted-foreground'}>{bridgeBindingStatus === 'linked' ? 'PAIRED' : bridgeBindingStatus === 'pending' ? 'PENDING' : 'OFFLINE'}</Badge>
                   </div>
-                  {bridgeTokenReveal && (
-                    <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/[.05] p-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-[.12em] text-amber-200">Copy now — shown only this time</p>
-                      <p className="mt-2 break-all font-mono text-[10px] leading-5 text-sky-100">{bridgeTokenReveal}</p>
-                      <Button variant="outline" size="sm" className="mt-3 h-8 border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" onClick={copyUserBridgeToken}><Clipboard className="size-3.5" /> {bridgeTokenCopied ? 'Copied' : 'Copy key'}</Button>
-                    </div>
-                  )}
-                  {bridgeBindingStatus === 'pending' && bridgeAccount && (
-                    <div className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/[.06] p-3">
-                      <p className="flex items-center gap-2 text-[10px] font-semibold text-amber-200"><TriangleAlert className="size-3.5" /> Confirm detected MT5 account</p>
-                      <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
-                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
-                      <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Approve only if this matches your current MT5 account. No trades are accepted before approval.</p>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <Button size="sm" className="h-8 bg-emerald-300 text-[10px] text-[#03121f] hover:bg-emerald-200" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('approve')}><Check className="size-3.5" /> Approve</Button>
-                        <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('reject')}>Reject</Button>
-                      </div>
-                    </div>
-                  )}
-                  {bridgeBindingStatus === 'linked' && bridgeAccount && (
-                    <div className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/[.05] p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="flex items-center gap-2 text-[10px] font-semibold text-emerald-200"><Check className="size-3.5" /> Account paired</p>
-                        {bridgeSyncCode && <Badge variant="outline" className="border-cyan-300/20 font-mono text-[9px] text-cyan-200">{bridgeSyncCode}</Badge>}
-                      </div>
-                      <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
-                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
-                      <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Only this exact provider, server and MT5 login can write to your journal.</p>
-                    </div>
-                  )}
-                  {bridgeTokenHasToken && bridgeBindingStatus === 'unpaired' && (
-                    <p className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[.04] p-3 text-[9px] leading-4 text-muted-foreground">Waiting for MT5 detection. Keep the advisor running; this card checks for the account every 5 seconds.</p>
-                  )}
-                  <Button variant="outline" size="sm" className="mt-3 h-9 w-full border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" disabled={bridgeTokenBusy} onClick={rotateUserBridgeToken}>
-                    <RotateCcw className={bridgeTokenBusy ? 'size-3.5 animate-spin' : 'size-3.5'} /> {bridgeTokenBusy ? 'Generating…' : bridgeTokenHasToken ? 'Replace bridge key' : 'Generate bridge key'}
-                  </Button>
-                  {bridgeTokenError && <p className="mt-2 text-[9px] text-red-300">{bridgeTokenError}</p>}
-                  {bridgeTokenHasToken && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Replacing it revokes the previous key immediately while keeping the approved MT5 account lock.</p>}
-                  <div className="mt-4 border-t border-red-300/10 pt-3">
-                    {journalResetArmed ? (
-                      <div className="rounded-lg border border-red-300/25 bg-red-300/[.055] p-3">
-                        <label htmlFor="journal-reset-email" className="text-[10px] font-semibold text-red-100">Confirm with your registered email</label>
-                        <Input id="journal-reset-email" type="email" autoComplete="email" value={journalResetEmail} onChange={(event) => setJournalResetEmail(event.target.value)} placeholder="you@example.com" className="mt-2 border-red-300/20 bg-black/15 text-[11px]" />
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          <Button size="sm" className="h-8 bg-red-400 text-[10px] text-[#210509] hover:bg-red-300" disabled={bridgeTokenBusy || !journalResetEmail.trim()} onClick={resetUserJournal}><Trash2 className="size-3.5" /> Permanently reset</Button>
-                          <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => { setJournalResetArmed(false); setJournalResetEmail(''); setBridgeTokenError(''); }}>Cancel</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button variant="outline" size="sm" className="h-9 w-full border-red-300/20 bg-red-300/[.035] text-[10px] text-red-300" disabled={bridgeTokenBusy} onClick={resetUserJournal}>
-                        <Trash2 className="size-3.5" /> Reset journal & pairing
-                      </Button>
-                    )}
-                    <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Deletes your journal history and account snapshot, unpairs MT5, revokes the old key, and creates a fresh key. This cannot be undone.</p>
-                  </div>
+                  <Button variant="outline" size="sm" className="mt-3 h-9 w-full border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" onClick={() => setManageAccountOpen(true)}><Settings2 className="size-3.5" /> Manage account</Button>
                 </CardContent>
               </Card>
 
