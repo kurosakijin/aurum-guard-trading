@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.22"
+#property version   "3.23"
 #property strict
 #property description "Asheparte AI analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
 
@@ -101,6 +101,10 @@ input bool   RequireBlowOffVolume            = true;
 input double ShockRangeATR                  = 2.00;
 input double ShockGapATR                    = 0.75;
 input int    SafetyPauseBars                = 3;
+input bool   DetectCountertrendReclaim      = true; // warn after a strong impulse is sharply reclaimed
+input double ReclaimImpulseMinimumATR       = 1.20;
+input double ReclaimMinimumRecovery         = 0.35; // fraction of the impulse candle recovered by the next close
+input double ReclaimMinimumBodyShare        = 0.45;
 input bool   EnableTerminalAlerts           = true;
 
 // --- Compact chart dashboard
@@ -182,6 +186,7 @@ double   g_manualTP2 = 0.0;
 double   g_manualTP3 = 0.0;
 int      g_manualDirection = 0;
 datetime g_lastPublishedSignalBar = 0;
+datetime g_lastH1ReclaimWarningBar = 0;
 string   g_journalTimeKey = "";
 string   g_journalTicketKey = "";
 ulong    g_journalNextSyncMs = 0;
@@ -217,6 +222,7 @@ int g_safetyATRHandle = INVALID_HANDLE;
 int g_safetyADXHandle = INVALID_HANDLE;
 int g_trendFastHandle = INVALID_HANDLE;
 int g_trendSlowHandle = INVALID_HANDLE;
+int g_trendATRHandle = INVALID_HANDLE;
 int g_setupATRHandle = INVALID_HANDLE;
 int g_safetyRSIHandle = INVALID_HANDLE;
 int g_trendRSIHandle = INVALID_HANDLE;
@@ -520,6 +526,36 @@ bool MetalsConfirmDirection(const int direction,string &reason,double &correlati
 //+------------------------------------------------------------------+
 //| M15 safety                                                       |
 //+------------------------------------------------------------------+
+bool DetectH1CountertrendReclaim(string &warning)
+  {
+   if(!DetectCountertrendReclaim)
+      return false;
+
+   MqlRates bars[];
+   double atr[];
+   if(!ReadRates(g_symbol,TrendTimeframe,4,bars) || !ReadBuffer(g_trendATRHandle,4,atr))
+      return false;
+   if(bars[1].time<=0 || bars[1].time==g_lastH1ReclaimWarningBar)
+      return false;
+
+   double point=SymbolInfoDouble(g_symbol,SYMBOL_POINT);
+   double currentRange=MathMax(bars[1].high-bars[1].low,point);
+   double impulseRange=MathMax(bars[2].high-bars[2].low,point);
+   double impulseBodyShare=MathAbs(bars[2].close-bars[2].open)/impulseRange;
+   double currentBodyShare=MathAbs(bars[1].close-bars[1].open)/currentRange;
+   double impulseCloseLocation=(bars[2].close-bars[2].low)/impulseRange;
+   bool bearishImpulse=bars[2].close<bars[2].open && impulseRange>=atr[2]*ReclaimImpulseMinimumATR && impulseBodyShare>=0.60 && impulseCloseLocation<=0.25;
+   bool bullishImpulse=bars[2].close>bars[2].open && impulseRange>=atr[2]*ReclaimImpulseMinimumATR && impulseBodyShare>=0.60 && impulseCloseLocation>=0.75;
+   bool bullishReclaim=bearishImpulse && bars[1].close>bars[1].open && currentBodyShare>=ReclaimMinimumBodyShare && bars[1].close>=bars[2].low+impulseRange*ReclaimMinimumRecovery;
+   bool bearishReclaim=bullishImpulse && bars[1].close<bars[1].open && currentBodyShare>=ReclaimMinimumBodyShare && bars[1].close<=bars[2].high-impulseRange*ReclaimMinimumRecovery;
+   if(!bullishReclaim && !bearishReclaim)
+      return false;
+
+   g_lastH1ReclaimWarningBar=bars[1].time;
+   warning=bullishReclaim ? "H1 BULLISH RECLAIM - PROTECT SELL" : "H1 BEARISH RECLAIM - PROTECT BUY";
+   return true;
+  }
+
 void EvaluateM15Safety()
   {
    if(!EnableM15Safety)
@@ -567,6 +603,22 @@ void EvaluateM15Safety()
    bool blowOffBottom=fast[1]-candle.low>=atr[1]*BlowOffDistanceATR && range>=atr[1]*BlowOffRangeATR && lowerShare>=0.30 && closeLocation>=0.45 && fast[1]<slow[1] && volumeOK;
    bool shock=range>=atr[1]*ShockRangeATR || MathAbs(candle.open-bars[2].close)>=atr[1]*ShockGapATR;
 
+   // Two-candle failed-breakdown / failed-breakout warning. The impulse must
+   // close near its extreme, then the next completed M15 candle must recover a
+   // meaningful share with a real body. This is a countertrend warning only;
+   // it never creates or reverses a trade plan by itself.
+   MqlRates impulse=bars[2];
+   double impulseRange=MathMax(impulse.high-impulse.low,point);
+   double impulseBodyShare=MathAbs(impulse.close-impulse.open)/impulseRange;
+   double reclaimBodyShare=MathAbs(candle.close-candle.open)/range;
+   double impulseCloseLocation=(impulse.close-impulse.low)/impulseRange;
+   bool bearishImpulse=impulse.close<impulse.open && impulseRange>=atr[2]*ReclaimImpulseMinimumATR && impulseBodyShare>=0.60 && impulseCloseLocation<=0.25;
+   bool bullishImpulse=impulse.close>impulse.open && impulseRange>=atr[2]*ReclaimImpulseMinimumATR && impulseBodyShare>=0.60 && impulseCloseLocation>=0.75;
+   bool bullishReclaim=DetectCountertrendReclaim && bearishImpulse && candle.close>candle.open && reclaimBodyShare>=ReclaimMinimumBodyShare && candle.close>=impulse.low+impulseRange*ReclaimMinimumRecovery;
+   bool bearishReclaim=DetectCountertrendReclaim && bullishImpulse && candle.close<candle.open && reclaimBodyShare>=ReclaimMinimumBodyShare && candle.close<=impulse.high-impulseRange*ReclaimMinimumRecovery;
+   string h1ReclaimWarning="";
+   bool h1Reclaim=DetectH1CountertrendReclaim(h1ReclaimWarning);
+
    string warning="";
    if(blowOffTop)
       warning="BLOW-OFF TOP - WAIT";
@@ -576,6 +628,12 @@ void EvaluateM15Safety()
       warning="MANIPULATION - AVOID LONG";
    else if(sellSideSweep)
       warning="MANIPULATION - AVOID SHORT";
+   else if(bullishReclaim)
+      warning="BULLISH RECLAIM - PROTECT SELL";
+   else if(bearishReclaim)
+      warning="BEARISH RECLAIM - PROTECT BUY";
+   else if(h1Reclaim)
+      warning=h1ReclaimWarning;
    else if(shock)
       warning="VOLATILITY SHOCK - WAIT";
 
@@ -2341,7 +2399,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.22",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.23",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2572,6 +2630,11 @@ int OnInit()
       Print("Aurum Guard: invalid smart-entry controls. Check ADX, candle, volatility and setup-score inputs.");
       return INIT_PARAMETERS_INCORRECT;
      }
+   if(ReclaimImpulseMinimumATR<=0.0 || ReclaimMinimumRecovery<=0.0 || ReclaimMinimumRecovery>1.0 || ReclaimMinimumBodyShare<=0.0 || ReclaimMinimumBodyShare>1.0)
+     {
+      Print("Aurum Guard: invalid countertrend reclaim controls.");
+      return INIT_PARAMETERS_INCORRECT;
+     }
    if(SignalTimeframe!=PERIOD_M1 || M1ExecutionWindowBars<1 || MinimumMTFConfirmationPoints<4 || MinimumMTFConfirmationPoints>9 || M1MinimumBodyShare<0.0 || M1MinimumBodyShare>1.0 || RSIBullishConfirmation<0.0 || RSIBullishConfirmation>100.0 || RSIBearishConfirmation<0.0 || RSIBearishConfirmation>100.0 || M1LongRSITrigger<0.0 || M1MaximumLongRSI>100.0 || M1LongRSITrigger>=M1MaximumLongRSI || M1MinimumShortRSI<0.0 || M1ShortRSITrigger>100.0 || M1MinimumShortRSI>=M1ShortRSITrigger)
      {
       Print("Aurum Guard: execution must be M1 and RSI confirmation/trigger ranges must be valid.");
@@ -2621,11 +2684,12 @@ int OnInit()
    g_safetyADXHandle=iADX(g_symbol,SafetyTimeframe,ADXPeriod);
    g_trendFastHandle=iMA(g_symbol,TrendTimeframe,FastEMAPeriod,0,MODE_EMA,PRICE_CLOSE);
    g_trendSlowHandle=iMA(g_symbol,TrendTimeframe,SlowEMAPeriod,0,MODE_EMA,PRICE_CLOSE);
+   g_trendATRHandle=iATR(g_symbol,TrendTimeframe,ATRPeriod);
    g_setupATRHandle=iATR(g_symbol,POCSetupTimeframe,ATRPeriod);
    g_safetyRSIHandle=iRSI(g_symbol,SafetyTimeframe,RSIPeriod,PRICE_CLOSE);
    g_trendRSIHandle=iRSI(g_symbol,TrendTimeframe,RSIPeriod,PRICE_CLOSE);
    g_dailyRSIHandle=iRSI(g_symbol,PERIOD_D1,RSIPeriod,PRICE_CLOSE);
-   if(g_fastHandle==INVALID_HANDLE || g_slowHandle==INVALID_HANDLE || g_rsiHandle==INVALID_HANDLE || g_atrHandle==INVALID_HANDLE || g_dailyEMAHandle==INVALID_HANDLE || g_safetyFastHandle==INVALID_HANDLE || g_safetySlowHandle==INVALID_HANDLE || g_safetyATRHandle==INVALID_HANDLE || g_safetyADXHandle==INVALID_HANDLE || g_trendFastHandle==INVALID_HANDLE || g_trendSlowHandle==INVALID_HANDLE || g_setupATRHandle==INVALID_HANDLE || g_safetyRSIHandle==INVALID_HANDLE || g_trendRSIHandle==INVALID_HANDLE || g_dailyRSIHandle==INVALID_HANDLE)
+   if(g_fastHandle==INVALID_HANDLE || g_slowHandle==INVALID_HANDLE || g_rsiHandle==INVALID_HANDLE || g_atrHandle==INVALID_HANDLE || g_dailyEMAHandle==INVALID_HANDLE || g_safetyFastHandle==INVALID_HANDLE || g_safetySlowHandle==INVALID_HANDLE || g_safetyATRHandle==INVALID_HANDLE || g_safetyADXHandle==INVALID_HANDLE || g_trendFastHandle==INVALID_HANDLE || g_trendSlowHandle==INVALID_HANDLE || g_trendATRHandle==INVALID_HANDLE || g_setupATRHandle==INVALID_HANDLE || g_safetyRSIHandle==INVALID_HANDLE || g_trendRSIHandle==INVALID_HANDLE || g_dailyRSIHandle==INVALID_HANDLE)
      {
       Print("Aurum Guard: failed to create indicator handles. Error ",GetLastError());
       return INIT_FAILED;
@@ -2680,6 +2744,7 @@ void OnDeinit(const int reason)
    if(g_safetyADXHandle!=INVALID_HANDLE) IndicatorRelease(g_safetyADXHandle);
    if(g_trendFastHandle!=INVALID_HANDLE) IndicatorRelease(g_trendFastHandle);
    if(g_trendSlowHandle!=INVALID_HANDLE) IndicatorRelease(g_trendSlowHandle);
+   if(g_trendATRHandle!=INVALID_HANDLE) IndicatorRelease(g_trendATRHandle);
    if(g_setupATRHandle!=INVALID_HANDLE) IndicatorRelease(g_setupATRHandle);
    if(g_safetyRSIHandle!=INVALID_HANDLE) IndicatorRelease(g_safetyRSIHandle);
    if(g_trendRSIHandle!=INVALID_HANDLE) IndicatorRelease(g_trendRSIHandle);
