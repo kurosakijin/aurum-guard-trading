@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from aurum_guard_ai_core import AurumProbabilityModel, FEATURE_COLUMNS, build_feature_frame
+from aurum_guard_ai_core import AurumProbabilityModel, FEATURE_COLUMNS, build_feature_frame, candidate_direction
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,6 +37,61 @@ def rates_frame(mt5: object, symbol: str, bars: int = 350) -> pd.DataFrame:
     if rates is None or len(rates) < 150:
         raise RuntimeError(f"MT5 returned insufficient {symbol} history: {mt5.last_error()}")
     return pd.DataFrame(rates)
+
+
+def closed_timeframe_state(mt5: object, symbol: str, timeframe: int) -> dict[str, float]:
+    """Read one completed timeframe using the same 20/50 EMA + RSI basis as the EA."""
+    rates = mt5.copy_rates_from_pos(symbol, timeframe, 1, 80)
+    if rates is None or len(rates) < 55:
+        raise RuntimeError(f"MT5 returned insufficient {symbol} timeframe history: {mt5.last_error()}")
+    frame = pd.DataFrame(rates).sort_values("time")
+    close = frame["close"].astype(float)
+    ema20 = close.ewm(span=20, adjust=False).mean()
+    ema50 = close.ewm(span=50, adjust=False).mean()
+    change = close.diff()
+    average_gain = change.clip(lower=0.0).ewm(alpha=1.0 / 14.0, adjust=False).mean()
+    average_loss = (-change.clip(upper=0.0)).ewm(alpha=1.0 / 14.0, adjust=False).mean()
+    relative_strength = average_gain / average_loss.replace(0.0, float("nan"))
+    rsi = (100.0 - 100.0 / (1.0 + relative_strength)).fillna(100.0)
+    return {
+        "close": float(close.iloc[-1]),
+        "ema20": float(ema20.iloc[-1]),
+        "ema50": float(ema50.iloc[-1]),
+        "ema50_previous": float(ema50.iloc[-2]),
+        "rsi": float(rsi.iloc[-1]),
+    }
+
+
+def four_timeframe_plan(mt5: object, symbol: str) -> tuple[int, str]:
+    """Mirror the EA's M15/H1/D1 direction score; M1 remains the timing layer."""
+    m15 = closed_timeframe_state(mt5, symbol, mt5.TIMEFRAME_M15)
+    h1 = closed_timeframe_state(mt5, symbol, mt5.TIMEFRAME_H1)
+    d1 = closed_timeframe_state(mt5, symbol, mt5.TIMEFRAME_D1)
+
+    def score(direction: int) -> tuple[int, int, int]:
+        m15_score = int((m15["close"] - m15["ema20"]) * direction > 0.0)
+        m15_score += int((m15["ema20"] - m15["ema50"]) * direction > 0.0)
+        m15_score += int((m15["rsi"] - 50.0) * direction >= 0.0)
+        h1_score = int((h1["close"] - h1["ema20"]) * direction > 0.0)
+        h1_score += int((h1["ema20"] - h1["ema50"]) * direction > 0.0)
+        h1_score += int((h1["rsi"] - 50.0) * direction >= 0.0)
+        d1_score = int((d1["close"] - d1["ema50"]) * direction > 0.0)
+        d1_score += int((d1["ema50"] - d1["ema50_previous"]) * direction > 0.0)
+        d1_score += int((d1["rsi"] - 50.0) * direction >= 0.0)
+        return m15_score, h1_score, d1_score
+
+    buy = score(1)
+    sell = score(-1)
+    buy_total = sum(buy)
+    sell_total = sum(sell)
+    buy_confirmed = buy[0] >= 2 and buy[1] >= 1 and buy[2] >= 1 and buy_total >= 6
+    sell_confirmed = sell[0] >= 2 and sell[1] >= 1 and sell[2] >= 1 and sell_total >= 6
+    if buy_confirmed and not sell_confirmed:
+        return 1, f"M15 {buy[0]}/3 H1 {buy[1]}/3 D1 {buy[2]}/3"
+    if sell_confirmed and not buy_confirmed:
+        return -1, f"M15 {sell[0]}/3 H1 {sell[1]}/3 D1 {sell[2]}/3"
+    best = buy if buy_total >= sell_total else sell
+    return 0, f"M15 {best[0]}/3 H1 {best[1]}/3 D1 {best[2]}/3"
 
 
 def write_signal(path: Path, row: list[object]) -> None:
@@ -97,7 +152,18 @@ def main() -> int:
                 latest = features.iloc[-1]
                 bar_time = int(latest["time"])
                 if bar_time != last_bar_time:
+                    plan_direction, plan_detail = four_timeframe_plan(mt5, args.gold)
+                    m1_direction = int(candidate_direction(latest.to_frame().T).iloc[0])
                     raw_direction, long_probability, short_probability, no_trade_probability, health_code, drift_share = model.decide_frame_row(latest)
+                    if plan_direction == 0:
+                        raw_direction = 0
+                        health_code = "HTF_NOT_ALIGNED"
+                    elif m1_direction == 0:
+                        raw_direction = 0
+                        health_code = "HTF_BUY_WAIT_M1" if plan_direction > 0 else "HTF_SELL_WAIT_M1"
+                    elif m1_direction != plan_direction:
+                        raw_direction = 0
+                        health_code = "TIMEFRAME_CONFLICT"
                     account = mt5.account_info()
                     if account is None:
                         raise RuntimeError(f"MT5 account equity is unavailable: {mt5.last_error()}")
@@ -138,7 +204,16 @@ def main() -> int:
                             f"{drift_share:.6f}",
                         ],
                     )
-                    raw_label = "BUY" if raw_direction > 0 else "SELL" if raw_direction < 0 else "NO TRADE"
+                    if health_code == "HTF_BUY_WAIT_M1":
+                        raw_label = "BUY PLAN - WAIT M1"
+                    elif health_code == "HTF_SELL_WAIT_M1":
+                        raw_label = "SELL PLAN - WAIT M1"
+                    elif health_code == "TIMEFRAME_CONFLICT":
+                        raw_label = "WAIT - M1/HTF CONFLICT"
+                    elif health_code == "HTF_NOT_ALIGNED":
+                        raw_label = "WAIT - HTF NOT ALIGNED"
+                    else:
+                        raw_label = "BUY" if raw_direction > 0 else "SELL" if raw_direction < 0 else "NO TRADE"
                     if history_path is not None:
                         append_history(history_path, [
                             generated_at, bar_time, model.model_id, raw_label, health_code,
@@ -151,7 +226,7 @@ def main() -> int:
                         f"{pd.to_datetime(bar_time, unit='s', utc=True)} | {label} | health={health_code} drift={drift_share:.1%} | "
                         f"buy={long_probability:.1%} sell={short_probability:.1%} "
                         f"wait={no_trade_probability:.1%} threshold={model.threshold:.1%} | "
-                        f"equity={equity:.2f} peakDD={equity_drawdown_percent:.2f}% "
+                        f"equity={equity:.2f} peakDD={equity_drawdown_percent:.2f}% 4tf={plan_detail} "
                         f"model_health={model_health_code}"
                     )
                     last_bar_time = bar_time

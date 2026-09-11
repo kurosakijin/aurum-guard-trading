@@ -7,7 +7,7 @@ classifier estimates confidence for that candidate. The result is displayed as
 context only. Neither this package nor the Analysis Advisor can place, modify,
 or close an MT5 order, and the score does not promise profit.
 
-Advisor v3.21 studies a four-stage M15/M30/H1 sequence: tight consolidation and
+Advisor v3.22 studies a four-stage M15/M30/H1 sequence: tight consolidation and
 tick-volume POC, liquidity sweep, directional displacement, then a defended
 return to POC. It combines that structure with M15/H1/D1 confirmation, completed
 M1 timing, Gold/Silver agreement, spread, news, and shock checks. It draws a
@@ -91,7 +91,11 @@ It is therefore stored as `asheparte_ai_v9_shadow.joblib` with
 `deployment_eligible=false`. Run `run_v9_shadow.cmd` to collect new forward
 evidence. The runner publishes to the advisor's stable
 `aurum_guard_ai_signal.csv` context file, so model-version filenames cannot make
-the MT5 panel appear stale. Do not retune against `asheparte_ai_v9_report.json`; that newest period
+the MT5 panel appear stale. The v9.3 runner also mirrors the advisor's closed-bar
+M15/H1/D1 score as a supervisory direction layer while retaining M1 for entry
+timing. It reports `BUY/SELL PLAN - WAIT M1` instead of pretending that an
+aligned higher-timeframe plan does not exist. Do not retune against
+`asheparte_ai_v9_report.json`; that newest period
 has now been observed and is no longer an untouched test.
 
 ## Safe first run
@@ -112,7 +116,7 @@ has now been observed and is no longer an untouched test.
    outcomes conservatively.
 6. Run `run_ai_gate.cmd`. It publishes one analysis score after each completed
    M1 candle.
-7. Attach Asheparte Analysis Advisor v3.21 with `UseAIAnalysisLayer=true`.
+7. Attach Asheparte Analysis Advisor v3.22 with `UseAIAnalysisLayer=true`.
 8. Compare its BUY / SELL / WAIT context with your own chart reading. You remain
    responsible for every manual trade decision.
 

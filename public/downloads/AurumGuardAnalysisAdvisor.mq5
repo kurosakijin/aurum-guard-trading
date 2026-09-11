@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.21"
+#property version   "3.22"
 #property strict
 #property description "Asheparte AI analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
 
@@ -1479,6 +1479,26 @@ void RefreshAIAnalysisContext()
       g_aiPanelStatus="WAIT - NO CANDIDATE";
       return;
      }
+   if(scoreHealth=="HTF_BUY_WAIT_M1")
+     {
+      g_aiPanelStatus="BUY PLAN - WAIT M1";
+      return;
+     }
+   if(scoreHealth=="HTF_SELL_WAIT_M1")
+     {
+      g_aiPanelStatus="SELL PLAN - WAIT M1";
+      return;
+     }
+   if(scoreHealth=="TIMEFRAME_CONFLICT")
+     {
+      g_aiPanelStatus="WAIT - M1/HTF CONFLICT";
+      return;
+     }
+   if(scoreHealth=="HTF_NOT_ALIGNED")
+     {
+      g_aiPanelStatus="WAIT - HTF NOT ALIGNED";
+      return;
+     }
 
    double directionalProbability=MathMax(longProbability,shortProbability);
    string directionText=longProbability>shortProbability ? "BUY" : "SELL";
@@ -2321,7 +2341,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.21",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.22",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
