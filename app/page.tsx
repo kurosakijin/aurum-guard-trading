@@ -3483,7 +3483,7 @@ export default function Home() {
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Asheparte AI Analysis Advisor</CardTitle>
-              <CardDescription>MT5 v3.24 · Gold structure, reclaim warnings, post-SL cooldown, four-timeframe confirmation and AI context</CardDescription>
+              <CardDescription>MT5 v3.25 · Gold structure, reclaim warnings, post-SL plan review, four-timeframe confirmation and AI context</CardDescription>
               <CardAction><Badge className="border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">ANALYSIS ONLY · NO ORDERS</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
@@ -3496,11 +3496,11 @@ export default function Home() {
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <a
-                        href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.24"
+                        href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.25"
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
                       >
-                        <Download className="size-4" /> Download advisor v3.24
+                        <Download className="size-4" /> Download advisor v3.25
                       </a>
                       <a
                         href="./downloads/AurumGuardAI.zip?v=9.3"

@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.24"
+#property version   "3.25"
 #property strict
 #property description "Asheparte AI analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
 
@@ -12,8 +12,8 @@
 // the analysis edition has no reachable order path.
 const bool   AllowLiveTrading              = false;
 input bool   EnableNewEntries              = true;  // enable analysis signals and alerts
-input ENUM_TIMEFRAMES PostSLCooldownTimeframe = PERIOD_H1; // PERIOD_M30 or PERIOD_H1
-input int    PostSLCooldownBars            = 1;
+input ENUM_TIMEFRAMES PostSLPlanDisplayTimeframe = PERIOD_H1; // keep stopped plan visible for M30 or H1
+input int    PostSLPlanDisplayBars         = 1;
 const ulong  MagicNumber                   = 26090315;
 const double StopLossMoney                 = 2.00;
 const ulong  DeviationPoints               = 30;
@@ -189,7 +189,7 @@ double   g_manualTP3 = 0.0;
 int      g_manualDirection = 0;
 datetime g_lastPublishedSignalBar = 0;
 datetime g_lastH1ReclaimWarningBar = 0;
-datetime g_signalCooldownUntil = 0;
+datetime g_planRemovalAt = 0;
 string   g_journalTimeKey = "";
 string   g_journalTicketKey = "";
 ulong    g_journalNextSyncMs = 0;
@@ -1646,26 +1646,21 @@ void ClearManualPlan()
    ObjectDelete(0,"AG_ANALYSIS_TP3");
   }
 
-void StartPostSLCooldown(const int stoppedDirection,const double stoppedPrice)
+void StartPostSLPlanDisplay(const int stoppedDirection,const double stoppedPrice)
   {
-   int cooldownSeconds=MathMax(60,PeriodSeconds(PostSLCooldownTimeframe))*MathMax(1,PostSLCooldownBars);
-   g_signalCooldownUntil=TimeCurrent()+cooldownSeconds;
-   SaveState("SIGNAL_COOLDOWN_UNTIL",(double)g_signalCooldownUntil);
+   int displaySeconds=MathMax(60,PeriodSeconds(PostSLPlanDisplayTimeframe))*MathMax(1,PostSLPlanDisplayBars);
+   g_planRemovalAt=TimeCurrent()+displaySeconds;
    ClearPendingEntry();
    ResetPOCSequence("");
-   ClearMarketCycleSnapshot();
-   ClearManualPlan();
-   g_lastSetupScore=0;
-   g_lastMTFScore=0;
-   g_lastDecision=StringFormat("%s SL HIT %.2f - WAIT %s CONFIRMATION",stoppedDirection>0 ? "BUY" : "SELL",stoppedPrice,EnumToString(PostSLCooldownTimeframe));
-   Print("Aurum Guard analysis plan stopped. New setup scan paused until ",TimeToString(g_signalCooldownUntil,TIME_DATE|TIME_MINUTES));
+   g_lastDecision=StringFormat("%s SL HIT %.2f - PLAN REMOVES IN %s",stoppedDirection>0 ? "BUY" : "SELL",stoppedPrice,EnumToString(PostSLPlanDisplayTimeframe));
+   Print("Aurum Guard analysis plan stopped. Keeping its chart map visible until ",TimeToString(g_planRemovalAt,TIME_DATE|TIME_MINUTES));
    if(EnableTerminalAlerts)
-      Alert("Aurum Guard ",g_symbol,": planned SL reached. Waiting ",EnumToString(PostSLCooldownTimeframe)," before another signal.");
+      Alert("Aurum Guard ",g_symbol,": planned SL reached. Its plan remains visible for ",EnumToString(PostSLPlanDisplayTimeframe)," before the next scan.");
   }
 
 void MonitorManualPlanOutcome()
   {
-   if(g_manualDirection==0 || g_manualStop<=0.0 || g_signalCooldownUntil>TimeCurrent())
+   if(g_manualDirection==0 || g_manualStop<=0.0 || g_planRemovalAt>0)
       return;
    MqlTick tick;
    if(!SymbolInfoTick(g_symbol,tick))
@@ -1675,7 +1670,7 @@ void MonitorManualPlanOutcome()
      {
       int stoppedDirection=g_manualDirection;
       double stoppedPrice=g_manualStop;
-      StartPostSLCooldown(stoppedDirection,stoppedPrice);
+      StartPostSLPlanDisplay(stoppedDirection,stoppedPrice);
      }
   }
 
@@ -1962,17 +1957,20 @@ void EvaluateNewEntry()
       g_lastDecision="ANALYSIS SIGNALS DISABLED";
       return;
      }
-   if(g_signalCooldownUntil>TimeCurrent())
+   if(g_planRemovalAt>TimeCurrent())
      {
-      int minutesLeft=(int)MathCeil((double)(g_signalCooldownUntil-TimeCurrent())/60.0);
-      g_lastDecision=StringFormat("POST-SL COOLDOWN - %d MIN LEFT",minutesLeft);
+      int minutesLeft=(int)MathCeil((double)(g_planRemovalAt-TimeCurrent())/60.0);
+      g_lastDecision=StringFormat("SL PLAN DISPLAY - %d MIN LEFT",minutesLeft);
       return;
      }
-   if(g_signalCooldownUntil>0)
+   if(g_planRemovalAt>0)
      {
-      g_signalCooldownUntil=0;
-      SaveState("SIGNAL_COOLDOWN_UNTIL",0.0);
-      ResetPOCSequence("COOLDOWN COMPLETE - WAIT NEXT SIGNAL");
+      g_planRemovalAt=0;
+      ClearMarketCycleSnapshot();
+      ClearManualPlan();
+      g_lastSetupScore=0;
+      g_lastMTFScore=0;
+      ResetPOCSequence("OLD SL PLAN REMOVED - SCANNING NEXT SIGNAL");
      }
    if(g_pendingEntry)
      {
@@ -2429,7 +2427,7 @@ void DrawAnalysisPanel()
    row+=13;
    PanelLabel("SEC_SIGNAL","MANUAL TRADE PLAN",x+10,row,section,PanelFontSize);
    row+=22;
-   string signal=g_manualDirection>0 ? "BUY CONFIRMED" : g_manualDirection<0 ? "SELL CONFIRMED" : "NO TRADE";
+   string signal=g_planRemovalAt>0 ? "STOPPED - REVIEW" : g_manualDirection>0 ? "BUY CONFIRMED" : g_manualDirection<0 ? "SELL CONFIRMED" : "NO TRADE";
    PanelLabel("LAB_SIGNAL","Signal",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_SIGNAL",signal,right,row,biasColor,PanelFontSize,ANCHOR_RIGHT_UPPER);
    row+=19;
@@ -2462,7 +2460,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.24",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.25",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2703,9 +2701,9 @@ int OnInit()
       Print("Aurum Guard: execution must be M1 and RSI confirmation/trigger ranges must be valid.");
       return INIT_PARAMETERS_INCORRECT;
      }
-   if((PostSLCooldownTimeframe!=PERIOD_M30 && PostSLCooldownTimeframe!=PERIOD_H1) || PostSLCooldownBars<1 || PostSLCooldownBars>12)
+   if((PostSLPlanDisplayTimeframe!=PERIOD_M30 && PostSLPlanDisplayTimeframe!=PERIOD_H1) || PostSLPlanDisplayBars<1 || PostSLPlanDisplayBars>12)
      {
-      Print("Aurum Guard: post-SL cooldown must use M30 or H1 and 1-12 bars.");
+      Print("Aurum Guard: post-SL plan display must use M30 or H1 and 1-12 bars.");
       return INIT_PARAMETERS_INCORRECT;
      }
    if(ConsolidationLookbackBars<10 || VolumeProfileBins<4 || VolumeProfileBins>100 || ConsolidationMaximumRangeATR<=0.0 || SweepBufferATR<0.0 || DisplacementFromPOCATR<=0.0 || POCReturnToleranceATR<=0.0 || StructureStopBufferATR<0.0 || POCSetupExpiryBars<3)
@@ -2720,9 +2718,10 @@ int OnInit()
      }
 
     g_symbol=TradeSymbol=="" ? _Symbol : TradeSymbol;
-    g_signalCooldownUntil=(datetime)LoadState("SIGNAL_COOLDOWN_UNTIL",0.0);
-    if(g_signalCooldownUntil<=TimeCurrent())
-       g_signalCooldownUntil=0;
+    // v3.25 replaces the old cooldown with a display-only retirement timer.
+    SaveState("SIGNAL_COOLDOWN_UNTIL",0.0);
+    SaveState("PLAN_REMOVAL_AT",0.0);
+    g_planRemovalAt=0;
     const long journalLogin=AccountInfoInteger(ACCOUNT_LOGIN);
     // Scope the upload cursor to the private bridge key. A newly generated key
     // must perform its own historical backfill instead of inheriting the cursor
