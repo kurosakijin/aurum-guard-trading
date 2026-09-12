@@ -4,9 +4,9 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.25"
+#property version   "3.26"
 #property strict
-#property description "Asheparte AI analysis-only EA: M15 POC/continuation, M15/H1/D1 confirmation, M1 timing, manual entry/SL/TP guidance. Never trades."
+#property description "Asheparte AI analysis-only EA: POC, engulfing/delivery-state confirmation, Gold/Silver sync, MTF direction and manual guidance. Never trades."
 
 // --- Analysis controls. Execution constants are retained only for source compatibility;
 // the analysis edition has no reachable order path.
@@ -91,6 +91,13 @@ input int    POCSetupExpiryBars               = 18;
 input int    CompletedCycleDisplayBars         = 18;   // remove a completed four-step map after this many setup bars
 input double FibonacciRewardMultiple          = 2.14;
 
+// --- Engulfing candle / change in state of delivery
+// This is a closed-candle confirmation route, never an automatic reversal.
+input bool   UseDeliveryStateStrategy          = true;
+input double DeliveryMinimumBodyShare          = 0.55;
+input double EngulfingMinimumBodyRatio          = 1.00;
+input int    DeliveryPriorMoveBars              = 4;
+
 // --- M15 manipulation, blow-off and shock guard
 input bool   EnableM15Safety                = true;
 input int    LiquidityLookback              = 12;
@@ -168,6 +175,7 @@ datetime g_pendingTouchBar = 0;
 datetime g_pendingLastCheckedBar = 0;
 string   g_aiStatus = "SHADOW - WAITING FOR SCORE";
 string   g_aiPanelStatus = "WAITING FOR AI SCORE";
+string   g_deliveryStatus = "SCANNING CLOSED M15";
 double   g_aiProbability = 0.0;
 string   g_aiModel = "NONE";
 int      g_pocStage = 0; // 0=find range, 1=wait sweep, 2=wait displacement, 3=wait POC return
@@ -180,6 +188,7 @@ double   g_signalStopPrice = 0.0;
 datetime g_pocExpires = 0;
 datetime g_lastPOCSetupBar = 0;
 datetime g_lastFallbackSetupBar = 0;
+datetime g_lastDeliverySetupBar = 0;
 bool     g_pendingFromPOC = false;
 double   g_manualEntry = 0.0;
 double   g_manualStop = 0.0;
@@ -1084,6 +1093,118 @@ bool EvaluatePOCSweepEntry(int &direction,double &atrValue,string &reason)
    return true;
   }
 
+bool DetectDeliveryState(const string symbol,const ENUM_TIMEFRAMES timeframe,int &direction,string &pattern,double &patternLow,double &patternHigh,bool &reversal)
+  {
+   direction=0;
+   pattern="NONE";
+   patternLow=0.0;
+   patternHigh=0.0;
+   reversal=false;
+
+   int needed=MathMax(DeliveryPriorMoveBars+3,7);
+   MqlRates bars[];
+   if(!ReadRates(symbol,timeframe,needed,bars))
+      return false;
+
+   double point=MathMax(SymbolInfoDouble(symbol,SYMBOL_POINT),0.0000001);
+   double currentRange=MathMax(bars[1].high-bars[1].low,point);
+   double currentBody=MathAbs(bars[1].close-bars[1].open);
+   double priorBody=MathMax(MathAbs(bars[2].close-bars[2].open),point);
+   double bodyShare=currentBody/currentRange;
+   bool bodyOK=bodyShare>=DeliveryMinimumBodyShare;
+
+   bool bullishEngulf=bodyOK && bars[1].close>bars[1].open && bars[2].close<bars[2].open &&
+                       bars[1].open<=bars[2].close && bars[1].close>=bars[2].open &&
+                       currentBody>=priorBody*EngulfingMinimumBodyRatio;
+   bool bearishEngulf=bodyOK && bars[1].close<bars[1].open && bars[2].close>bars[2].open &&
+                       bars[1].open>=bars[2].close && bars[1].close<=bars[2].open &&
+                       currentBody>=priorBody*EngulfingMinimumBodyRatio;
+
+   // A delivery-state change requires the completed candle body to close through
+   // the prior opposing candle's extreme. Wick-only breaks do not qualify.
+   bool bullishDelivery=bodyOK && bars[1].close>bars[1].open && bars[2].close<=bars[2].open && bars[1].close>bars[2].high;
+   bool bearishDelivery=bodyOK && bars[1].close<bars[1].open && bars[2].close>=bars[2].open && bars[1].close<bars[2].low;
+
+   if(bullishDelivery || bullishEngulf)
+     {
+      direction=1;
+      pattern=bullishDelivery ? "BULLISH DELIVERY SHIFT" : "BULLISH ENGULFING";
+     }
+   else if(bearishDelivery || bearishEngulf)
+     {
+      direction=-1;
+      pattern=bearishDelivery ? "BEARISH DELIVERY SHIFT" : "BEARISH ENGULFING";
+     }
+   else
+      return false;
+
+   patternLow=MathMin(bars[1].low,bars[2].low);
+   patternHigh=MathMax(bars[1].high,bars[2].high);
+   double priorMove=bars[2].close-bars[2+DeliveryPriorMoveBars].close;
+   reversal=(direction>0 && priorMove<0.0) || (direction<0 && priorMove>0.0);
+   return true;
+  }
+
+bool EvaluateDeliveryStateEntry(int &direction,double &atrValue,string &reason)
+  {
+   direction=0;
+   if(!UseDeliveryStateStrategy)
+     {
+      g_deliveryStatus="OFF";
+      return false;
+     }
+
+   datetime currentOpen=iTime(g_symbol,POCSetupTimeframe,0);
+   if(currentOpen<=0 || currentOpen==g_lastDeliverySetupBar)
+      return false;
+   g_lastDeliverySetupBar=currentOpen;
+
+   int goldDirection=0,silverDirection=0;
+   string goldPattern="",silverPattern="";
+   double goldLow=0.0,goldHigh=0.0,silverLow=0.0,silverHigh=0.0;
+   bool goldReversal=false,silverReversal=false;
+   bool goldDetected=DetectDeliveryState(g_symbol,POCSetupTimeframe,goldDirection,goldPattern,goldLow,goldHigh,goldReversal);
+   bool silverDetected=DetectDeliveryState(SilverConfirmationSymbol,POCSetupTimeframe,silverDirection,silverPattern,silverLow,silverHigh,silverReversal);
+   if(!goldDetected)
+     {
+      g_deliveryStatus="SCANNING CLOSED M15";
+      reason="NO CLOSED M15 ENGULF / DELIVERY SHIFT";
+      return false;
+     }
+   if(RequireGoldSilverSync && (!silverDetected || silverDirection!=goldDirection))
+     {
+      g_deliveryStatus="WAIT GOLD / SILVER SYNC";
+      reason=goldPattern+" - WAIT SILVER MATCH";
+      return false;
+     }
+
+   direction=goldDirection;
+   MqlRates setupBars[];
+   double setupATR[];
+   if(!ReadRates(g_symbol,POCSetupTimeframe,4,setupBars) || !ReadBuffer(g_setupATRHandle,4,setupATR) || setupATR[1]<=0.0)
+     {
+      direction=0;
+      reason="DELIVERY ATR DATA NOT READY";
+      return false;
+     }
+   atrValue=setupATR[1];
+
+   string mtfReason="";
+   if(!MultiTimeframeRSIConfirm(direction,mtfReason))
+     {
+      g_deliveryStatus=goldReversal ? "REVERSAL WATCH - WAIT MTF" : "CONTINUATION - WAIT MTF";
+      reason=goldPattern+" | "+mtfReason;
+      direction=0;
+      return false;
+     }
+
+   g_signalStopPrice=NormalizePrice(direction>0 ? goldLow-atrValue*StructureStopBufferATR : goldHigh+atrValue*StructureStopBufferATR);
+   g_lastSetupScore=goldReversal ? 94 : 88;
+   g_deliveryStatus=goldReversal ? "REVERSAL CONFIRMED" : "CONTINUATION CONFIRMED";
+   reason=StringFormat("%s %s | GOLD + SILVER SYNC",goldReversal ? "REVERSAL" : "CONTINUATION",goldPattern);
+   return true;
+  }
+
 bool EvaluateM15ContinuationEntry(int &direction,double &atrValue,string &reason)
   {
    direction=0;
@@ -1224,14 +1345,22 @@ bool EvaluateSignal(int &direction,double &atrValue,string &reason)
      {
       string pocReason="";
       bool strictPOC=EvaluatePOCSweepEntry(direction,atrValue,pocReason);
+      string route="POC";
       if(!strictPOC)
         {
          string fallbackReason="";
          if(!EvaluateM15ContinuationEntry(direction,atrValue,fallbackReason))
            {
-            reason=fallbackReason!="" ? fallbackReason : pocReason;
-            return false;
+            string deliveryReason="";
+            if(!EvaluateDeliveryStateEntry(direction,atrValue,deliveryReason))
+              {
+               reason=deliveryReason!="" ? deliveryReason : fallbackReason!="" ? fallbackReason : pocReason;
+               return false;
+              }
+            route="DELIVERY STATE";
            }
+         else
+            route="CONTINUATION";
         }
       double metalCorrelation=0.0;
       if(!MetalsConfirmDirection(direction,reason,metalCorrelation))
@@ -1239,7 +1368,7 @@ bool EvaluateSignal(int &direction,double &atrValue,string &reason)
          direction=0;
          return false;
         }
-      PrintFormat("Aurum Guard M15 setup accepted: route=%s direction=%d POC=%.2f stop=%.2f MTF=%d/9 metals corr=%.2f ATR=%.2f",strictPOC ? "POC" : "CONTINUATION",direction,g_pocPrice,g_signalStopPrice,g_lastMTFScore,metalCorrelation,atrValue);
+      PrintFormat("Asheparte M15 setup accepted: route=%s direction=%d POC=%.2f stop=%.2f MTF=%d/9 metals corr=%.2f ATR=%.2f",route,direction,g_pocPrice,g_signalStopPrice,g_lastMTFScore,metalCorrelation,atrValue);
       return true;
      }
    int needed=60;
@@ -2390,7 +2519,7 @@ void DrawAnalysisPanel()
    color bad=C'255,91,91';
    color warning=C'250,190,49';
 
-   PanelRectangle("BODY",x,y,PanelWidth,438,panel,C'52,57,67');
+   PanelRectangle("BODY",x,y,PanelWidth,457,panel,C'52,57,67');
    PanelRectangle("HEADER",x,y,PanelWidth,42,header,C'52,57,67');
    PanelRectangle("ACCENT",x,y,PanelWidth,3,section,section);
    PanelLabel("TITLE","Asheparte AI Analysis",x+12,y+10,white,PanelFontSize+2);
@@ -2421,6 +2550,10 @@ void DrawAnalysisPanel()
    row+=19;
    PanelLabel("LAB_PPRICE","Tick-volume POC",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_PPRICE",g_pocPrice>0.0 ? DoubleToString(g_pocPrice,2) : "---",right,row,white,PanelFontSize,ANCHOR_RIGHT_UPPER);
+   row+=19;
+   PanelLabel("LAB_DELIVERY","Engulf / delivery",x+10,row,muted,PanelFontSize);
+   color deliveryColor=StringFind(g_deliveryStatus,"CONFIRMED")>=0 ? good : warning;
+   PanelLabel("VAL_DELIVERY",g_deliveryStatus,right,row,deliveryColor,PanelFontSize-1,ANCHOR_RIGHT_UPPER);
    row+=25;
    PanelDivider("TWO",row);
 
@@ -2458,9 +2591,9 @@ void DrawAnalysisPanel()
    PanelLabel("LAB_DECISION","Current check",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_DECISION",CompactDecision(),right,row,white,PanelFontSize-1,ANCHOR_RIGHT_UPPER);
 
-   PanelRectangle("FOOTER",x,y+407,PanelWidth,31,header,C'52,57,67');
-   PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+416,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.25",right,y+416,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+   PanelRectangle("FOOTER",x,y+426,PanelWidth,31,header,C'52,57,67');
+   PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+435,good,PanelFontSize);
+    PanelLabel("FOOT_RIGHT","v3.26",right,y+435,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2696,6 +2829,11 @@ int OnInit()
       Print("Aurum Guard: invalid countertrend reclaim controls.");
       return INIT_PARAMETERS_INCORRECT;
      }
+   if(DeliveryMinimumBodyShare<=0.0 || DeliveryMinimumBodyShare>1.0 || EngulfingMinimumBodyRatio<0.5 || EngulfingMinimumBodyRatio>3.0 || DeliveryPriorMoveBars<2 || DeliveryPriorMoveBars>20)
+     {
+      Print("Asheparte: invalid engulfing / delivery-state controls.");
+      return INIT_PARAMETERS_INCORRECT;
+     }
    if(SignalTimeframe!=PERIOD_M1 || M1ExecutionWindowBars<1 || MinimumMTFConfirmationPoints<4 || MinimumMTFConfirmationPoints>9 || M1MinimumBodyShare<0.0 || M1MinimumBodyShare>1.0 || RSIBullishConfirmation<0.0 || RSIBullishConfirmation>100.0 || RSIBearishConfirmation<0.0 || RSIBearishConfirmation>100.0 || M1LongRSITrigger<0.0 || M1MaximumLongRSI>100.0 || M1LongRSITrigger>=M1MaximumLongRSI || M1MinimumShortRSI<0.0 || M1ShortRSITrigger>100.0 || M1MinimumShortRSI>=M1ShortRSITrigger)
      {
       Print("Aurum Guard: execution must be M1 and RSI confirmation/trigger ranges must be valid.");
@@ -2718,7 +2856,8 @@ int OnInit()
      }
 
     g_symbol=TradeSymbol=="" ? _Symbol : TradeSymbol;
-    // v3.25 replaces the old cooldown with a display-only retirement timer.
+    // v3.26 retains the display-only retirement timer; the delivery-state
+    // route does not add a post-plan scanning cooldown.
     SaveState("SIGNAL_COOLDOWN_UNTIL",0.0);
     SaveState("PLAN_REMOVAL_AT",0.0);
     g_planRemovalAt=0;

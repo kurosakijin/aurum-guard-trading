@@ -3483,7 +3483,7 @@ export default function Home() {
           <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Asheparte AI Analysis Advisor</CardTitle>
-              <CardDescription>MT5 v3.25 · Gold structure, reclaim warnings, post-SL plan review, four-timeframe confirmation and AI context</CardDescription>
+              <CardDescription>MT5 v3.26 · POC structure, engulfing and delivery-state shifts, Gold/Silver sync, four-timeframe confirmation and AI context</CardDescription>
               <CardAction><Badge className="border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">ANALYSIS ONLY · NO ORDERS</Badge></CardAction>
             </CardHeader>
             <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
@@ -3496,11 +3496,11 @@ export default function Home() {
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <a
-                        href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.25"
+                        href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.26"
                         download
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
                       >
-                        <Download className="size-4" /> Download advisor v3.25
+                        <Download className="size-4" /> Download advisor v3.26
                       </a>
                       <a
                         href="./downloads/AurumGuardAI.zip?v=9.3"
@@ -3516,8 +3516,8 @@ export default function Home() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[
                     ['1 · Context', 'Read M15/H1/D1 trend, RSI, volatility and Gold/Silver agreement.'],
-                    ['2 · Structure', 'Map consolidation, tick-volume POC, liquidity sweep and displacement.'],
-                    ['3 · Timing', 'Use completed M1 candles only after the higher-timeframe idea is valid.'],
+                    ['2 · Structure', 'Map POC/liquidity and detect closed engulfing or delivery-state shifts.'],
+                    ['3 · Confirmation', 'Classify continuation or reversal, then require Gold/Silver and higher-timeframe agreement.'],
                     ['4 · Manual plan', 'Display entry, invalidation and targets for your review—never place an order.'],
                   ].map(([title, description]) => (
                     <div key={title} className="rounded-xl border border-white/8 bg-black/15 p-3">

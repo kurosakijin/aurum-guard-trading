@@ -7,11 +7,17 @@ classifier estimates confidence for that candidate. The result is displayed as
 context only. Neither this package nor the Analysis Advisor can place, modify,
 or close an MT5 order, and the score does not promise profit.
 
-Advisor v3.25 studies a four-stage M15/M30/H1 sequence: tight consolidation and
+Advisor v3.26 studies a four-stage M15/M30/H1 sequence: tight consolidation and
 tick-volume POC, liquidity sweep, directional displacement, then a defended
 return to POC. It combines that structure with M15/H1/D1 confirmation, completed
 M1 timing, Gold/Silver agreement, spread, news, and shock checks. It draws a
 manual plan only; it contains no active order path.
+
+It also recognizes closed bullish/bearish engulfing candles and changes in the
+state of delivery. Gold and Silver must show the same direction. A pattern that
+agrees with the established direction is classified as continuation; one that
+opposes the preceding move remains a reversal watch until M15/H1/D1 confirm it.
+One candle never causes an automatic flip or an order.
 
 The POC sequence intentionally rejects M1 as an input timeframe. M1 noise can
 make consolidation and sweep labels misleading; use M15, M30 or H1 instead.
@@ -116,7 +122,7 @@ has now been observed and is no longer an untouched test.
    outcomes conservatively.
 6. Run `run_ai_gate.cmd`. It publishes one analysis score after each completed
    M1 candle.
-7. Attach Asheparte Analysis Advisor v3.25 with `UseAIAnalysisLayer=true`.
+7. Attach Asheparte Analysis Advisor v3.26 with `UseAIAnalysisLayer=true`.
 8. Compare its BUY / SELL / WAIT context with your own chart reading. You remain
    responsible for every manual trade decision.
 
