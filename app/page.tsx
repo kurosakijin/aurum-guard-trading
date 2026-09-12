@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Show, SignInButton, UserButton, useAuth, useSignUp, useUser } from '@clerk/react';
+import { Show, SignIn, SignInButton, UserButton, useAuth, useSignUp, useUser } from '@clerk/react';
 import {
   ArrowUpRight,
   BarChart3,
@@ -2982,6 +2982,113 @@ export default function Home() {
     const day = index - monthStartWeekday + 1;
     return day >= 1 && day <= daysInJournalMonth ? day : null;
   });
+
+  const registrationDialog = (
+    <Dialog open={signUpOpen} onOpenChange={(open) => { setSignUpOpen(open); if (!open) { setSignUpError(''); setSignUpStep('details'); } }}>
+      <DialogContent className="border border-violet-200 bg-white text-slate-950 shadow-[0_30px_100px_rgba(76,29,149,.2)] sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-slate-950">Create Asheparte account</DialogTitle>
+          <DialogDescription className="text-[11px] text-slate-500">One permanent username and one verified email per account.</DialogDescription>
+        </DialogHeader>
+        {signUpStep === 'details' ? (
+          <div className="grid gap-3">
+            <div><label htmlFor="signup-username" className="text-[10px] font-semibold text-slate-700">Username</label><Input id="signup-username" autoComplete="username" maxLength={24} value={signUpUsername} onChange={(event) => setSignUpUsername(event.target.value)} className="mt-1.5 border-slate-200 bg-slate-50 text-slate-950" /><p className="mt-1 text-[9px] text-slate-500">Permanent after registration. Explicit or abusive names are rejected.</p></div>
+            <div><label htmlFor="signup-email" className="text-[10px] font-semibold text-slate-700">Email</label><Input id="signup-email" type="email" autoComplete="email" value={signUpEmail} onChange={(event) => setSignUpEmail(event.target.value)} className="mt-1.5 border-slate-200 bg-slate-50 text-slate-950" /></div>
+            <div><label htmlFor="signup-password" className="text-[10px] font-semibold text-slate-700">Password</label><Input id="signup-password" type="password" autoComplete="new-password" value={signUpPassword} onChange={(event) => setSignUpPassword(event.target.value)} className="mt-1.5 border-slate-200 bg-slate-50 text-slate-950" /><div className="mt-2 grid grid-cols-5 gap-1" aria-label={`Password strength ${signUpPasswordStrength} of 5`}>{Array.from({ length: 5 }, (_, index) => <span key={index} className={`h-1 rounded-full ${index < signUpPasswordStrength ? signUpPasswordStrength >= 5 ? 'bg-emerald-500' : 'bg-amber-400' : 'bg-slate-200'}`} />)}</div><p className="mt-1.5 text-[9px] text-slate-500">8+ characters with uppercase, lowercase, number and symbol.</p></div>
+            <div id="clerk-captcha" className="min-h-1" />
+            {signUpError && <p className="text-[10px] leading-4 text-red-600">{signUpError}</p>}
+            <Button className="h-10 bg-violet-700 text-white hover:bg-violet-600" disabled={signUpBusy || !signUpUsername.trim() || !signUpEmail.trim() || signUpPasswordStrength < 5} onClick={createAsheparteAccount}>{signUpBusy ? 'Creating…' : 'Create & verify email'}</Button>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            <p className="text-[11px] leading-5 text-slate-500">Enter the verification code sent to <span className="font-medium text-violet-700">{signUpEmail}</span>.</p>
+            <Input inputMode="numeric" autoComplete="one-time-code" value={signUpCode} onChange={(event) => setSignUpCode(event.target.value)} placeholder="Verification code" className="border-slate-200 bg-slate-50 font-mono text-slate-950" />
+            {signUpError && <p className="text-[10px] leading-4 text-red-600">{signUpError}</p>}
+            <Button className="h-10 bg-violet-700 text-white hover:bg-violet-600" disabled={signUpBusy || !signUpCode.trim()} onClick={verifyAsheparteAccount}>{signUpBusy ? 'Verifying…' : 'Verify email & sign in'}</Button>
+            <Button variant="ghost" size="sm" className="text-[10px] text-slate-500 hover:bg-slate-100" onClick={() => { setSignUpStep('details'); setSignUpCode(''); setSignUpError(''); }}>Back</Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (!authLoaded) {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-[#f7f6fb] text-slate-900">
+        <div className="flex items-center gap-3 text-sm font-semibold"><span className="grid size-10 place-items-center rounded-xl bg-violet-700 text-white shadow-lg shadow-violet-200"><Bot className="size-5" /></span>Loading Asheparte AI…</div>
+      </main>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <main className="min-h-dvh overflow-y-auto bg-[#f7f6fb] text-slate-950">
+        {registrationDialog}
+        <header className="border-b border-violet-100 bg-white/90 backdrop-blur-xl">
+          <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between px-5 lg:px-8">
+            <div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-lg bg-violet-700 text-white shadow-md shadow-violet-200"><Bot className="size-5" /></span><div><p className="text-sm font-bold tracking-tight">Asheparte AI</p><p className="text-[10px] text-slate-500">Precious metals intelligence</p></div></div>
+            <div className="flex items-center gap-2 text-[11px] text-slate-500"><ShieldCheck className="size-4 text-emerald-500" /> Secure account access</div>
+          </div>
+        </header>
+
+        <div className="mx-auto grid min-h-[calc(100dvh-4rem)] max-w-[1500px] items-center gap-12 px-5 py-10 lg:grid-cols-[420px_minmax(0,1fr)] lg:px-8 lg:py-14">
+          <section className="order-2 lg:order-1" aria-labelledby="login-heading">
+            <div className="mb-7">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.14em] text-violet-700"><span className="size-1.5 rounded-full bg-violet-600" /> Private decision workspace</div>
+              <h1 id="login-heading" className="max-w-md text-4xl font-bold leading-[1.05] tracking-[-.045em] text-slate-950 sm:text-5xl">Trade with context, not noise.</h1>
+              <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">Sign in to open your Gold and Silver charts, analysis advisor, Pine strategies, risk radar and private trading journal.</p>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(76,29,149,.12)]">
+              <div className="border-b border-slate-100 px-5 py-4"><p className="text-sm font-bold text-slate-900">Welcome back</p><p className="mt-1 text-[11px] text-slate-500">Login is required before the dashboard opens.</p></div>
+              <div className="flex justify-center px-3 py-4">
+                <SignIn
+                  routing="hash"
+                  withSignUp={false}
+                  fallbackRedirectUrl="/#desk"
+                  appearance={{
+                    variables: { colorPrimary: '#6d28d9', colorBackground: '#ffffff', colorText: '#0f172a', colorTextSecondary: '#64748b', borderRadius: '0.75rem' },
+                    elements: { rootBox: 'w-full', cardBox: 'w-full shadow-none', card: 'w-full shadow-none border-0', headerTitle: 'hidden', headerSubtitle: 'hidden', footer: 'hidden' },
+                  }}
+                />
+              </div>
+              <div className="border-t border-slate-100 px-5 py-4 text-center">
+                <p className="text-[11px] text-slate-500">New to Asheparte?</p>
+                <Button variant="outline" className="mt-2 h-10 w-full border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" onClick={() => setSignUpOpen(true)}>Create verified account <ArrowUpRight className="size-4" /></Button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[10px] text-slate-500">
+              {[['Gold + Silver', 'Synced'], ['Journal', 'Private'], ['Advisor', 'No orders']].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-200 bg-white px-2 py-3"><p className="font-semibold text-slate-800">{value}</p><p className="mt-1">{label}</p></div>)}
+            </div>
+          </section>
+
+          <section className="order-1 min-w-0 lg:order-2" aria-label="Asheparte dashboard preview">
+            <div className="relative overflow-hidden rounded-[2rem] bg-violet-700 p-3 shadow-[0_35px_100px_rgba(76,29,149,.3)] sm:p-5">
+              <div className="absolute -right-16 -top-16 size-56 rounded-full bg-fuchsia-400/25 blur-3xl" />
+              <div className="relative overflow-hidden rounded-2xl bg-[#fbfaff] shadow-2xl">
+                <div className="flex h-12 items-center justify-between border-b border-violet-100 px-4"><div className="flex items-center gap-2"><span className="grid size-7 place-items-center rounded-md bg-violet-700 text-white"><Bot className="size-4" /></span><span className="text-[11px] font-bold text-slate-900">Asheparte dashboard</span></div><div className="flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-400" /><span className="text-[9px] text-slate-400">Markets connected</span></div></div>
+                <div className="grid min-h-[430px] grid-cols-[82px_1fr] sm:grid-cols-[132px_1fr]">
+                  <aside className="border-r border-violet-100 bg-white px-2 py-4 sm:px-3">
+                    <p className="hidden px-2 text-[8px] font-bold uppercase tracking-[.16em] text-slate-300 sm:block">Workspace</p>
+                    <div className="mt-2 grid gap-1">{[[LineChart,'Desk'],[CandlestickChart,'Charts'],[Bot,'MT5'],[Database,'Journal'],[ShieldCheck,'Risk']].map(([Icon,label], index) => { const PreviewIcon = Icon as typeof LineChart; return <div key={label as string} className={`flex items-center gap-2 rounded-lg px-2 py-2 text-[9px] ${index === 0 ? 'bg-violet-50 font-semibold text-violet-700' : 'text-slate-400'}`}><PreviewIcon className="size-3.5" /><span className="hidden sm:inline">{label as string}</span></div>; })}</div>
+                  </aside>
+                  <div className="min-w-0 p-3 sm:p-5">
+                    <div className="flex items-end justify-between gap-3"><div><p className="text-[9px] text-slate-400">Decision workspace</p><p className="mt-1 text-sm font-bold text-slate-900 sm:text-lg">Gold &amp; Silver overview</p></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-[8px] font-bold text-emerald-600">LIVE</span></div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{[['XAUUSD','$4,330'],['XAGUSD','$67.94'],['Bias','WAIT'],['Risk','LOCKED']].map(([label,value], index) => <div key={label} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm"><p className="text-[8px] text-slate-400">{label}</p><p className={`mt-2 text-xs font-bold ${index === 2 ? 'text-amber-500' : index === 3 ? 'text-rose-500' : 'text-slate-900'}`}>{value}</p><div className={`mt-2 h-1 rounded-full ${index < 2 ? 'bg-violet-200' : index === 2 ? 'bg-amber-200' : 'bg-rose-200'}`} /></div>)}</div>
+                    <div className="mt-3 grid gap-3 xl:grid-cols-[1fr_180px]">
+                      <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm"><div className="flex items-center justify-between"><p className="text-[9px] font-semibold text-slate-700">Market delivery</p><p className="text-[8px] text-violet-600">H1</p></div><svg viewBox="0 0 520 190" className="mt-2 h-[170px] w-full" role="img" aria-label="Preview line chart"><defs><linearGradient id="preview-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7c3aed" stopOpacity=".22"/><stop offset="1" stopColor="#7c3aed" stopOpacity="0"/></linearGradient></defs><path d="M0 155 C45 148 55 104 95 116 S150 134 177 91 S240 112 270 66 S329 84 355 48 S420 74 452 34 S492 40 520 18 L520 190 L0 190Z" fill="url(#preview-fill)"/><path d="M0 155 C45 148 55 104 95 116 S150 134 177 91 S240 112 270 66 S329 84 355 48 S420 74 452 34 S492 40 520 18" fill="none" stroke="#7c3aed" strokeWidth="4" strokeLinecap="round"/><line x1="0" y1="118" x2="520" y2="118" stroke="#e2e8f0" strokeDasharray="5 6"/></svg></div>
+                      <div className="grid gap-3"><div className="rounded-xl bg-violet-700 p-4 text-white shadow-lg shadow-violet-200"><p className="text-[8px] uppercase tracking-[.12em] text-violet-200">Account journal</p><p className="mt-3 text-xl font-bold">Private</p><p className="mt-1 text-[9px] text-violet-200">One user · one ledger</p></div><div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm"><p className="text-[9px] font-semibold text-slate-700">Confirmation</p><div className="mt-3 space-y-2">{['Gold structure','Silver sync','News guard'].map((item,index)=><div key={item} className="flex items-center justify-between text-[8px] text-slate-400"><span>{item}</span><span className={`size-2 rounded-full ${index===2?'bg-amber-400':'bg-emerald-400'}`} /></div>)}</div></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
