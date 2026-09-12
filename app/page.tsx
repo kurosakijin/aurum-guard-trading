@@ -3091,9 +3091,37 @@ export default function Home() {
   }
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <main className="workspace-light flex h-dvh overflow-hidden bg-[#f7f7fb] text-slate-950">
+      <aside className="hidden w-[232px] shrink-0 flex-col border-r border-violet-100 bg-white px-3 py-4 lg:flex" aria-label="Primary navigation">
+        <div className="flex items-center gap-3 px-2 pb-5">
+          <div className="grid size-10 place-items-center rounded-xl bg-violet-700 text-white shadow-lg shadow-violet-200"><Bot className="size-5" /></div>
+          <div><p className="text-sm font-bold tracking-tight text-slate-950">Asheparte AI</p><p className="mt-0.5 text-[11px] text-slate-500">Metals intelligence</p></div>
+        </div>
+        <p className="px-3 text-[10px] font-bold uppercase tracking-[.14em] text-slate-400">Workspace</p>
+        <div className="mt-2 grid gap-1">
+          {([
+            ['desk', 'Dashboard', LineChart, 'desk'],
+            ['charts', 'Live charts', CandlestickChart, 'live-chart'],
+            ['pine', 'Pine strategies', Code2, 'pine-script'],
+            ['mt5', 'MT5 advisor', Bot, 'mt5-bot'],
+            ['journal', 'Trade journal', Database, 'trade-journal'],
+            ['guides', 'Trading guides', BookOpenCheck, 'chart-guide'],
+            ['risk', 'Risk & news', ShieldCheck, 'news-radar'],
+          ] as const).map(([panel, label, Icon, hash]) => (
+            <button key={panel} type="button" onClick={() => openWorkspace(panel, hash)} className={`flex h-10 items-center gap-3 rounded-xl px-3 text-left text-[13px] font-medium transition ${workspacePanel === panel ? 'bg-violet-50 text-violet-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`} aria-pressed={workspacePanel === panel}>
+              <Icon className={`size-4 ${workspacePanel === panel ? 'text-violet-600' : 'text-slate-400'}`} /> {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-auto rounded-2xl bg-violet-700 p-4 text-white shadow-lg shadow-violet-100">
+          <div className="flex items-center gap-2"><ShieldCheck className="size-4 text-violet-200" /><p className="text-xs font-semibold">Private workspace</p></div>
+          <p className="mt-2 text-[11px] leading-5 text-violet-200">Your journal and bridge pairing stay isolated to this account.</p>
+          <div className="mt-3 flex items-center justify-between border-t border-white/15 pt-3"><span className="max-w-[135px] truncate text-[11px]">{signedInUserLabel}</span><UserButton userProfileMode="navigation" userProfileUrl="#manage-account" /></div>
+        </div>
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
       <Dialog open={manageAccountOpen} onOpenChange={setAccountDialogOpen}>
-      <header className="glass-chrome z-30 shrink-0 border-b border-sky-200/10">
+      <header className="glass-chrome z-30 shrink-0 border-b border-violet-100">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between px-3 sm:px-5 lg:px-6">
           <div className="flex items-center gap-3">
             <div className="grid size-9 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-primary shadow-[0_0_32px_rgba(225,177,78,.12)]">
@@ -3267,7 +3295,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      <nav className="glass-chrome shrink-0 border-b border-sky-200/10 px-2 py-2" aria-label="Trader workspace">
+      <nav className="glass-chrome shrink-0 border-b border-violet-100 px-2 py-2 lg:hidden" aria-label="Trader workspace">
         <div className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto">
           {([
             ['desk', 'Desk', LineChart],
@@ -3299,7 +3327,7 @@ export default function Home() {
             journalScrollPosition.current = workspaceScrollRef.current.scrollTop;
           }
         }}
-        className="mx-auto min-h-0 w-full max-w-[1800px] flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 lg:px-6"
+        className="mx-auto min-h-0 w-full max-w-[1800px] flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5 lg:px-7 lg:py-6"
       >
         <section className={workspacePanel === 'desk' ? 'mb-5' : 'hidden'}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
@@ -4841,6 +4869,7 @@ export default function Home() {
           <span>TradingView supplies the live quote, chart and technical rating; provider latency may apply. The Pine strategy is a testable ruleset—not financial advice or a profit guarantee.</span>
           <a href="#news-radar" className="flex items-center gap-1 text-foreground hover:text-primary">Open risk &amp; news <Newspaper className="size-3" /></a>
         </div>
+      </div>
       </div>
     </main>
   );

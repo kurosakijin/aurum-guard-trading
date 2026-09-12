@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-heading: var(--font-inter);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -96,6 +96,64 @@
     backdrop-filter: blur(24px) saturate(150%);
     -webkit-backdrop-filter: blur(24px) saturate(150%);
   }
+
+  .workspace-light {
+    color-scheme: light;
+    --background: oklch(.975 .008 285);
+    --foreground: oklch(.2 .025 275);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(.2 .025 275);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(.2 .025 275);
+    --primary: oklch(.52 .23 293);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(.95 .025 290);
+    --secondary-foreground: oklch(.34 .12 290);
+    --muted: oklch(.95 .012 280);
+    --muted-foreground: oklch(.5 .035 275);
+    --accent: oklch(.94 .035 290);
+    --accent-foreground: oklch(.38 .16 292);
+    --border: oklch(.9 .025 285);
+    --input: oklch(.9 .025 285);
+    --ring: oklch(.52 .23 293);
+    font-size: 15px;
+    line-height: 1.5;
+    background-image: radial-gradient(circle at 92% -8%, rgba(139, 92, 246, .1), transparent 30rem);
+  }
+
+  .workspace-light .glass-surface {
+    background: rgba(255, 255, 255, .96) !important;
+    border-color: rgba(124, 58, 237, .12) !important;
+    box-shadow: 0 10px 35px rgba(67, 56, 120, .07), inset 0 1px 0 white;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .workspace-light .glass-chrome {
+    background: rgba(255, 255, 255, .94) !important;
+    border-color: rgba(124, 58, 237, .1) !important;
+    box-shadow: 0 1px 0 rgba(124, 58, 237, .05);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .workspace-light [class*="border-white/"] { border-color: rgba(124, 58, 237, .1) !important; }
+  .workspace-light [class*="bg-white/["] { background-color: rgba(124, 58, 237, .035) !important; }
+  .workspace-light [class*="bg-black/"] { background-color: rgba(30, 41, 59, .04) !important; }
+  .workspace-light [class~="text-sky-50"],
+  .workspace-light [class~="text-sky-100"] { color: #172033 !important; }
+  .workspace-light [class~="text-cyan-100"],
+  .workspace-light [class~="text-cyan-200"] { color: #6d28d9 !important; }
+  .workspace-light [class~="text-emerald-100"] { color: #047857 !important; }
+  .workspace-light [class~="text-amber-100"],
+  .workspace-light [class~="text-yellow-100"] { color: #a16207 !important; }
+  .workspace-light [class~="text-violet-100"],
+  .workspace-light [class~="text-violet-200"],
+  .workspace-light [class~="text-fuchsia-100"] { color: #6d28d9 !important; }
+  .workspace-light [class*="text-[8px]"] { font-size: .72rem !important; }
+  .workspace-light [class*="text-[9px]"] { font-size: .75rem !important; }
+  .workspace-light [class*="text-[10px]"] { font-size: .78rem !important; }
+  .workspace-light [class*="text-[11px]"] { font-size: .82rem !important; }
 }
 
 ::selection { background: rgba(56, 189, 248, .3); color: white; }
