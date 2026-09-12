@@ -64,6 +64,7 @@ async function initializeJournalSchema() {
     PRIMARY KEY(account_key, ticket)
   )`;
   await sql`ALTER TABLE journal_accounts ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
+  await sql`ALTER TABLE journal_accounts ADD COLUMN IF NOT EXISTS trade_mode INTEGER`;
   await sql`ALTER TABLE journal_deals ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT 'legacy-demo'`;
   return sql;
 }
@@ -103,22 +104,23 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
   if (!account || typeof account !== 'object') throw new Error('account_required');
   const login = text(account.login, 64);
   const server = text(account.server, 160);
-  const tradeMode = Math.trunc(finiteNumber(account.tradeMode));
+  const tradeMode = account.tradeMode;
   if (!login || !server) throw new Error('account_identity_required');
-  if (tradeMode !== 0 || !server.toLowerCase().includes('demo')) throw new Error('demo_accounts_only');
+  if (typeof tradeMode !== 'number' || ![0, 1, 2].includes(tradeMode)) throw new Error('invalid_account_trade_mode');
+  if (ownerUserId === 'legacy-demo' && tradeMode !== 0) throw new Error('personal_bridge_token_required');
   if (!Array.isArray(payload.deals) || payload.deals.length > 1000) throw new Error('invalid_deals');
 
   const sql = await ensureJournalSchema();
 
   const key = accountKey(ownerUserId, `${provider}|${server}`, login);
   await sql`INSERT INTO journal_accounts
-    (account_key,owner_user_id,provider,broker_server,login_masked,company,currency,balance,equity,margin,free_margin,floating_profit,observed_at,updated_at)
-    VALUES (${key},${ownerUserId},${provider},${server},${maskLogin(login)},${text(account.company, 160)},${text(account.currency, 16)},
+    (account_key,owner_user_id,provider,broker_server,login_masked,company,currency,trade_mode,balance,equity,margin,free_margin,floating_profit,observed_at,updated_at)
+    VALUES (${key},${ownerUserId},${provider},${server},${maskLogin(login)},${text(account.company, 160)},${text(account.currency, 16)},${tradeMode},
       ${finiteNumber(account.balance)},${finiteNumber(account.equity)},${finiteNumber(account.margin)},
       ${finiteNumber(account.freeMargin)},${finiteNumber(account.floatingProfit)},${Math.trunc(finiteNumber(account.observedAt))},NOW())
     ON CONFLICT (account_key) DO UPDATE SET
       provider=EXCLUDED.provider,broker_server=EXCLUDED.broker_server,login_masked=EXCLUDED.login_masked,
-      company=EXCLUDED.company,currency=EXCLUDED.currency,balance=EXCLUDED.balance,equity=EXCLUDED.equity,
+      company=EXCLUDED.company,currency=EXCLUDED.currency,trade_mode=EXCLUDED.trade_mode,balance=EXCLUDED.balance,equity=EXCLUDED.equity,
       margin=EXCLUDED.margin,free_margin=EXCLUDED.free_margin,floating_profit=EXCLUDED.floating_profit,
       observed_at=EXCLUDED.observed_at,updated_at=NOW()`;
 
@@ -188,7 +190,7 @@ export async function readJournal(ownerUserId: string) {
   const losses = closedTrades - winners;
   return {
     connected: true,
-    mode: 'demo',
+    mode: account.trade_mode === 2 ? 'live' : account.trade_mode === 0 ? 'demo' : account.trade_mode === 1 ? 'contest' : 'unknown',
     account: {
       provider: account.provider,
       brokerServer: account.broker_server,

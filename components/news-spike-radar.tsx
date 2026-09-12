@@ -212,8 +212,8 @@ export function NewsSpikeRadar() {
                         {isLiveWindow ? 'WAIT 15 MIN' : isEntryBlocked ? 'NO NEW ENTRY' : 'COUNTDOWN'}
                       </span>
                     </div>
-                    <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{formatCountdown(eventTime, nowMs)}</p>
-                    <p className="mt-1 text-[10px] font-medium text-zinc-300">{event.title}</p>
+                    <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-foreground">{formatCountdown(eventTime, nowMs)}</p>
+                    <p className="mt-1 text-[10px] font-medium text-muted-foreground">{event.title}</p>
                     <p className="mt-2 text-[10px] text-muted-foreground">{formatEventTime(event.utc, 'Asia/Manila')} PHT</p>
                     <p className="mt-0.5 text-[9px] text-muted-foreground">{formatEventTime(event.utc, 'America/New_York')} ET · official schedule ↗</p>
                   </a>

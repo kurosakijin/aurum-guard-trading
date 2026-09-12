@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ChangePassword } from '@/components/change-password';
 import { Show, SignIn, SignInButton, UserButton, useAuth, useSignUp, useUser } from '@clerk/react';
 import {
   ArrowUpRight,
@@ -19,7 +20,10 @@ import {
   Landmark,
   KeyRound,
   LineChart,
+  Moon,
   Newspaper,
+  PanelLeftClose,
+  PanelLeftOpen,
   PlugZap,
   RadioTower,
   RefreshCw,
@@ -28,6 +32,7 @@ import {
   ShieldCheck,
   Sparkles,
   Settings2,
+  Sun,
   Trash2,
   TriangleAlert,
   UserRound,
@@ -63,7 +68,7 @@ type BridgeAccount = { provider: string; server: string; loginMasked: string };
 type BridgeBindingStatus = 'unpaired' | 'pending' | 'linked';
 type JournalData = {
   connected: boolean;
-  mode: 'demo';
+  mode: 'demo' | 'live' | 'contest' | 'unknown';
   account: { provider: string; brokerServer: string; loginMasked: string; company: string; currency: string; balance: number; equity: number; freeMargin: number; floatingProfit: number; updatedAt: string };
   summary: { net: number; grossProfit: number; grossLoss: number; closedTrades: number; winRate: number; profitFactor: number; averageWin: number; averageLoss: number };
   trades: JournalTrade[];
@@ -2550,6 +2555,9 @@ export default function Home() {
   const accountReturnHash = useRef(typeof window !== 'undefined' && window.location.hash && window.location.hash !== '#manage-account' ? window.location.hash : '#desk');
   const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>(() =>
     typeof window === 'undefined' ? 'desk' : workspacePanelFromHash(window.location.hash));
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [themeFade, setThemeFade] = useState<'light' | 'dark' | null>(null);
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState('16:42:08');
   const [widgetRefresh, setWidgetRefresh] = useState(0);
@@ -2605,6 +2613,15 @@ export default function Home() {
     : '';
   const signedInUserLabel = user?.username ? `@${user.username}` : user?.primaryEmailAddress?.emailAddress ?? 'Signed-in user';
   const signedInEmail = user?.primaryEmailAddress?.emailAddress ?? '';
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('asheparte-theme');
+    setDarkMode(savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches));
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('asheparte-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     let active = true;
@@ -2923,7 +2940,19 @@ export default function Home() {
     }
   }
 
+  useEffect(() => {
+    if (!isSignedIn || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const surface = workspaceScrollRef.current;
+    if (!surface) return;
+    const animation = surface.animate(
+      [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }],
+      { duration: 220, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+    );
+    return () => animation.cancel();
+  }, [workspacePanel, isSignedIn]);
+
   function openWorkspace(panel: WorkspacePanel, hash: string = panel) {
+    if (window.matchMedia('(max-width: 767px)').matches) setSidebarExpanded(false);
     if (workspacePanel === 'journal' && workspaceScrollRef.current) {
       journalScrollPosition.current = workspaceScrollRef.current.scrollTop;
     }
@@ -2935,6 +2964,14 @@ export default function Home() {
         behavior: panel === 'journal' ? 'auto' : 'smooth',
       });
     });
+  }
+
+  function toggleTheme() {
+    if (themeFade) return;
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setThemeFade(darkMode ? 'dark' : 'light');
+    }
+    setDarkMode((enabled) => !enabled);
   }
 
   function runScan() {
@@ -3014,56 +3051,52 @@ export default function Home() {
 
   if (!authLoaded) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-[#f7f6fb] text-slate-900">
-        <div className="flex items-center gap-3 text-sm font-semibold"><span className="grid size-10 place-items-center rounded-xl bg-violet-700 text-white shadow-lg shadow-violet-200"><Bot className="size-5" /></span>Loading Asheparte AI…</div>
+      <main className={`grid min-h-dvh place-items-center ${darkMode ? 'bg-[#070b14]' : 'bg-[#f7f6fb]'}`}>
+        <div role="status" aria-live="polite">
+          <span aria-hidden="true" className={`block size-9 animate-spin rounded-full border-[3px] motion-reduce:animate-none ${darkMode ? 'border-slate-700 border-t-violet-400' : 'border-violet-100 border-t-violet-600'}`} />
+          <span className="sr-only">Loading…</span>
+        </div>
       </main>
     );
   }
 
   if (!isSignedIn) {
     return (
-      <main className="min-h-dvh overflow-y-auto bg-[#f7f6fb] text-slate-950">
+      <main className="login-shell min-h-dvh bg-white text-slate-950">
         {registrationDialog}
-        <header className="border-b border-violet-100 bg-white/90 backdrop-blur-xl">
-          <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between px-5 lg:px-8">
-            <div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-lg bg-violet-700 text-white shadow-md shadow-violet-200"><Bot className="size-5" /></span><div><p className="text-sm font-bold tracking-tight">Asheparte AI</p><p className="text-[10px] text-slate-500">Precious metals intelligence</p></div></div>
-            <div className="flex items-center gap-2 text-[11px] text-slate-500"><ShieldCheck className="size-4 text-emerald-500" /> Secure account access</div>
-          </div>
-        </header>
-
-        <div className="mx-auto grid min-h-[calc(100dvh-4rem)] max-w-[1500px] items-center gap-12 px-5 py-10 lg:grid-cols-[420px_minmax(0,1fr)] lg:px-8 lg:py-14">
-          <section className="order-2 lg:order-1" aria-labelledby="login-heading">
-            <div className="mb-7">
+        <div className="grid min-h-dvh place-items-center px-5 py-10">
+          <section className="w-full max-w-[430px]" aria-labelledby="login-heading">
+            <div className="hidden">
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.14em] text-violet-700"><span className="size-1.5 rounded-full bg-violet-600" /> Private decision workspace</div>
-              <h1 id="login-heading" className="max-w-md text-4xl font-bold leading-[1.05] tracking-[-.045em] text-slate-950 sm:text-5xl">Trade with context, not noise.</h1>
+              <h2 className="max-w-md text-4xl font-bold leading-[1.05] tracking-[-.045em] text-slate-950 sm:text-5xl">Trade with context, not noise.</h2>
               <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">Sign in to open your Gold and Silver charts, analysis advisor, Pine strategies, risk radar and private trading journal.</p>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(76,29,149,.12)]">
-              <div className="border-b border-slate-100 px-5 py-4"><p className="text-sm font-bold text-slate-900">Welcome back</p><p className="mt-1 text-[11px] text-slate-500">Login is required before the dashboard opens.</p></div>
-              <div className="flex justify-center px-3 py-4">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,.10)]">
+              <div className="border-b border-slate-100 px-6 py-5 text-center"><span className="mx-auto grid size-11 place-items-center rounded-xl bg-violet-50 text-violet-700"><Bot className="size-5" /></span><h1 id="login-heading" className="mt-4 text-2xl font-bold tracking-tight text-slate-950">Welcome back</h1><p className="mt-2 text-sm text-slate-500">Sign in to continue to your workspace.</p></div>
+              <div className="flex justify-center px-4 py-5">
                 <SignIn
                   routing="hash"
                   withSignUp={false}
                   fallbackRedirectUrl="/#desk"
                   appearance={{
-                    variables: { colorPrimary: '#6d28d9', colorBackground: '#ffffff', colorText: '#0f172a', colorTextSecondary: '#64748b', borderRadius: '0.75rem' },
-                    elements: { rootBox: 'w-full', cardBox: 'w-full shadow-none', card: 'w-full shadow-none border-0', headerTitle: 'hidden', headerSubtitle: 'hidden', footer: 'hidden' },
+                    variables: { colorPrimary: '#6d28d9', colorBackground: '#ffffff', colorInputBackground: '#ffffff', colorInputText: '#0f172a', colorText: '#0f172a', colorTextSecondary: '#475569', borderRadius: '0.75rem' },
+                    elements: { rootBox: 'w-full', cardBox: 'w-full shadow-none', card: 'w-full shadow-none border-0 p-0', headerTitle: 'hidden', headerSubtitle: 'hidden', footer: 'hidden', footerAction: 'hidden', formFieldLabel: 'text-slate-700', formFieldInput: 'border-slate-300 bg-white text-slate-950', formButtonPrimary: 'bg-violet-700 text-white hover:bg-violet-600' },
                   }}
                 />
               </div>
-              <div className="border-t border-slate-100 px-5 py-4 text-center">
-                <p className="text-[11px] text-slate-500">New to Asheparte?</p>
-                <Button variant="outline" className="mt-2 h-10 w-full border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" onClick={() => setSignUpOpen(true)}>Create verified account <ArrowUpRight className="size-4" /></Button>
+              <div className="border-t border-slate-100 px-6 py-5 text-center">
+                <p className="text-xs text-slate-500">Don&apos;t have an account?</p>
+                <Button variant="outline" className="mt-3 h-10 w-full border-slate-200 bg-white text-violet-700 hover:border-violet-200 hover:bg-violet-50" onClick={() => setSignUpOpen(true)}>Create account <ArrowUpRight className="size-4" /></Button>
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[10px] text-slate-500">
+            <div className="hidden">
               {[['Gold + Silver', 'Synced'], ['Journal', 'Private'], ['Advisor', 'No orders']].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-200 bg-white px-2 py-3"><p className="font-semibold text-slate-800">{value}</p><p className="mt-1">{label}</p></div>)}
             </div>
           </section>
 
-          <section className="order-1 min-w-0 lg:order-2" aria-label="Asheparte dashboard preview">
+          <section className="hidden" aria-label="Asheparte dashboard preview">
             <div className="relative overflow-hidden rounded-[2rem] bg-violet-700 p-3 shadow-[0_35px_100px_rgba(76,29,149,.3)] sm:p-5">
               <div className="absolute -right-16 -top-16 size-56 rounded-full bg-fuchsia-400/25 blur-3xl" />
               <div className="relative overflow-hidden rounded-2xl bg-[#fbfaff] shadow-2xl">
@@ -3091,13 +3124,21 @@ export default function Home() {
   }
 
   return (
-    <main className="workspace-light flex h-dvh overflow-hidden bg-[#f7f7fb] text-slate-950">
-      <aside className="hidden w-[232px] shrink-0 flex-col border-r border-violet-100 bg-white px-3 py-4 lg:flex" aria-label="Primary navigation">
-        <div className="flex items-center gap-3 px-2 pb-5">
+    <main className={`workspace-shell ${sidebarExpanded ? 'navigation-expanded' : ''} ${darkMode ? 'workspace-dark bg-[#070b14] text-slate-100' : 'workspace-light bg-[#f7f7fb] text-slate-950'} flex h-dvh overflow-hidden`}>
+      {sidebarExpanded && <button type="button" className="mobile-navigation-backdrop" aria-label="Close navigation" onClick={() => setSidebarExpanded(false)} />}
+      {themeFade && <div aria-hidden="true" className="theme-fade-overlay" style={{ backgroundColor: themeFade === 'dark' ? '#070b14' : '#f7f7fb' }} onAnimationEnd={() => setThemeFade(null)} />}
+      <aside className={`workspace-sidebar order-1 flex shrink-0 flex-col border-r px-1.5 py-3 transition-[width] duration-200 sm:px-2 sm:py-4 ${darkMode ? 'border-slate-800 bg-[#0c1220]' : 'border-violet-100 bg-white'} ${sidebarExpanded ? 'w-[min(248px,86vw)] sm:w-[248px]' : 'w-[52px] sm:w-[64px]'}`} aria-label="Primary navigation">
+        <div className={`flex items-center pb-5 ${sidebarExpanded ? 'justify-between gap-2 px-1' : 'justify-center'}`}>
+          <button type="button" onClick={() => setSidebarExpanded((expanded) => !expanded)} className={`grid size-10 shrink-0 place-items-center rounded-xl border transition ${darkMode ? 'border-slate-700 text-violet-300 hover:bg-white/5' : 'border-violet-100 text-violet-700 hover:bg-violet-50'}`} aria-label={sidebarExpanded ? 'Collapse navigation' : 'Expand navigation'} title={sidebarExpanded ? 'Collapse navigation' : 'Expand navigation'}>
+            {sidebarExpanded ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+          </button>
+          {sidebarExpanded && <p className={`min-w-0 flex-1 truncate text-sm font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-950'}`}>Asheparte AI</p>}
+        </div>
+        <div className="hidden">
           <div className="grid size-10 place-items-center rounded-xl bg-violet-700 text-white shadow-lg shadow-violet-200"><Bot className="size-5" /></div>
           <div><p className="text-sm font-bold tracking-tight text-slate-950">Asheparte AI</p><p className="mt-0.5 text-[11px] text-slate-500">Metals intelligence</p></div>
         </div>
-        <p className="px-3 text-[10px] font-bold uppercase tracking-[.14em] text-slate-400">Workspace</p>
+        {sidebarExpanded && <p className={`px-3 text-[10px] font-bold uppercase tracking-[.14em] ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Navigation</p>}
         <div className="mt-2 grid gap-1">
           {([
             ['desk', 'Dashboard', LineChart, 'desk'],
@@ -3108,20 +3149,32 @@ export default function Home() {
             ['guides', 'Trading guides', BookOpenCheck, 'chart-guide'],
             ['risk', 'Risk & news', ShieldCheck, 'news-radar'],
           ] as const).map(([panel, label, Icon, hash]) => (
-            <button key={panel} type="button" onClick={() => openWorkspace(panel, hash)} className={`flex h-10 items-center gap-3 rounded-xl px-3 text-left text-[13px] font-medium transition ${workspacePanel === panel ? 'bg-violet-50 text-violet-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`} aria-pressed={workspacePanel === panel}>
-              <Icon className={`size-4 ${workspacePanel === panel ? 'text-violet-600' : 'text-slate-400'}`} /> {label}
+            <button key={panel} type="button" onClick={() => openWorkspace(panel, hash)} className={`flex h-10 items-center rounded-xl text-left text-[13px] font-medium transition ${sidebarExpanded ? 'gap-3 px-3' : 'justify-center px-0'} ${workspacePanel === panel ? darkMode ? 'bg-violet-400/15 text-violet-200' : 'bg-violet-50 text-violet-700 shadow-sm' : darkMode ? 'text-slate-400 hover:bg-white/5 hover:text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`} aria-pressed={workspacePanel === panel} aria-label={label} title={!sidebarExpanded ? label : undefined}>
+              <Icon className={`size-4 shrink-0 ${workspacePanel === panel ? darkMode ? 'text-violet-300' : 'text-violet-600' : 'text-slate-400'}`} /> {sidebarExpanded && <span>{label}</span>}
             </button>
           ))}
         </div>
-        <div className="mt-auto rounded-2xl bg-violet-700 p-4 text-white shadow-lg shadow-violet-100">
-          <div className="flex items-center gap-2"><ShieldCheck className="size-4 text-violet-200" /><p className="text-xs font-semibold">Private workspace</p></div>
-          <p className="mt-2 text-[11px] leading-5 text-violet-200">Your journal and bridge pairing stay isolated to this account.</p>
-          <div className="mt-3 flex items-center justify-between border-t border-white/15 pt-3"><span className="max-w-[135px] truncate text-[11px]">{signedInUserLabel}</span><UserButton userProfileMode="navigation" userProfileUrl="#manage-account" /></div>
-        </div>
+        <button type="button" onClick={toggleTheme} className={`mt-3 flex h-10 items-center rounded-xl border text-[12px] font-medium transition ${sidebarExpanded ? 'gap-3 px-3' : 'justify-center px-0'} ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-white/5' : 'border-violet-100 text-slate-600 hover:bg-violet-50'}`} aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} title={!sidebarExpanded ? darkMode ? 'Light mode' : 'Dark mode' : undefined}>
+          {darkMode ? <Sun className="size-4 shrink-0 text-amber-300" /> : <Moon className="size-4 shrink-0 text-violet-600" />}
+          {sidebarExpanded && <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>}
+        </button>
+        {sidebarExpanded ? <div className="broker-summary mt-auto rounded-2xl bg-violet-700 p-3.5 text-white">
+          <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><ShieldCheck className="broker-muted size-4" /><p className="text-xs font-semibold text-white">Broker Account</p></div><span className={`size-2 rounded-full ${bridgeHeartbeatOnline ? 'bg-emerald-300' : 'bg-violet-300'}`} /></div>
+          <p className="broker-muted mt-1.5 text-[10px]">{currentJournalEnabled ? `${journalData.account.provider} · ${journalData.account.loginMasked}` : 'No account linked to this user'}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/15 pt-3">
+            {([
+              ['Balance', currentJournalEnabled ? `$${journalData.account.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'],
+              ['Equity', currentJournalEnabled ? `$${journalData.account.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'],
+              ['Free margin', currentJournalEnabled ? `$${journalData.account.freeMargin.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'],
+              ['Open P/L', currentJournalEnabled ? `${journalData.account.floatingProfit < 0 ? '−' : '+'}$${Math.abs(journalData.account.floatingProfit).toFixed(2)}` : '—'],
+            ] as const).map(([label, value]) => <div key={label} className="rounded-lg bg-white/10 p-2"><p className="broker-label text-[9px]">{label}</p><p className="mt-1 truncate text-[11px] font-semibold text-white">{value}</p></div>)}
+          </div>
+          <div className="mt-3 flex items-center justify-between border-t border-white/15 pt-3"><span className="max-w-[160px] truncate text-[11px]">{signedInUserLabel}</span><UserButton userProfileMode="navigation" userProfileUrl="#manage-account" /></div>
+        </div> : <div className="mt-auto flex justify-center"><UserButton userProfileMode="navigation" userProfileUrl="#manage-account" /></div>}
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="order-2 flex min-w-0 flex-1 flex-col">
       <Dialog open={manageAccountOpen} onOpenChange={setAccountDialogOpen}>
-      <header className="glass-chrome z-30 shrink-0 border-b border-violet-100">
+      <header className="hidden">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between px-3 sm:px-5 lg:px-6">
           <div className="flex items-center gap-3">
             <div className="grid size-9 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-primary shadow-[0_0_32px_rgba(225,177,78,.12)]">
@@ -3198,6 +3251,7 @@ export default function Home() {
               {emailChangeStep === 'code' && <div className="mt-3"><label htmlFor="email-change-code" className="text-[10px] font-medium text-sky-100">Code sent to {newAccountEmail}</label><Input id="email-change-code" inputMode="numeric" autoComplete="one-time-code" value={emailVerificationCode} onChange={(event) => setEmailVerificationCode(event.target.value)} className="mt-1.5 border-cyan-300/15 bg-black/15 font-mono text-[11px]" /><div className="mt-2 flex gap-2"><Button size="sm" className="h-8 bg-emerald-300 text-[10px] text-[#03121f]" disabled={accountChangeBusy || !emailVerificationCode.trim()} onClick={confirmEmailChange}>Verify &amp; replace</Button><Button variant="outline" size="sm" className="h-8 border-white/10 text-[10px]" disabled={accountChangeBusy} onClick={cancelEmailChange}>Cancel</Button></div></div>}
               {accountChangeError && <p className="mt-2 text-[9px] text-red-300">{accountChangeError}</p>}
               <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Usernames cannot be changed. A replacement email becomes active only after its verification code succeeds; the previous email is then removed.</p>
+              <ChangePassword key={user?.id} />
             </div>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -3295,7 +3349,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      <nav className="glass-chrome shrink-0 border-b border-violet-100 px-2 py-2 lg:hidden" aria-label="Trader workspace">
+      <nav className="hidden" aria-label="Trader workspace">
         <div className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto">
           {([
             ['desk', 'Desk', LineChart],
@@ -3346,7 +3400,7 @@ export default function Home() {
         </section>
 
         <section className={workspacePanel === 'desk' ? 'mb-4 grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]' : 'hidden'} aria-label="Trading desk overview">
-          <Card className="min-w-0 border-sky-300/20">
+          <Card className="order-2 min-w-0 border-sky-300/20 xl:order-none">
             <CardHeader className="border-b border-sky-200/10 pb-3">
               <CardTitle className="flex items-center gap-2"><CandlestickChart className="size-4 text-cyan-300" /> XAUUSD live chart</CardTitle>
               <CardDescription>Account-independent market view · H1 by default</CardDescription>
@@ -3371,14 +3425,14 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <div className="grid content-start gap-4">
+          <div className="order-first grid content-start gap-4 xl:order-none">
             <Card className="border-cyan-300/20">
-              <CardHeader className="border-b border-sky-200/10 pb-3">
+              <CardHeader className="hidden border-b border-sky-200/10 pb-3 xl:grid">
                 <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-cyan-300" /> Current account connection</CardTitle>
                 <CardDescription>{isSignedIn ? `Signed in as ${signedInUserLabel}` : 'Sign in to view your private journal'}</CardDescription>
                 <CardAction><Badge variant="outline" className={bridgeHeartbeatOnline ? 'border-emerald-300/25 text-emerald-200' : bridgeBindingStatus === 'linked' ? 'border-red-300/25 text-red-200' : 'border-amber-300/25 text-amber-200'}>{bridgeHeartbeatOnline ? 'ONLINE' : bridgeBindingStatus === 'linked' ? 'OFFLINE' : isSignedIn ? 'NOT LINKED' : 'LOCKED'}</Badge></CardAction>
               </CardHeader>
-              <CardContent className="pt-4">
+              <CardContent className="pt-3 xl:pt-4">
                 <div className="space-y-2 rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
                   <div className="flex items-start justify-between gap-3"><span className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Asheparte account</span><span className="min-w-0 text-right"><span className="block max-w-[175px] truncate font-mono text-[10px] text-cyan-200">{isSignedIn ? signedInUserLabel : 'Not signed in'}</span>{isSignedIn && signedInEmail && signedInEmail !== signedInUserLabel && <span className="mt-0.5 block max-w-[175px] truncate text-[9px] text-muted-foreground">{signedInEmail}</span>}</span></div>
                   <div className="border-t border-white/8 pt-2"><p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Linked broker account</p><div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {currentJournalEnabled ? `${journalData.account.provider} · ${journalData.account.brokerServer} · ${journalData.account.loginMasked}` : 'No account linked to this user'}</div></div>
@@ -3406,17 +3460,10 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            <Card className="border-sky-300/18" size="sm">
-              <CardContent>
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-300" />
-                  <div>
-                    <p className="text-xs font-medium text-sky-100">Account isolation active</p>
-                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Balances, orders and history are scoped to the authenticated user—not shared globally or stored in this browser UI.</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <p role="note" className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span><strong className="font-medium">Account isolation active.</strong> Balances, orders and history are scoped to the authenticated user—not shared globally or stored in this browser UI.</span>
+            </p>
           </div>
         </section>
 
@@ -3440,7 +3487,20 @@ export default function Home() {
             </Card>
           )}
           {!authLoaded && <div className="grid min-h-64 place-items-center text-sm text-muted-foreground">Loading secure account…</div>}
-          {authLoaded && isSignedIn && <>
+          {authLoaded && isSignedIn && !currentJournalEnabled && (
+            <Card className="mx-auto mt-8 max-w-xl">
+              <CardContent className="px-6 py-10 text-center">
+                <PlugZap className="mx-auto size-9 text-primary" />
+                <h1 id="trade-journal-heading" className="mt-4 text-2xl font-semibold">You haven’t linked MT5 yet</h1>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">Connect your live or demo MT5 account to see your trading history and performance here.</p>
+                {bridgeBindingStatus === 'pending' && <p className="mt-3 text-sm text-muted-foreground">An account was detected. Review and approve the pairing to continue.</p>}
+                {bridgeBindingStatus === 'linked' && <p className="mt-3 text-sm text-muted-foreground">Pairing is approved. Waiting for your first synchronized account snapshot.</p>}
+                <Button className="mt-5" onClick={() => setAccountDialogOpen(true)}><Settings2 className="size-4" /> {bridgeBindingStatus === 'pending' ? 'Review pairing' : 'Connect MT5'}</Button>
+                <p className="mt-3 text-xs text-muted-foreground">Read-only journal · no trading access</p>
+              </CardContent>
+            </Card>
+          )}
+          {authLoaded && isSignedIn && currentJournalEnabled && <>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-cyan-300">
@@ -3448,6 +3508,7 @@ export default function Home() {
               </div>
               <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Trading journal</h1>
               <p className="mt-1 text-sm text-muted-foreground">Your private ACCM / MT5 performance and trade history.</p>
+              {journalData.mode !== 'unknown' && <Badge variant="outline" className="mt-2">{journalData.mode === 'live' ? 'Live account' : journalData.mode === 'contest' ? 'Contest account' : 'Demo account'}</Badge>}
               <p className="mt-1.5 font-mono text-[10px] text-cyan-200">{signedInUserLabel} → {currentJournalEnabled ? `${journalData.account.provider} / ${journalData.account.brokerServer} / ${journalData.account.loginMasked}` : 'no broker account linked'}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -3615,157 +3676,47 @@ export default function Home() {
         </section>
 
         <section id="mt5-bot" className={workspacePanel === 'mt5' ? 'mb-4' : 'hidden'} aria-labelledby="mt5-bot-heading">
-          <Card className="overflow-hidden border-emerald-300/20 bg-[linear-gradient(135deg,rgba(52,211,153,.085),rgba(34,211,238,.045)_48%,rgba(18,22,27,.97))] shadow-[0_22px_80px_rgba(0,0,0,.22)]">
-            <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-lg"><Bot className="size-5 text-emerald-300" /> Asheparte AI Analysis Advisor</CardTitle>
-              <CardDescription>MT5 v3.26 · POC structure, engulfing and delivery-state shifts, Gold/Silver sync, four-timeframe confirmation and AI context</CardDescription>
-              <CardAction><Badge className="border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">ANALYSIS ONLY · NO ORDERS</Badge></CardAction>
+          <Card className="overflow-hidden">
+            <CardHeader className="border-b border-border pb-5">
+              <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-xl"><Bot className="size-5 text-primary" /> Asheparte AI Analysis Advisor</CardTitle>
+              <CardDescription>Clear trade analysis for Gold and Silver, inside MetaTrader 5.</CardDescription>
+              <CardAction><Badge variant="outline">Analysis only</Badge></CardAction>
             </CardHeader>
-            <CardContent className="grid gap-5 pt-5 xl:grid-cols-[1.1fr_.9fr]">
-              <div className="grid content-start gap-4">
-                <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[.045] p-4">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="max-w-2xl">
-                      <p className="text-sm font-semibold text-emerald-100">Decision support inside your Gold chart</p>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Maps the setup, checks M15/H1/D1 agreement, watches M1 timing and displays a manual entry, invalidation and target plan. It cannot open, modify or close a trade.</p>
-                    </div>
-                    <div className="flex shrink-0 flex-col gap-2">
-                      <a
-                        href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.26"
-                        download
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200"
-                      >
-                        <Download className="size-4" /> Download advisor v3.26
-                      </a>
-                      <a
-                        href="./downloads/AurumGuardAI.zip?v=9.3"
-                        download
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/15"
-                      >
-                        <Sparkles className="size-4" /> Download AI layer
-                      </a>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {[
-                    ['1 · Context', 'Read M15/H1/D1 trend, RSI, volatility and Gold/Silver agreement.'],
-                    ['2 · Structure', 'Map POC/liquidity and detect closed engulfing or delivery-state shifts.'],
-                    ['3 · Confirmation', 'Classify continuation or reversal, then require Gold/Silver and higher-timeframe agreement.'],
-                    ['4 · Manual plan', 'Display entry, invalidation and targets for your review—never place an order.'],
-                  ].map(([title, description]) => (
-                    <div key={title} className="rounded-xl border border-white/8 bg-black/15 p-3">
-                      <p className="text-[10px] font-semibold text-emerald-200">{title}</p>
-                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="rounded-xl border border-violet-300/20 bg-violet-300/[.045] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-xs font-semibold text-violet-100"><Sparkles className="size-3.5" /> AI confidence layer</p>
-                    <Badge variant="outline" className="border-violet-300/25 text-violet-200">SECOND OPINION</Badge>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
-                    {[
-                      ['BUY / SELL / WAIT', 'Research bias'],
-                      ['Closed M1', 'Update timing'],
-                      ['Gold + Silver', 'Market inputs'],
-                      ['Fail closed', 'Stale / drift lock'],
-                    ].map(([value, label]) => (
-                      <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
-                        <p className="font-heading text-sm font-semibold text-violet-100">{value}</p>
-                        <p className="mt-0.5 text-muted-foreground">{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[10px] leading-4 text-amber-100/85">The AI reports directional confidence, model health and regime drift in the chart panel. Its score is context—not a prediction, execution command or guarantee.</p>
-                  <div className="mt-3 rounded-lg border border-amber-300/20 bg-black/20 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-amber-100">V9 stability research</p>
-                      <Badge variant="outline" className="border-amber-300/25 text-amber-200">SHADOW · HOLD</Badge>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {[
-                        ['20', 'Models checked'],
-                        ['3 / 3', 'Positive dev folds'],
-                        ['41.7%', 'Untouched win rate'],
-                        ['+10.47R', 'Untouched net'],
-                      ].map(([value, label]) => (
-                        <div key={label} className="rounded-md border border-white/7 bg-white/[.025] p-2">
-                          <p className="font-heading text-sm font-semibold text-amber-100">{value}</p>
-                          <p className="mt-0.5 text-muted-foreground">{label}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="mt-2 text-[10px] leading-4 text-muted-foreground">Better consistency, but not promoted: the untouched profit factor was 1.09 and drawdown was 10.82R. Use <span className="font-mono text-foreground">run_v9_shadow.cmd</span> only to gather fresh evidence.</p>
-                  </div>
-                </div>
+            <CardContent className="space-y-6 pt-6">
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">The advisor checks market direction, price structure and Gold/Silver agreement, then displays a possible entry, stop loss and targets. You review the plan and decide whether to trade.</p>
+              <div className="flex flex-wrap gap-3">
+                <a href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.26" download className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:opacity-90"><Download className="size-4" /> Download advisor v3.26</a>
+                <a href="./downloads/AurumGuardAI.zip?v=9.3" download className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-5 text-sm font-semibold text-secondary-foreground hover:opacity-90"><Sparkles className="size-4" /> Optional AI layer</a>
               </div>
-
-              <div className="grid content-start gap-4">
-                <div className="rounded-xl border border-white/9 bg-black/15 p-4">
-                  <p className="text-xs font-semibold">What the advisor checks</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
-                    {[
-                      ['M15', 'Setup + safety'],
-                      ['H1 + D1', 'Directional context'],
-                      ['M1 close', 'Timing confirmation'],
-                      ['XAU + XAG', 'Metals synchronization'],
-                    ].map(([value, label]) => (
-                      <div key={label} className="rounded-lg border border-white/8 bg-white/[.025] p-3">
-                        <p className="font-heading text-base font-semibold text-primary">{value}</p>
-                        <p className="mt-0.5 text-muted-foreground">{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[10px] leading-4 text-muted-foreground">A setup stays in WAIT when required data is missing, the spread is abnormal, high-impact USD news is near, or the market is in shock.</p>
-                </div>
-
-                <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold text-amber-100">How to use the AI reading</p>
-                    <Badge variant="outline" className="border-amber-300/25 text-amber-200">RESEARCH CONTEXT</Badge>
-                  </div>
-                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Read it only after the rule-based setup has formed.</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
-                    {[
-                      ['BUY', 'Bullish candidate'],
-                      ['SELL', 'Bearish candidate'],
-                      ['WAIT', 'No usable edge'],
-                      ['LOCK', 'Stale data or drift'],
-                    ].map(([value, label]) => (
-                      <div key={label} className="rounded-lg border border-white/8 bg-black/15 p-2.5">
-                        <p className="font-heading text-sm font-semibold text-amber-100">{value}</p>
-                        <p className="mt-0.5 text-muted-foreground">{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[10px] leading-4 text-red-100/85">Confidence is not win probability. Your own chart reading and risk decision remain final.</p>
-                </div>
-
-                <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[.035] p-4">
-                  <p className="text-xs font-semibold text-cyan-100">Install in MetaTrader 5</p>
-                  <ol className="mt-2 space-y-2 text-[10px] leading-4 text-muted-foreground">
-                    <li><span className="mr-2 font-semibold text-cyan-200">1.</span>Download the EA and copy it to <span className="font-mono text-foreground">MQL5/Experts</span>.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">2.</span>Refresh Navigator and attach it to a Gold chart.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">3.</span>Attach it to a Gold chart and enter the correct Silver symbol.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">4.</span>Download the optional AI layer and run its installer, then its analysis runner.</li>
-                    <li><span className="mr-2 font-semibold text-cyan-200">5.</span>Keep <span className="font-mono text-foreground">AIShadowMode = true</span>; Algo Trading is not required.</li>
+              <div className="grid gap-6 border-t border-border pt-6 md:grid-cols-2">
+                <div>
+                  <h2 className="text-base font-semibold">Get started</h2>
+                  <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
+                    <li>Copy the advisor to MT5’s <span className="font-mono text-foreground">MQL5/Experts</span> folder.</li>
+                    <li>Refresh Navigator, attach it to a Gold chart and set your Silver symbol.</li>
+                    <li>Keep MT5 open for updated analysis.</li>
                   </ol>
                 </div>
-
-                <div className="rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-3 text-[10px] leading-4 text-muted-foreground">
-                  <p><span className="font-semibold text-amber-200">Manual execution only:</span> the advisor and website cannot press Buy or Sell. MT5 must stay open for live analysis, AI scores and journal heartbeat.</p>
+                <div>
+                  <h2 className="text-base font-semibold">An optional second opinion</h2>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">The AI layer adds BUY, SELL or WAIT context. It is still in research mode; its confidence score is not a win probability.</p>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">Neither download places or manages trades.</p>
                 </div>
               </div>
+              <details className="rounded-xl border border-border">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Setup details &amp; research status</summary>
+                <div className="space-y-3 border-t border-border px-4 py-4 text-sm leading-6 text-muted-foreground">
+                  <p>The advisor uses M15, H1 and D1 for context, M1 for timing, and Gold/Silver agreement. It checks POC, liquidity, engulfing candles and shifts in price delivery.</p>
+                  <p>Missing data, abnormal spreads, news risk or market shocks can keep a setup in WAIT. AI LOCK indicates stale data or model drift.</p>
+                  <p>For the optional AI layer, run its installer and analysis runner. Keep <span className="font-mono text-foreground">AIShadowMode = true</span>. Algo Trading is not required.</p>
+                  <p>V9 remains in shadow testing. The recorded untouched test showed a 41.7% win rate, 1.09 profit factor and 10.82R drawdown; it has not been promoted.</p>
+                </div>
+              </details>
             </CardContent>
           </Card>
-
         </section>
 
-        <section id="chart-guide" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="chart-guide-heading">
+        <section id="chart-guide" className={`guide-panel ${workspacePanel === 'guides' ? 'mb-4' : 'hidden'}`} aria-labelledby="chart-guide-heading">
           <Card className="overflow-hidden border-cyan-300/15 bg-[linear-gradient(145deg,rgba(34,211,238,.055),rgba(18,22,27,.96)_42%)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="chart-guide-heading" className="flex items-center gap-2 text-lg"><BookOpenCheck className="size-5 text-cyan-300" /> How to read the chart</CardTitle>
@@ -4069,7 +4020,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section id="pattern-playbook" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="pattern-playbook-heading">
+        <section id="pattern-playbook" className={`guide-panel ${workspacePanel === 'guides' ? 'mb-4' : 'hidden'}`} aria-labelledby="pattern-playbook-heading">
           <Card className="border-sky-300/16 bg-[linear-gradient(145deg,rgba(14,165,233,.065),rgba(18,22,27,.97)_42%)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="pattern-playbook-heading" className="flex items-center gap-2 text-lg"><LineChart className="size-5 text-sky-300" /> 11 chart patterns · candlestick playbook</CardTitle>
@@ -4114,7 +4065,7 @@ export default function Home() {
           </Card>
         </section>
 
-        <section id="fibonacci-guide" className={workspacePanel === 'guides' ? 'mb-4' : 'hidden'} aria-labelledby="fibonacci-guide-heading">
+        <section id="fibonacci-guide" className={`guide-panel ${workspacePanel === 'guides' ? 'mb-4' : 'hidden'}`} aria-labelledby="fibonacci-guide-heading">
           <Card className="border-yellow-300/18 bg-[linear-gradient(145deg,rgba(250,204,21,.07),rgba(168,85,247,.045)_48%,rgba(18,22,27,.97))]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle id="fibonacci-guide-heading" className="flex items-center gap-2 text-lg"><Crosshair className="size-5 text-yellow-300" /> Automatic Fibonacci pullback map</CardTitle>
@@ -4720,7 +4671,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="reversal-playbook" className={workspacePanel === 'guides' ? 'mt-4' : 'hidden'}>
+        <section id="reversal-playbook" className={`guide-panel ${workspacePanel === 'guides' ? 'mt-4' : 'hidden'}`}>
           <Card className="border-fuchsia-400/15 bg-[linear-gradient(145deg,rgba(192,132,252,.08),rgba(18,22,27,.95)_45%)]">
             <CardHeader className="border-b border-white/7 pb-4">
               <CardTitle className="flex items-center gap-2"><RotateCcw className="size-4 text-fuchsia-300" /> Gold reversal scalping playbook</CardTitle>
