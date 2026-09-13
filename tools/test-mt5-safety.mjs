@@ -58,7 +58,7 @@ function observe(prices,direction=1) {
   return new Function('prices','direction',`
     let g_manualActive=true,g_manualDirection=direction,g_manualStop=direction>0?95:105;
     let g_manualTP1=direction>0?105:95,g_manualTP2=direction>0?107.5:92.5,g_manualTP3=direction>0?110:90;
-    let g_manualTargets=0,g_manualOutcome='',g_planRemovalAt=0;
+    let g_manualTargets=0,g_manualOutcome='',g_planRemovalAt=0,g_planOutcomeCode=0;
     const PrintFormat=()=>{},TimeLocal=()=>100,PeriodSeconds=()=>3600,PostSLPlanDisplayTimeframe=0,PostSLPlanDisplayBars=1;
     const StartPostSLPlanDisplay=()=>{g_manualActive=false;g_manualOutcome='SL';};
     function step(tick){${code}}

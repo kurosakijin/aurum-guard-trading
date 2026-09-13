@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChangePassword } from '@/components/change-password';
 import { AdvisorDownloads } from '@/components/advisor-downloads';
+import { SignalJournal } from '@/components/signal-journal';
 import { deliveryPineScript } from '@/lib/delivery-pine';
 import { Show, SignIn, SignInButton, UserButton, useAuth, useSignUp, useUser } from '@clerk/react';
 import {
@@ -3719,6 +3720,7 @@ export default function Home() {
                 <a href="./downloads/AurumGuardAI.zip?v=9.3" download className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-5 text-sm font-semibold text-secondary-foreground hover:opacity-90"><Sparkles className="size-4" /> Optional AI layer</a>
               </div>
               <AdvisorDownloads key={user?.id ?? 'signed-out'} hasToken={bridgeTokenHasToken && Boolean(isSignedIn)} generatedToken={bridgeTokenRevealOwner === user?.id ? bridgeTokenReveal : ''} onManage={() => setManageAccountOpen(true)} />
+              <SignalJournal key={`signal-journal-${user?.id ?? 'signed-out'}`} />
               <div className="grid gap-6 border-t border-border pt-6 md:grid-cols-2">
                 <div>
                   <h2 className="text-base font-semibold">Get started</h2>

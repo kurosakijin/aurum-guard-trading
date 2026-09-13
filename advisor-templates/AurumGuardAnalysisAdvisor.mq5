@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.27"
+#property version   "3.28"
 #property strict
 #property description "Asheparte AI analysis-only EA: POC, engulfing/delivery-state confirmation, Gold/Silver sync, MTF direction and manual guidance. Never trades."
 
@@ -203,6 +203,11 @@ bool g_manualActive=false;
 int g_manualTargets=0;
 string g_manualOutcome="";
 long g_manualLastTickMsc=0;
+string g_signalRoute="RETEST";
+datetime g_recordedPlanBar=0;
+int g_recordedTargets=0,g_recordedOutcome=0,g_planOutcomeCode=0;
+string g_signalJournalStatus="LOCAL JOURNAL READY";
+string g_lastExplanationLogged="";
 string   g_journalTimeKey = "";
 string   g_journalTicketKey = "";
 ulong    g_journalNextSyncMs = 0;
@@ -1447,6 +1452,7 @@ bool EvaluateSignal(int &direction,double &atrValue,string &reason)
   {
    direction=0;
    g_lastSetupScore=0;
+   g_signalRoute="RETEST";
    if(UsePOCSweepSequence)
      {
       string pocReason="";
@@ -1475,6 +1481,7 @@ bool EvaluateSignal(int &direction,double &atrValue,string &reason)
          direction=0;
          return false;
         }
+      g_signalRoute=route;
       PrintFormat("Asheparte M15 setup accepted: route=%s direction=%d POC=%.2f stop=%.2f MTF=%d/9 metals corr=%.2f ATR=%.2f",route,direction,g_pocPrice,g_signalStopPrice,g_lastMTFScore,metalCorrelation,atrValue);
       return true;
      }
@@ -1827,9 +1834,72 @@ void SetGuideLine(const string name,const double price,const color lineColor,con
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
   }
 
+// Local analysis journal: deliberately separate from broker deal ingestion.
+string SignalJournalPath()
+  {
+   return "AsheparteSignals\\"+ManualStateKey("signals")+".jsonl";
+  }
+
+bool AppendSignalRecord(const string record)
+  {
+   ResetLastError();
+   int file=FileOpen(SignalJournalPath(),FILE_READ|FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_SHARE_READ,0,CP_UTF8);
+   if(file==INVALID_HANDLE)
+     { g_signalJournalStatus="JOURNAL WRITE FAILED"; return false; }
+   bool sought=FileSeek(file,0,SEEK_END);
+   // A leading newline isolates a partial last record after an interrupted write.
+   uint written=sought ? FileWriteString(file,"\r\n"+record+"\r\n") : 0;
+   FileFlush(file);
+   int error=GetLastError();
+   FileClose(file);
+   if(written==0 || error!=0)
+     { g_signalJournalStatus="JOURNAL WRITE FAILED"; return false; }
+   g_signalJournalStatus="LOCAL JOURNAL SAVED";
+   return true;
+  }
+
+string SignalPlanId(const datetime bar)
+  {
+   return ManualStateKey("plan")+"_"+IntegerToString((long)bar);
+  }
+
+bool BeginSignalRecord(const datetime bar,const int direction,const double entry,const double stop,
+                       const double tp1,const double tp2,const double tp3)
+  {
+   string record=StringFormat(
+      "{\"schema\":1,\"type\":\"CREATED\",\"eventId\":%s,\"planId\":%s,\"version\":\"3.28\",\"recordedAt\":%I64d,"
+      "\"symbol\":%s,\"timeframe\":%s,\"strategy\":%s,\"direction\":%d,\"entry\":%.10f,\"stop\":%.10f,"
+      "\"tp1\":%.10f,\"tp2\":%.10f,\"tp3\":%.10f,\"ruleScore\":%d,\"mtfScore\":%d,\"aiOpinion\":%s,\"explanation\":%s}",
+      JournalJsonString(SignalPlanId(bar)+"/CREATED"),JournalJsonString(SignalPlanId(bar)),(long)TimeGMT()*1000,
+      JournalJsonString(g_symbol),JournalJsonString(EnumToString(UsePOCSweepSequence ? POCSetupTimeframe : SignalTimeframe)),JournalJsonString(g_signalRoute),
+      direction,entry,stop,tp1,tp2,tp3,g_lastSetupScore,g_lastMTFScore,JournalJsonString(g_aiPanelStatus),
+      JournalJsonString("Closed-bar "+g_signalRoute+" setup passed the configured confirmation and entry-quality checks. AI is a separate opinion."));
+   if(!AppendSignalRecord(record)) return false;
+   g_recordedPlanBar=bar;
+   g_recordedTargets=0; g_recordedOutcome=0; g_planOutcomeCode=0;
+   return true;
+  }
+
+bool FlushSignalProgress()
+  {
+   // Old 3.27 plans lack an original snapshot: do not invent their history.
+   if(g_recordedPlanBar==0 || g_recordedPlanBar!=g_lastPublishedSignalBar) return true;
+   if(g_recordedTargets==g_manualTargets && g_recordedOutcome==g_planOutcomeCode) return true;
+   string outcome=g_planOutcomeCode==1 ? "SL" : g_planOutcomeCode==2 ? "TP3" : g_planOutcomeCode==3 ? "UNKNOWN" : "ACTIVE";
+   string record=StringFormat(
+      "{\"schema\":1,\"type\":\"PROGRESS\",\"eventId\":%s,\"planId\":%s,\"recordedAt\":%I64d,\"targets\":%d,\"outcome\":%s}",
+      JournalJsonString(SignalPlanId(g_recordedPlanBar)+"/"+IntegerToString(g_manualTargets)+"/"+outcome),
+      JournalJsonString(SignalPlanId(g_recordedPlanBar)),(long)TimeGMT()*1000,g_manualTargets,JournalJsonString(outcome));
+   if(!AppendSignalRecord(record)) { SaveManualPlanState(); return false; }
+   g_recordedTargets=g_manualTargets; g_recordedOutcome=g_planOutcomeCode;
+   SaveManualPlanState();
+   return true;
+  }
+
 void PublishManualSetup(const int direction,const double signalATR,const double structureStop)
   {
    if(g_manualActive || (direction!=1 && direction!=-1)) return;
+   if(!FlushSignalProgress()) { g_lastDecision="JOURNAL WRITE FAILED"; return; }
    string qualityReason="";
    if(!SharedSignalQuality(direction,true,qualityReason))
      { g_lastDecision=qualityReason; return; }
@@ -1857,6 +1927,8 @@ void PublishManualSetup(const int direction,const double signalATR,const double 
    double tp2=NormalizePrice(direction>0 ? entry+risk*1.50 : entry-risk*1.50);
    double tp3=NormalizePrice(direction>0 ? entry+risk*FibonacciRewardMultiple : entry-risk*FibonacciRewardMultiple);
 
+   if(!BeginSignalRecord(signalBar,direction,entry,stop,tp1,tp2,tp3))
+     { g_lastDecision="JOURNAL WRITE FAILED"; return; }
    g_manualDirection=direction;
    g_manualActive=true;
    g_manualTargets=0;
@@ -1894,6 +1966,8 @@ void PublishManualSetup(const int direction,const double signalATR,const double 
 
 void ClearManualPlan()
   {
+   g_recordedPlanBar=0;
+   g_recordedTargets=0; g_recordedOutcome=0; g_planOutcomeCode=0;
    g_manualActive=false;
    g_manualTargets=0;
    g_manualOutcome="";
@@ -1916,6 +1990,9 @@ void StartPostSLPlanDisplay(const int stoppedDirection,const double stoppedPrice
    g_planRemovalAt=TimeLocal()+displaySeconds;
    g_manualActive=false;
    g_manualOutcome=StringFormat("SL AFTER %d TARGETS",g_manualTargets);
+   g_planOutcomeCode=1;
+   SaveManualPlanState();
+   FlushSignalProgress();
    ClearPendingEntry();
    ResetPOCSequence("");
    g_lastDecision=StringFormat("%s SL HIT %.2f - PLAN REMOVES IN %s",stoppedDirection>0 ? "BUY" : "SELL",stoppedPrice,EnumToString(PostSLPlanDisplayTimeframe));
@@ -1943,6 +2020,12 @@ void SaveManualPlanState()
    state[8]=(double)g_planRemovalAt; state[9]=(double)g_manualLastTickMsc;
    state[10]=(double)g_lastPublishedSignalBar;
    for(int i=0;i<11;i++) GlobalVariableSet(ManualStateKey(IntegerToString(i)),state[i]);
+   GlobalVariableSet(ManualStateKey("recordBar"),(double)g_recordedPlanBar);
+   GlobalVariableSet(ManualStateKey("recordTargets"),g_recordedTargets);
+   GlobalVariableSet(ManualStateKey("recordOutcome"),g_recordedOutcome);
+   GlobalVariableSet(ManualStateKey("planOutcome"),g_planOutcomeCode);
+   GlobalVariableSet(ManualStateKey("ruleScore"),g_lastSetupScore);
+   GlobalVariableSet(ManualStateKey("mtfScore"),g_lastMTFScore);
   }
 
 void RestoreManualPlanState()
@@ -1960,7 +2043,16 @@ void RestoreManualPlanState()
    g_manualActive=state[6]==1; g_manualTargets=(int)state[7];
    g_planRemovalAt=(datetime)state[8]; g_manualLastTickMsc=(long)state[9];
    g_lastPublishedSignalBar=(datetime)state[10];
-   g_manualOutcome=g_manualTargets==3 ? "TP3 OBSERVED" : "FINISHED - REVIEW LOG";
+   if(GlobalVariableCheck(ManualStateKey("recordBar")))
+     {
+      g_recordedPlanBar=(datetime)GlobalVariableGet(ManualStateKey("recordBar"));
+      g_recordedTargets=(int)GlobalVariableGet(ManualStateKey("recordTargets"));
+      g_recordedOutcome=(int)GlobalVariableGet(ManualStateKey("recordOutcome"));
+      g_planOutcomeCode=(int)GlobalVariableGet(ManualStateKey("planOutcome"));
+      g_lastSetupScore=(int)GlobalVariableGet(ManualStateKey("ruleScore"));
+      g_lastMTFScore=(int)GlobalVariableGet(ManualStateKey("mtfScore"));
+     }
+   g_manualOutcome=g_planOutcomeCode==3 ? "UNKNOWN - DATA GAP" : g_manualTargets==3 ? "TP3 OBSERVED" : "FINISHED - REVIEW LOG";
    SetGuideLine("AG_ANALYSIS_ENTRY",g_manualEntry,clrWhite,STYLE_DASH,1);
    SetGuideLine("AG_ANALYSIS_SL",g_manualStop,clrTomato,STYLE_SOLID,2);
    SetGuideLine("AG_ANALYSIS_TP1",g_manualTP1,clrLimeGreen,STYLE_DOT,1);
@@ -1990,13 +2082,15 @@ void ObserveManualPlanTick(const MqlTick &tick)
      {
       g_manualActive=false;
       g_manualOutcome="TP3 OBSERVED";
+      g_planOutcomeCode=2;
       g_planRemovalAt=TimeLocal()+MathMax(60,PeriodSeconds(PostSLPlanDisplayTimeframe))*MathMax(1,PostSLPlanDisplayBars);
      }
   }
 
 void MonitorManualPlanOutcome()
   {
-   if(g_planRemovalAt>0 && TimeLocal()>=g_planRemovalAt)
+   FlushSignalProgress();
+   if(g_planRemovalAt>0 && TimeLocal()>=g_planRemovalAt && FlushSignalProgress())
      { g_planRemovalAt=0; ClearManualPlan(); }
    if(!g_manualActive) return;
    MqlTick tick;
@@ -2012,11 +2106,18 @@ void MonitorManualPlanOutcome()
      {
       g_manualActive=false;
       g_manualOutcome="UNKNOWN - DATA GAP";
+      g_planOutcomeCode=3;
       g_planRemovalAt=TimeLocal()+MathMax(60,PeriodSeconds(PostSLPlanDisplayTimeframe))*MathMax(1,PostSLPlanDisplayBars);
+      SaveManualPlanState();
+      FlushSignalProgress();
       Print("Analysis plan outcome UNKNOWN: incomplete tick history. Not a win or loss.");
       return;
      }
-   for(int i=0;i<count && g_manualActive;i++) ObserveManualPlanTick(history[i]);
+   for(int i=0;i<count && g_manualActive;i++)
+     {
+      ObserveManualPlanTick(history[i]);
+      FlushSignalProgress();
+     }
    g_manualLastTickMsc=tick.time_msc;
   }
 
@@ -2308,7 +2409,7 @@ void EvaluateNewEntry()
       g_lastDecision="TRACKING ACTIVE PLAN - NO REPLACEMENT";
       return;
      }
-   if(g_planRemovalAt>0 && TimeLocal()>=g_planRemovalAt)
+   if(g_planRemovalAt>0 && TimeLocal()>=g_planRemovalAt && FlushSignalProgress())
      {
       g_planRemovalAt=0;
       ClearMarketCycleSnapshot();
@@ -2544,6 +2645,31 @@ void PanelDivider(const string suffix,const int y)
    PanelRectangle("DIV_"+suffix,PanelLeft+10,y,PanelWidth-20,1,C'47,52,62',C'47,52,62');
   }
 
+string DecisionExplanation()
+  {
+   if(g_signalJournalStatus=="JOURNAL WRITE FAILED") return "Cannot save signal history. Check disk space and MT5 file access.";
+   if(g_manualActive) return StringFormat("Tracking this plan; %d of 3 targets observed. New plans cannot replace it.",g_manualTargets);
+   string reason=g_lastDecision;
+   if(StringFind(reason,"SILVER")>=0 || StringFind(reason,"METALS")>=0 || StringFind(reason,"XAU / XAG")>=0)
+      return "Waiting for fresh, matching Gold/Silver data and direction.";
+   if(StringFind(reason,"NEWS")>=0 || StringFind(reason,"CALENDAR")>=0 || StringFind(reason,"EVENT DETAILS")>=0)
+      return "Paused: USD news is nearby or the news calendar cannot be checked.";
+   if(StringFind(reason,"CHASE")>=0 || StringFind(reason,"EXTENDED")>=0)
+      return "Price moved too far from confirmation. Waiting for a fresh setup.";
+   if(StringFind(reason,"STOP")>=0 && StringFind(reason,"LIMIT")>=0)
+      return "Structural stop fails the risk limits. The stop was not moved.";
+   if(StringFind(reason,"MTF")>=0 || StringFind(reason,"ALIGNED")>=0 || StringFind(reason,"RSI")>=0)
+      return "Waiting for the required timeframes and momentum to agree.";
+   if(StringFind(reason,"CANDLE")>=0 || StringFind(reason,"ADX")>=0 || StringFind(reason,"SCORE")>=0)
+      return "Setup is not strong enough under the current rule filters.";
+   if(StringFind(reason,"SPREAD")>=0) return "Spread is too wide. Waiting for safer quote conditions.";
+   if(g_pendingEntry && g_pendingFromPOC) return "Setup found. Waiting for a closed M1 candle and final safety checks.";
+   if(g_pendingEntry) return "Setup found. Waiting for price to retest and defend the entry area.";
+   if(StringFind(reason,"NO ")==0 || StringFind(reason,"SCANNING")>=0 || StringFind(reason,"WAITING FOR NEXT")>=0)
+      return "Scanning closed candles. No new setup has passed all checks.";
+   return reason;
+  }
+
 string CompactDecision()
   {
    if(StringLen(g_lastDecision)<=42)
@@ -2735,7 +2861,7 @@ void DrawAnalysisPanel()
    color bad=C'255,91,91';
    color warning=C'250,190,49';
 
-   PanelRectangle("BODY",x,y,PanelWidth,457,panel,C'52,57,67');
+   PanelRectangle("BODY",x,y,PanelWidth,555,panel,C'52,57,67');
    PanelRectangle("HEADER",x,y,PanelWidth,42,header,C'52,57,67');
    PanelRectangle("ACCENT",x,y,PanelWidth,3,section,section);
    PanelLabel("TITLE","Asheparte AI Analysis",x+12,y+10,white,PanelFontSize+2);
@@ -2806,10 +2932,22 @@ void DrawAnalysisPanel()
    row+=19;
    PanelLabel("LAB_DECISION","Current check",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_DECISION",CompactDecision(),right,row,white,PanelFontSize-1,ANCHOR_RIGHT_UPPER);
+   string explanation=DecisionExplanation();
+   row+=22;
+   int lineWidth=MathMax(25,(int)((PanelWidth-20)/(MathMax(6,PanelFontSize)*0.62)));
+   for(int line=0;line<3;line++)
+     {
+      string name="WHY_"+IntegerToString(line);
+      PanelLabel(name,StringSubstr(explanation,line*lineWidth,lineWidth),x+10,row+line*15,muted,PanelFontSize-1);
+      ObjectSetString(0,PANEL_PREFIX+name,OBJPROP_TOOLTIP,explanation+" | "+g_lastDecision);
+     }
+   PanelLabel("JOURNAL",g_signalJournalStatus,x+10,row+48,muted,PanelFontSize-1);
+   if(explanation!=g_lastExplanationLogged)
+     { Print("Advisor decision: ",explanation," Detail: ",g_lastDecision); g_lastExplanationLogged=explanation; }
 
-   PanelRectangle("FOOTER",x,y+426,PanelWidth,31,header,C'52,57,67');
-   PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+435,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.27",right,y+435,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+   PanelRectangle("FOOTER",x,y+524,PanelWidth,31,header,C'52,57,67');
+   PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+533,good,PanelFontSize);
+    PanelLabel("FOOT_RIGHT","v3.28",right,y+533,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2925,7 +3063,7 @@ bool JournalPostPayload(const string payload)
 
    const string headers="Content-Type: application/json\r\n"+
                         "X-Asheparte-Bridge-Token: "+JournalBridgeToken+"\r\n"+
-                        "X-Asheparte-Bridge-Version: combined-3.27\r\n";
+                        "X-Asheparte-Bridge-Version: combined-3.28\r\n";
    ResetLastError();
    const int status=WebRequest("POST",journalUrl,headers,1500,
                                requestData,responseData,responseHeaders);
@@ -3190,12 +3328,13 @@ int OnInit()
     UpdateChartPanel();
     ChartRedraw(0);
     Print("Aurum Guard Analysis Advisor initialized on ",g_symbol,". This edition never sends orders.");
+    Print("Local signal journal: ",TerminalInfoString(TERMINAL_DATA_PATH),"\\MQL5\\Files\\",SignalJournalPath());
     return INIT_SUCCEEDED;
    }
 
 void OnDeinit(const int reason)
    {
-    if(g_symbol!="" && reason!=REASON_INITFAILED) SaveManualPlanState();
+    if(g_symbol!="" && reason!=REASON_INITFAILED) { FlushSignalProgress(); SaveManualPlanState(); }
     EventKillTimer();
     Comment("");
     // MT5 deinitializes and immediately initializes the EA when only the chart

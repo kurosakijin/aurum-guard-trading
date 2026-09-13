@@ -58,6 +58,13 @@ PRIVATE: the .set file contains your journal bridge token. Do not share it.
 6. Keep MT5 open; approve the detected pairing in the site's Manage account.
 
 Algo Trading is not required. This advisor does not place or manage trades.
+Version 3.28 saves a LOCAL signal journal separate from broker trade history.
+MT5: File > Open Data Folder > MQL5 > Files > AsheparteSignals.
+Import the .jsonl file into the website's MT5 advisor > Signal performance journal.
+The importer processes files in browser memory only; refresh clears its view.
+No live trades, monetary P/L or future win rates are inferred from these observations.
+If the journal cannot be written, inspect disk space and MT5 file access. New plans
+wait until recording succeeds, and pending outcomes are retried without resetting trades.
 Loading an MT5 chart template or another preset may override the token: load this preset last.
 Rotating/revoking your token makes this preset stop syncing. Download again with the new key.
 The preset is user-specific, but the standard .ex5 binary does not embed your key.

@@ -48,7 +48,7 @@ export function AdvisorDownloads({ generatedToken, hasToken, onManage }: {
     }
   }
   return <div className="space-y-3 rounded-xl border border-border p-4">
-    <p className="text-sm font-medium">Your personal advisor · v3.27</p>
+    <p className="text-sm font-medium">Your personal advisor · v3.28</p>
     {!hasToken ? <>
       <p className="text-sm text-muted-foreground">Generate your journal bridge key to unlock personal downloads.</p>
       <Button variant="outline" onClick={onManage}>Manage account · generate key</Button>
