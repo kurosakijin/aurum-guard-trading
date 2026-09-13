@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.26"
+#property version   "3.27"
 #property strict
 #property description "Asheparte AI analysis-only EA: POC, engulfing/delivery-state confirmation, Gold/Silver sync, MTF direction and manual guidance. Never trades."
 
@@ -199,6 +199,10 @@ int      g_manualDirection = 0;
 datetime g_lastPublishedSignalBar = 0;
 datetime g_lastH1ReclaimWarningBar = 0;
 datetime g_planRemovalAt = 0;
+bool g_manualActive=false;
+int g_manualTargets=0;
+string g_manualOutcome="";
+long g_manualLastTickMsc=0;
 string   g_journalTimeKey = "";
 string   g_journalTicketKey = "";
 ulong    g_journalNextSyncMs = 0;
@@ -236,6 +240,8 @@ int g_trendFastHandle = INVALID_HANDLE;
 int g_trendSlowHandle = INVALID_HANDLE;
 int g_trendATRHandle = INVALID_HANDLE;
 int g_setupATRHandle = INVALID_HANDLE;
+int g_setupFastHandle=INVALID_HANDLE,g_setupSlowHandle=INVALID_HANDLE,g_setupRSIHandle=INVALID_HANDLE;
+int g_journalFailures=0;
 int g_safetyRSIHandle = INVALID_HANDLE;
 int g_trendRSIHandle = INVALID_HANDLE;
 int g_dailyRSIHandle = INVALID_HANDLE;
@@ -465,7 +471,13 @@ bool IsUSDNewsBlocked(string &reason)
    for(int i=0;i<count;i++)
      {
       MqlCalendarEvent event;
-      if(CalendarEventById(values[i].event_id,event) && event.importance==CALENDAR_IMPORTANCE_HIGH)
+      if(!CalendarEventById(values[i].event_id,event))
+        {
+         if(FailClosedWhenCalendarUnavailable)
+           { reason="USD EVENT DETAILS UNAVAILABLE"; return true; }
+         continue;
+        }
+      if(event.importance==CALENDAR_IMPORTANCE_HIGH)
         {
          reason="HIGH-IMPACT USD NEWS: "+event.name;
          return true;
@@ -507,6 +519,19 @@ bool MetalsConfirmDirection(const int direction,string &reason,double &correlati
    if(!RequireGoldSilverSync)
       return true;
 
+   if(g_symbol==SilverConfirmationSymbol)
+     {
+      reason="CONFIRMATION MUST USE A DIFFERENT METAL";
+      return false;
+     }
+   string primaryBase=SymbolInfoString(g_symbol,SYMBOL_CURRENCY_BASE);
+   string confirmationBase=SymbolInfoString(SilverConfirmationSymbol,SYMBOL_CURRENCY_BASE);
+   if(primaryBase!="XAU" || confirmationBase!="XAG" ||
+      SymbolInfoString(g_symbol,SYMBOL_CURRENCY_PROFIT)!=SymbolInfoString(SilverConfirmationSymbol,SYMBOL_CURRENCY_PROFIT))
+     {
+      reason="REQUIRE XAU / XAG WITH MATCHING QUOTE CURRENCY";
+      return false;
+     }
    int needed=SyncCorrelationLength+SyncLookbackBars+3;
    MqlRates gold[],silver[];
    if(!ReadRates(g_symbol,POCSetupTimeframe,needed,gold) || !ReadRates(SilverConfirmationSymbol,POCSetupTimeframe,needed,silver))
@@ -515,6 +540,17 @@ bool MetalsConfirmDirection(const int direction,string &reason,double &correlati
       return false;
      }
 
+   for(int i=0;i<needed;i++)
+      if(gold[i].time!=silver[i].time)
+        {
+         reason="GOLD/SILVER BAR TIMES DO NOT MATCH";
+         return false;
+        }
+   if(TimeCurrent()-gold[0].time>PeriodSeconds(POCSetupTimeframe)*2)
+     {
+      reason="METAL CONTEXT IS STALE";
+      return false;
+     }
    double goldReturns[],silverReturns[];
    ArrayResize(goldReturns,SyncCorrelationLength);
    ArrayResize(silverReturns,SyncCorrelationLength);
@@ -1083,7 +1119,7 @@ bool EvaluatePOCSweepEntry(int &direction,double &atrValue,string &reason)
       return false;
      }
    g_signalStopPrice=NormalizePrice(direction>0 ? g_pocSweepExtreme-atrValue*StructureStopBufferATR : g_pocSweepExtreme+atrValue*StructureStopBufferATR);
-    g_lastSetupScore=90;
+    g_lastSetupScore=(int)MathRound(100.0*(g_lastMTFScore+3)/12.0);
     reason=direction>0 ? "POC RECLAIM BUY" : "POC REJECTION SELL";
     g_cycleStage=4;
     g_cycleDirection=direction;
@@ -1101,7 +1137,7 @@ bool DetectDeliveryState(const string symbol,const ENUM_TIMEFRAMES timeframe,int
    patternHigh=0.0;
    reversal=false;
 
-   int needed=MathMax(DeliveryPriorMoveBars+3,7);
+   int needed=MathMax(DeliveryPriorMoveBars+3,200);
    MqlRates bars[];
    if(!ReadRates(symbol,timeframe,needed,bars))
       return false;
@@ -1120,10 +1156,39 @@ bool DetectDeliveryState(const string symbol,const ENUM_TIMEFRAMES timeframe,int
                        bars[1].open>=bars[2].close && bars[1].close<=bars[2].open &&
                        currentBody>=priorBody*EngulfingMinimumBodyRatio;
 
-   // A delivery-state change requires the completed candle body to close through
-   // the prior opposing candle's extreme. Wick-only breaks do not qualify.
-   bool bullishDelivery=bodyOK && bars[1].close>bars[1].open && bars[2].close<=bars[2].open && bars[1].close>bars[2].high;
-   bool bearishDelivery=bodyOK && bars[1].close<bars[1].open && bars[2].close>=bars[2].open && bars[1].close<bars[2].low;
+   // Closed-bar replay of opposing-leg FIRST-open reclaim, matching the
+   // Pine detector's definition (entry timing/filters remain MT5-specific).
+   int legDirection=0,legStart=needed-2;
+   double legOrigin=0,legLow=0,legHigh=0,bullRunOpen=0,bearRunOpen=0;
+   double shiftedLow=MathMin(bars[1].low,bars[2].low);
+   double shiftedHigh=MathMax(bars[1].high,bars[2].high);
+   bool bullishDelivery=false,bearishDelivery=false;
+   for(int i=needed-2;i>=1;i--)
+     {
+      bool up=bars[i].close>bars[i].open,down=bars[i].close<bars[i].open;
+      if(up && (bars[i+1].close<=bars[i+1].open || bullRunOpen==0)) bullRunOpen=bars[i].open;
+      if(down && (bars[i+1].close>=bars[i+1].open || bearRunOpen==0)) bearRunOpen=bars[i].open;
+      bool bullShift=false,bearShift=false;
+      if(legDirection==0 || legStart-i>20)
+        {
+         legDirection=up ? 1 : down ? -1 : 0;
+         legOrigin=bars[i].open; legStart=i;
+         legLow=bars[i].low; legHigh=bars[i].high;
+        }
+      else
+        {
+         legLow=MathMin(legLow,bars[i].low); legHigh=MathMax(legHigh,bars[i].high);
+         bullShift=legDirection==-1 && up && bars[i].close>legOrigin && bars[i+1].close<=legOrigin;
+         bearShift=legDirection==1 && down && bars[i].close<legOrigin && bars[i+1].close>=legOrigin;
+         if(bullShift || bearShift)
+           {
+            if(i==1) { shiftedLow=legLow; shiftedHigh=legHigh; }
+            legDirection=bullShift ? 1 : -1; legOrigin=bullShift ? bullRunOpen : bearRunOpen;
+            legStart=i; legLow=bars[i].low; legHigh=bars[i].high;
+           }
+        }
+      if(i==1) { bullishDelivery=bodyOK && bullShift; bearishDelivery=bodyOK && bearShift; }
+     }
 
    if(bullishDelivery || bullishEngulf)
      {
@@ -1138,8 +1203,8 @@ bool DetectDeliveryState(const string symbol,const ENUM_TIMEFRAMES timeframe,int
    else
       return false;
 
-   patternLow=MathMin(bars[1].low,bars[2].low);
-   patternHigh=MathMax(bars[1].high,bars[2].high);
+   patternLow=(bullishDelivery || bearishDelivery) ? shiftedLow : MathMin(bars[1].low,bars[2].low);
+   patternHigh=(bullishDelivery || bearishDelivery) ? shiftedHigh : MathMax(bars[1].high,bars[2].high);
    double priorMove=bars[2].close-bars[2+DeliveryPriorMoveBars].close;
    reversal=(direction>0 && priorMove<0.0) || (direction<0 && priorMove>0.0);
    return true;
@@ -1199,8 +1264,8 @@ bool EvaluateDeliveryStateEntry(int &direction,double &atrValue,string &reason)
      }
 
    g_signalStopPrice=NormalizePrice(direction>0 ? goldLow-atrValue*StructureStopBufferATR : goldHigh+atrValue*StructureStopBufferATR);
-   g_lastSetupScore=goldReversal ? 94 : 88;
-   g_deliveryStatus=goldReversal ? "REVERSAL CONFIRMED" : "CONTINUATION CONFIRMED";
+   g_lastSetupScore=(int)MathRound(100.0*(g_lastMTFScore+3)/12.0);
+   g_deliveryStatus=goldReversal ? "REVERSAL CONTEXT" : "CONTINUATION CONTEXT";
    reason=StringFormat("%s %s | GOLD + SILVER SYNC",goldReversal ? "REVERSAL" : "CONTINUATION",goldPattern);
    return true;
   }
@@ -1221,9 +1286,9 @@ bool EvaluateM15ContinuationEntry(int &direction,double &atrValue,string &reason
    MqlRates bars[];
    double fast[],slow[],rsi[],atr[];
    if(!ReadRates(g_symbol,POCSetupTimeframe,5,bars) ||
-      !ReadBuffer(g_safetyFastHandle,5,fast) ||
-      !ReadBuffer(g_safetySlowHandle,5,slow) ||
-      !ReadBuffer(g_safetyRSIHandle,5,rsi) ||
+      !ReadBuffer(g_setupFastHandle,5,fast) ||
+      !ReadBuffer(g_setupSlowHandle,5,slow) ||
+      !ReadBuffer(g_setupRSIHandle,5,rsi) ||
       !ReadBuffer(g_setupATRHandle,5,atr))
      {
       reason="M15 FALLBACK DATA NOT READY";
@@ -1337,6 +1402,47 @@ bool PendingRetestDefended(double &atrValue,string &reason)
 //+------------------------------------------------------------------+
 //| Closed-candle signal                                             |
 //+------------------------------------------------------------------+
+bool SharedSignalQuality(const int direction,const bool execution,string &reason)
+  {
+   if((direction>0 && !EnableLongEntries) || (direction<0 && !EnableShortEntries) || direction==0)
+     { reason="DIRECTION DISABLED"; return false; }
+   MqlRates bars[];
+   double atr[],fast[],adx[],plusDI[],minusDI[];
+   ENUM_TIMEFRAMES tf=execution ? SignalTimeframe : POCSetupTimeframe;
+   if(!ReadRates(g_symbol,tf,3,bars) ||
+      !ReadBuffer(execution ? g_atrHandle : g_setupATRHandle,3,atr) ||
+      !ReadBuffer(execution ? g_fastHandle : g_setupFastHandle,3,fast) ||
+      !ReadBuffer(g_safetyADXHandle,3,adx) ||
+      !ReadIndicatorBuffer(g_safetyADXHandle,1,3,plusDI) ||
+      !ReadIndicatorBuffer(g_safetyADXHandle,2,3,minusDI) || atr[1]<=0.0)
+     { reason="QUALITY DATA NOT READY"; return false; }
+   double range=bars[1].high-bars[1].low;
+   double body=MathAbs(bars[1].close-bars[1].open);
+   if(range<=0 || range>atr[1]*MaximumSignalRangeATR || body/range<MinimumEntryBodyShare)
+     { reason="CANDLE QUALITY FILTER"; return false; }
+   if(direction*(bars[1].close-bars[1].open)<=0)
+     { reason="CANDLE OPPOSES PLAN"; return false; }
+   if(adx[1]<MinimumSafetyADX || (direction>0 ? plusDI[1]<=minusDI[1] : minusDI[1]<=plusDI[1]))
+     { reason="WEAK TREND - ADX FILTER"; return false; }
+   if(MathAbs(bars[1].close-fast[1])>atr[1]*MaximumEntryDistanceATR)
+     { reason="EXTENDED PRICE - DO NOT CHASE"; return false; }
+   if(execution)
+     {
+      MqlTick quote;
+      if(!SymbolInfoTick(g_symbol,quote) || quote.bid<=0 || quote.ask<=0)
+        { reason="QUOTE NOT READY"; return false; }
+      double price=direction>0 ? quote.ask : quote.bid;
+      if(MathAbs(price-bars[1].close)>atr[1]*MaximumEntryDistanceATR)
+        { reason="LIVE PRICE MOVED - DO NOT CHASE"; return false; }
+     }
+   if(!MultiTimeframeRSIConfirm(direction,reason)) return false;
+   // Confluence score, not calibrated win probability.
+   g_lastSetupScore=(int)MathRound(100.0*(g_lastMTFScore+3)/12.0);
+   if(g_lastSetupScore<MinimumSetupScore)
+     { reason="RULE SCORE BELOW THRESHOLD"; return false; }
+   return true;
+  }
+
 bool EvaluateSignal(int &direction,double &atrValue,string &reason)
   {
    direction=0;
@@ -1362,6 +1468,7 @@ bool EvaluateSignal(int &direction,double &atrValue,string &reason)
          else
             route="CONTINUATION";
         }
+      if(!SharedSignalQuality(direction,false,reason)) { direction=0; return false; }
       double metalCorrelation=0.0;
       if(!MetalsConfirmDirection(direction,reason,metalCorrelation))
         {
@@ -1654,6 +1761,14 @@ void RefreshAIAnalysisContext()
       g_aiPanelStatus="STALE - CHECK AI RUNNER";
       return;
      }
+   long latestClosedBar=(long)iTime(g_symbol,PERIOD_M1,1);
+   if(latestClosedBar<=0 || scoredBar>latestClosedBar || latestClosedBar-scoredBar>120)
+     { g_aiPanelStatus="STALE SCORED BAR"; return; }
+   if(!MathIsValidNumber(longProbability) || !MathIsValidNumber(shortProbability) ||
+      !MathIsValidNumber(noTradeProbability) || longProbability<0 || longProbability>1 ||
+      shortProbability<0 || shortProbability>1 || noTradeProbability<0 || noTradeProbability>1 ||
+      MathAbs(longProbability+shortProbability+noTradeProbability-1.0)>0.02)
+     { g_aiPanelStatus="INVALID PROBABILITIES"; return; }
    if(scoreHealth=="EQUITY_GUARD")
      {
       g_aiPanelStatus="WAIT - EQUITY GUARD";
@@ -1692,10 +1807,12 @@ void RefreshAIAnalysisContext()
 
    double directionalProbability=MathMax(longProbability,shortProbability);
    string directionText=longProbability>shortProbability ? "BUY" : "SELL";
-   if(scoreDirection==0 || noTradeProbability>=directionalProbability || scoreHealth=="LOW_CONFIDENCE")
+   if(scoreDirection==0 || noTradeProbability>=directionalProbability || scoreHealth=="LOW_CONFIDENCE" || directionalProbability<MinimumAIConfidence)
       g_aiPanelStatus=StringFormat("WAIT - %s %.0f%%",directionText,directionalProbability*100.0);
    else
-      g_aiPanelStatus=StringFormat("%s %s %.0f%%",deploymentEligible==1 ? "VALIDATED" : "RESEARCH",directionText,directionalProbability*100.0);
+      g_aiPanelStatus=StringFormat("%s %s %.0f%%",deploymentEligible==1 && scoreHealth=="APPROVED" ? "VALIDATED" : "RESEARCH",directionText,directionalProbability*100.0);
+   if(g_manualActive && scoreDirection!=0)
+      g_aiPanelStatus+=(scoreDirection==g_manualDirection ? " | AGREES" : " | CONFLICT");
   }
 
 void SetGuideLine(const string name,const double price,const color lineColor,const ENUM_LINE_STYLE style,const int width)
@@ -1712,6 +1829,10 @@ void SetGuideLine(const string name,const double price,const color lineColor,con
 
 void PublishManualSetup(const int direction,const double signalATR,const double structureStop)
   {
+   if(g_manualActive || (direction!=1 && direction!=-1)) return;
+   string qualityReason="";
+   if(!SharedSignalQuality(direction,true,qualityReason))
+     { g_lastDecision=qualityReason; return; }
    datetime signalBar=iTime(g_symbol,SignalTimeframe,0);
    if(signalBar<=0 || signalBar==g_lastPublishedSignalBar)
       return;
@@ -1724,20 +1845,31 @@ void PublishManualSetup(const int direction,const double signalATR,const double 
      }
 
    double entry=NormalizePrice(direction>0 ? tick.ask : tick.bid);
-   double rawRisk=structureStop>0.0 ? MathAbs(entry-structureStop) : signalATR*0.75;
-   double risk=MathMax(signalATR*0.50,MathMin(rawRisk,signalATR*1.50));
-   double stop=NormalizePrice(direction>0 ? entry-risk : entry+risk);
+   double stop=NormalizePrice(structureStop>0.0 ? structureStop : entry-direction*signalATR*0.75);
+   double risk=direction*(entry-stop);
+   // Reject unsuitable structure; never move its invalidation to fit a risk cap.
+   if(risk<signalATR*MinimumStopDistanceATR || risk>signalATR*1.50)
+     {
+      g_lastDecision="STRUCTURAL STOP OUTSIDE RISK LIMITS - NO PLAN";
+      return;
+     }
    double tp1=NormalizePrice(direction>0 ? entry+risk : entry-risk);
    double tp2=NormalizePrice(direction>0 ? entry+risk*1.50 : entry-risk*1.50);
    double tp3=NormalizePrice(direction>0 ? entry+risk*FibonacciRewardMultiple : entry-risk*FibonacciRewardMultiple);
 
    g_manualDirection=direction;
+   g_manualActive=true;
+   g_manualTargets=0;
+   g_manualOutcome="";
+   g_planRemovalAt=0;
+   g_manualLastTickMsc=tick.time_msc;
    g_manualEntry=entry;
    g_manualStop=stop;
    g_manualTP1=tp1;
    g_manualTP2=tp2;
    g_manualTP3=tp3;
    g_lastPublishedSignalBar=signalBar;
+   SaveManualPlanState();
 
    SetGuideLine("AG_ANALYSIS_ENTRY",entry,clrWhite,STYLE_DASH,1);
    SetGuideLine("AG_ANALYSIS_SL",stop,clrTomato,STYLE_SOLID,2);
@@ -1762,6 +1894,9 @@ void PublishManualSetup(const int direction,const double signalATR,const double 
 
 void ClearManualPlan()
   {
+   g_manualActive=false;
+   g_manualTargets=0;
+   g_manualOutcome="";
    g_manualDirection=0;
    g_manualEntry=0.0;
    g_manualStop=0.0;
@@ -1778,29 +1913,111 @@ void ClearManualPlan()
 void StartPostSLPlanDisplay(const int stoppedDirection,const double stoppedPrice)
   {
    int displaySeconds=MathMax(60,PeriodSeconds(PostSLPlanDisplayTimeframe))*MathMax(1,PostSLPlanDisplayBars);
-   g_planRemovalAt=TimeCurrent()+displaySeconds;
+   g_planRemovalAt=TimeLocal()+displaySeconds;
+   g_manualActive=false;
+   g_manualOutcome=StringFormat("SL AFTER %d TARGETS",g_manualTargets);
    ClearPendingEntry();
    ResetPOCSequence("");
    g_lastDecision=StringFormat("%s SL HIT %.2f - PLAN REMOVES IN %s",stoppedDirection>0 ? "BUY" : "SELL",stoppedPrice,EnumToString(PostSLPlanDisplayTimeframe));
    Print("Aurum Guard analysis plan stopped. Keeping its chart map visible until ",TimeToString(g_planRemovalAt,TIME_DATE|TIME_MINUTES));
    if(EnableTerminalAlerts)
-      Alert("Aurum Guard ",g_symbol,": planned SL reached. Its plan remains visible for ",EnumToString(PostSLPlanDisplayTimeframe)," before the next scan.");
+      Alert("Aurum Guard ",g_symbol,": planned SL reached. Its plan remains visible for ",EnumToString(PostSLPlanDisplayTimeframe),"; scanning is not paused.");
+  }
+
+// Per-chart, broker-account and symbol state; changing chart timeframe does not
+// create a new plan. Offline gaps are explicitly unknown, never counted as wins.
+string ManualStateKey(const string field)
+  {
+   string identity=AccountInfoString(ACCOUNT_SERVER)+"|"+IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))+"|"+g_symbol;
+   uint hash=2166136261;
+   for(int i=0;i<StringLen(identity);i++) hash=(hash^(uint)StringGetCharacter(identity,i))*16777619;
+   return "AG327_"+IntegerToString(ChartID())+"_"+IntegerToString(hash)+"_"+field;
+  }
+
+void SaveManualPlanState()
+  {
+   double state[11];
+   state[0]=g_manualDirection; state[1]=g_manualEntry; state[2]=g_manualStop;
+   state[3]=g_manualTP1; state[4]=g_manualTP2; state[5]=g_manualTP3;
+   state[6]=g_manualActive ? 1 : 0; state[7]=g_manualTargets;
+   state[8]=(double)g_planRemovalAt; state[9]=(double)g_manualLastTickMsc;
+   state[10]=(double)g_lastPublishedSignalBar;
+   for(int i=0;i<11;i++) GlobalVariableSet(ManualStateKey(IntegerToString(i)),state[i]);
+  }
+
+void RestoreManualPlanState()
+  {
+   double state[11];
+   for(int i=0;i<11;i++)
+     {
+      string key=ManualStateKey(IntegerToString(i));
+      if(!GlobalVariableCheck(key)) return;
+      state[i]=GlobalVariableGet(key);
+     }
+   if(state[0]!=1 && state[0]!=-1) return;
+   g_manualDirection=(int)state[0]; g_manualEntry=state[1]; g_manualStop=state[2];
+   g_manualTP1=state[3]; g_manualTP2=state[4]; g_manualTP3=state[5];
+   g_manualActive=state[6]==1; g_manualTargets=(int)state[7];
+   g_planRemovalAt=(datetime)state[8]; g_manualLastTickMsc=(long)state[9];
+   g_lastPublishedSignalBar=(datetime)state[10];
+   g_manualOutcome=g_manualTargets==3 ? "TP3 OBSERVED" : "FINISHED - REVIEW LOG";
+   SetGuideLine("AG_ANALYSIS_ENTRY",g_manualEntry,clrWhite,STYLE_DASH,1);
+   SetGuideLine("AG_ANALYSIS_SL",g_manualStop,clrTomato,STYLE_SOLID,2);
+   SetGuideLine("AG_ANALYSIS_TP1",g_manualTP1,clrLimeGreen,STYLE_DOT,1);
+   SetGuideLine("AG_ANALYSIS_TP2",g_manualTP2,clrLimeGreen,STYLE_DASH,1);
+   SetGuideLine("AG_ANALYSIS_TP3",g_manualTP3,clrLime,STYLE_SOLID,2);
+  }
+
+void ObserveManualPlanTick(const MqlTick &tick)
+  {
+   if(!g_manualActive || tick.bid<=0 || tick.ask<=0) return;
+   bool stopHit=g_manualDirection>0 ? tick.bid<=g_manualStop : tick.ask>=g_manualStop;
+   if(stopHit)
+     {
+      StartPostSLPlanDisplay(g_manualDirection,g_manualStop);
+      return;
+     }
+   double price=g_manualDirection>0 ? tick.bid : tick.ask;
+   int reached=g_manualDirection*(price-g_manualTP3)>=0 ? 3 :
+               g_manualDirection*(price-g_manualTP2)>=0 ? 2 :
+               g_manualDirection*(price-g_manualTP1)>=0 ? 1 : 0;
+   if(reached>g_manualTargets)
+     {
+      g_manualTargets=reached;
+      PrintFormat("Analysis plan: TP%d observed (not an executed trade).",reached);
+     }
+   if(reached==3)
+     {
+      g_manualActive=false;
+      g_manualOutcome="TP3 OBSERVED";
+      g_planRemovalAt=TimeLocal()+MathMax(60,PeriodSeconds(PostSLPlanDisplayTimeframe))*MathMax(1,PostSLPlanDisplayBars);
+     }
   }
 
 void MonitorManualPlanOutcome()
   {
-   if(g_manualDirection==0 || g_manualStop<=0.0 || g_planRemovalAt>0)
-      return;
+   if(g_planRemovalAt>0 && TimeLocal()>=g_planRemovalAt)
+     { g_planRemovalAt=0; ClearManualPlan(); }
+   if(!g_manualActive) return;
    MqlTick tick;
-   if(!SymbolInfoTick(g_symbol,tick))
-      return;
-   bool stopHit=g_manualDirection>0 ? tick.bid<=g_manualStop : tick.ask>=g_manualStop;
-   if(stopHit)
+   if(!SymbolInfoTick(g_symbol,tick) || tick.time_msc<=g_manualLastTickMsc) return;
+   MqlTick history[];
+   ResetLastError();
+   int count=-1;
+   // Bounded recovery covers coalesced ticks. Do not manufacture outcomes when
+   // the terminal has been offline or history is unavailable.
+   if(g_manualLastTickMsc>0 && tick.time_msc-g_manualLastTickMsc<=60000)
+      count=CopyTicksRange(g_symbol,history,COPY_TICKS_INFO,(ulong)g_manualLastTickMsc,(ulong)tick.time_msc);
+   if(count<=0 || GetLastError()!=0 || history[count-1].time_msc<tick.time_msc)
      {
-      int stoppedDirection=g_manualDirection;
-      double stoppedPrice=g_manualStop;
-      StartPostSLPlanDisplay(stoppedDirection,stoppedPrice);
+      g_manualActive=false;
+      g_manualOutcome="UNKNOWN - DATA GAP";
+      g_planRemovalAt=TimeLocal()+MathMax(60,PeriodSeconds(PostSLPlanDisplayTimeframe))*MathMax(1,PostSLPlanDisplayBars);
+      Print("Analysis plan outcome UNKNOWN: incomplete tick history. Not a win or loss.");
+      return;
      }
+   for(int i=0;i<count && g_manualActive;i++) ObserveManualPlanTick(history[i]);
+   g_manualLastTickMsc=tick.time_msc;
   }
 
 void OpenSignalTrade(const int direction,const double signalATR,const double structureStop=0.0)
@@ -2086,13 +2303,12 @@ void EvaluateNewEntry()
       g_lastDecision="ANALYSIS SIGNALS DISABLED";
       return;
      }
-   if(g_planRemovalAt>TimeCurrent())
+   if(g_manualActive)
      {
-      int minutesLeft=(int)MathCeil((double)(g_planRemovalAt-TimeCurrent())/60.0);
-      g_lastDecision=StringFormat("SL PLAN DISPLAY - %d MIN LEFT",minutesLeft);
+      g_lastDecision="TRACKING ACTIVE PLAN - NO REPLACEMENT";
       return;
      }
-   if(g_planRemovalAt>0)
+   if(g_planRemovalAt>0 && TimeLocal()>=g_planRemovalAt)
      {
       g_planRemovalAt=0;
       ClearMarketCycleSnapshot();
@@ -2533,7 +2749,7 @@ void DrawAnalysisPanel()
    PanelLabel("LAB_BIAS","Bias",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_BIAS",bias,right,row,biasColor,PanelFontSize,ANCHOR_RIGHT_UPPER);
    row+=19;
-   PanelLabel("LAB_SCORE","Setup confidence",x+10,row,muted,PanelFontSize);
+   PanelLabel("LAB_SCORE","Rule score (not odds)",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_SCORE",IntegerToString(g_lastSetupScore)+" / 100",right,row,g_lastSetupScore>=MinimumSetupScore ? good : warning,PanelFontSize,ANCHOR_RIGHT_UPPER);
    row+=19;
    PanelLabel("LAB_MTF","M15 · H1 · D1",x+10,row,muted,PanelFontSize);
@@ -2560,7 +2776,7 @@ void DrawAnalysisPanel()
    row+=13;
    PanelLabel("SEC_SIGNAL","MANUAL TRADE PLAN",x+10,row,section,PanelFontSize);
    row+=22;
-   string signal=g_planRemovalAt>0 ? "STOPPED - REVIEW" : g_manualDirection>0 ? "BUY CONFIRMED" : g_manualDirection<0 ? "SELL CONFIRMED" : "NO TRADE";
+   string signal=g_planRemovalAt>0 ? g_manualOutcome : g_manualDirection>0 ? "BUY CONFIRMED" : g_manualDirection<0 ? "SELL CONFIRMED" : "NO TRADE";
    PanelLabel("LAB_SIGNAL","Signal",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_SIGNAL",signal,right,row,biasColor,PanelFontSize,ANCHOR_RIGHT_UPPER);
    row+=19;
@@ -2584,7 +2800,7 @@ void DrawAnalysisPanel()
    PanelLabel("LAB_SAFETY","M15 safety",x+10,row,muted,PanelFontSize);
    PanelLabel("VAL_SAFETY",safety,right,row,safetyColor,PanelFontSize,ANCHOR_RIGHT_UPPER);
    row+=19;
-   PanelLabel("LAB_AI","AI context",x+10,row,muted,PanelFontSize);
+   PanelLabel("LAB_AI","AI opinion",x+10,row,muted,PanelFontSize);
    color aiPanelColor=StringFind(g_aiPanelStatus,"WAIT")==0 ? warning : StringFind(g_aiPanelStatus,"BUY")>=0 ? good : StringFind(g_aiPanelStatus,"SELL")>=0 ? bad : warning;
    PanelLabel("VAL_AI",g_aiPanelStatus,right,row,aiPanelColor,PanelFontSize-1,ANCHOR_RIGHT_UPPER);
    row+=19;
@@ -2593,7 +2809,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+426,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+435,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.26",right,y+435,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.27",right,y+435,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -2709,10 +2925,12 @@ bool JournalPostPayload(const string payload)
 
    const string headers="Content-Type: application/json\r\n"+
                         "X-Asheparte-Bridge-Token: "+JournalBridgeToken+"\r\n"+
-                        "X-Asheparte-Bridge-Version: combined-3.14\r\n";
+                        "X-Asheparte-Bridge-Version: combined-3.27\r\n";
    ResetLastError();
-   const int status=WebRequest("POST",journalUrl,headers,15000,
+   const int status=WebRequest("POST",journalUrl,headers,1500,
                                requestData,responseData,responseHeaders);
+   if(status<200 || status>=300) g_journalFailures=MathMin(5,g_journalFailures+1);
+   else g_journalFailures=0;
    if(status==-1)
      {
       Print("Asheparte Journal: WebRequest failed. Error ",GetLastError(),
@@ -2728,6 +2946,35 @@ bool JournalPostPayload(const string payload)
    Print("Asheparte Journal: account snapshot synchronized. HTTP ",status," ",
          CharArrayToString(responseData,0,WHOLE_ARRAY,CP_UTF8));
    return true;
+  }
+
+struct JournalCursorDeal
+  {
+   ulong ticket;
+   long time;
+  };
+
+bool JournalDealBefore(const JournalCursorDeal &a,const JournalCursorDeal &b)
+  {
+   return a.time<b.time || (a.time==b.time && a.ticket<b.ticket);
+  }
+
+void SortJournalDeals(JournalCursorDeal &items[],const int left,const int right)
+  {
+   int i=left,j=right;
+   JournalCursorDeal pivot=items[(left+right)/2];
+   while(i<=j)
+     {
+      while(JournalDealBefore(items[i],pivot)) i++;
+      while(JournalDealBefore(pivot,items[j])) j--;
+      if(i<=j)
+        {
+         JournalCursorDeal temp=items[i]; items[i]=items[j]; items[j]=temp;
+         i++; j--;
+        }
+     }
+   if(left<j) SortJournalDeals(items,left,j);
+   if(i<right) SortJournalDeals(items,i,right);
   }
 
 void SynchronizeJournal()
@@ -2754,9 +3001,22 @@ void SynchronizeJournal()
       return;
      }
 
-   const int total=HistoryDealsTotal();
+   const int historyTotal=HistoryDealsTotal();
+   JournalCursorDeal ordered[];
+   ArrayResize(ordered,historyTotal);
+   int total=0;
+   for(int i=0;i<historyTotal;i++)
+     {
+      ulong ticket=HistoryDealGetTicket(i);
+      if(ticket==0 || !IsJournalTradeDeal((ENUM_DEAL_TYPE)HistoryDealGetInteger(ticket,DEAL_TYPE))) continue;
+      ordered[total].ticket=ticket;
+      ordered[total].time=HistoryDealGetInteger(ticket,DEAL_TIME_MSC);
+      total++;
+     }
+   if(total>1) SortJournalDeals(ordered,0,total-1);
    const int safeLimit=MathMax(1,MathMin(1000,JournalMaxDeals));
-   const int first=MathMax(0,total-safeLimit);
+   const int first=0;
+   int sentCount=0;
    string dealsJson="[";
    bool needsComma=false;
    long newestTimeMsc=lastTimeMsc;
@@ -2764,10 +3024,10 @@ void SynchronizeJournal()
 
    for(int index=first;index<total;index++)
      {
-      const ulong ticket=HistoryDealGetTicket(index);
+      const ulong ticket=ordered[index].ticket;
       if(ticket==0)
          continue;
-      const long dealTimeMsc=HistoryDealGetInteger(ticket,DEAL_TIME_MSC);
+      const long dealTimeMsc=ordered[index].time;
       const ENUM_DEAL_TYPE dealType=(ENUM_DEAL_TYPE)HistoryDealGetInteger(ticket,DEAL_TYPE);
       const bool alreadySent=dealTimeMsc<lastTimeMsc ||
                              (dealTimeMsc==lastTimeMsc && ticket<=lastTicket);
@@ -2777,12 +3037,14 @@ void SynchronizeJournal()
          dealsJson+=",";
       dealsJson+=JournalDealJson(ticket);
       needsComma=true;
+      sentCount++;
       if(dealTimeMsc>newestTimeMsc ||
          (dealTimeMsc==newestTimeMsc && ticket>newestTicket))
         {
          newestTimeMsc=dealTimeMsc;
          newestTicket=ticket;
         }
+      if(sentCount>=safeLimit) break;
      }
    dealsJson+="]";
 
@@ -2797,7 +3059,7 @@ void SynchronizeJournal()
       AccountInfoDouble(ACCOUNT_MARGIN_FREE),AccountInfoDouble(ACCOUNT_PROFIT),
       (long)TimeGMT()*1000,dealsJson);
 
-   if(JournalPostPayload(payload) && newestTimeMsc>lastTimeMsc)
+   if(JournalPostPayload(payload) && (newestTimeMsc>lastTimeMsc || (newestTimeMsc==lastTimeMsc && newestTicket>lastTicket)))
      {
       GlobalVariableSet(g_journalTimeKey,(double)newestTimeMsc);
       GlobalVariableSet(g_journalTicketKey,(double)newestTicket);
@@ -2809,9 +3071,11 @@ void SynchronizeJournal()
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   if(FibonacciRewardMultiple<=1.0)
+   if(SyncCorrelationLength<3 || SyncCorrelationLength>500 || SyncLookbackBars<1 || SyncLookbackBars>500 || DeliveryPriorMoveBars<1 || DeliveryPriorMoveBars>100)
+      return INIT_PARAMETERS_INCORRECT;
+   if(FibonacciRewardMultiple<=1.50)
      {
-      Print("Aurum Guard: the Fibonacci reward multiple must exceed 1.0.");
+      Print("Aurum Guard: TP3 reward multiple must exceed TP2 (1.5R).");
       return INIT_PARAMETERS_INCORRECT;
      }
    if(MinimumAIConfidence<0.50 || MinimumAIConfidence>0.99 || MaximumAISignalAgeSeconds<60)
@@ -2819,7 +3083,7 @@ int OnInit()
       Print("Aurum Guard: invalid AI controls. Probability must be 0.50-0.99 and signal age must be at least 60 seconds.");
       return INIT_PARAMETERS_INCORRECT;
      }
-   if(MinimumSafetyADX<0.0 || MaximumSignalRangeATR<=0.0 || MinimumEntryBodyShare<0.0 || MinimumEntryBodyShare>1.0 || MinimumStopDistanceATR<=0.0 || MinimumSetupScore<0 || MinimumSetupScore>100 || ConfirmationRetestFraction<0.0 || ConfirmationRetestFraction>1.0 || ConfirmationRetestBars<1 || RetestDefenseBars<1 || MinimumDefenseBodyShare<0.0 || MinimumDefenseBodyShare>1.0)
+   if(MinimumSafetyADX<0.0 || MaximumSignalRangeATR<=0.0 || MinimumEntryBodyShare<0.0 || MinimumEntryBodyShare>1.0 || MinimumStopDistanceATR<=0.0 || MinimumStopDistanceATR>1.50 || MinimumSetupScore<0 || MinimumSetupScore>100 || ConfirmationRetestFraction<0.0 || ConfirmationRetestFraction>1.0 || ConfirmationRetestBars<1 || RetestDefenseBars<1 || MinimumDefenseBodyShare<0.0 || MinimumDefenseBodyShare>1.0)
      {
       Print("Aurum Guard: invalid smart-entry controls. Check ADX, candle, volatility and setup-score inputs.");
       return INIT_PARAMETERS_INCORRECT;
@@ -2856,19 +3120,20 @@ int OnInit()
      }
 
     g_symbol=TradeSymbol=="" ? _Symbol : TradeSymbol;
-    // v3.26 retains the display-only retirement timer; the delivery-state
-    // route does not add a post-plan scanning cooldown.
+    // Legacy cooldown is unused. Restore chart-scoped plan state after initialization.
     SaveState("SIGNAL_COOLDOWN_UNTIL",0.0);
     SaveState("PLAN_REMOVAL_AT",0.0);
     g_planRemovalAt=0;
     const long journalLogin=AccountInfoInteger(ACCOUNT_LOGIN);
+    // v3.27 replays the configured history window to repair previously skipped
+    // batches. Hosted ingestion deduplicates by account and ticket.
     // Scope the upload cursor to the private bridge key. A newly generated key
     // must perform its own historical backfill instead of inheriting the cursor
     // from an earlier localhost or user connection on the same MT5 account.
     const int tokenLength=StringLen(JournalBridgeToken);
     const string tokenScope=tokenLength>8 ? StringSubstr(JournalBridgeToken,tokenLength-8) : JournalBridgeToken;
-    g_journalTimeKey="AsheparteCombinedTime_"+IntegerToString(journalLogin)+"_"+tokenScope;
-    g_journalTicketKey="AsheparteCombinedTicket_"+IntegerToString(journalLogin)+"_"+tokenScope;
+    g_journalTimeKey="Asheparte327Time_"+IntegerToString(journalLogin)+"_"+tokenScope;
+    g_journalTicketKey="Asheparte327Ticket_"+IntegerToString(journalLogin)+"_"+tokenScope;
     ApplyAurumChartTheme();
     ChartSetInteger(0,CHART_EVENT_OBJECT_DELETE,true);
     if(!SymbolSelect(g_symbol,true))
@@ -2895,10 +3160,13 @@ int OnInit()
    g_trendSlowHandle=iMA(g_symbol,TrendTimeframe,SlowEMAPeriod,0,MODE_EMA,PRICE_CLOSE);
    g_trendATRHandle=iATR(g_symbol,TrendTimeframe,ATRPeriod);
    g_setupATRHandle=iATR(g_symbol,POCSetupTimeframe,ATRPeriod);
+   g_setupFastHandle=iMA(g_symbol,POCSetupTimeframe,FastEMAPeriod,0,MODE_EMA,PRICE_CLOSE);
+   g_setupSlowHandle=iMA(g_symbol,POCSetupTimeframe,SlowEMAPeriod,0,MODE_EMA,PRICE_CLOSE);
+   g_setupRSIHandle=iRSI(g_symbol,POCSetupTimeframe,RSIPeriod,PRICE_CLOSE);
    g_safetyRSIHandle=iRSI(g_symbol,SafetyTimeframe,RSIPeriod,PRICE_CLOSE);
    g_trendRSIHandle=iRSI(g_symbol,TrendTimeframe,RSIPeriod,PRICE_CLOSE);
    g_dailyRSIHandle=iRSI(g_symbol,PERIOD_D1,RSIPeriod,PRICE_CLOSE);
-   if(g_fastHandle==INVALID_HANDLE || g_slowHandle==INVALID_HANDLE || g_rsiHandle==INVALID_HANDLE || g_atrHandle==INVALID_HANDLE || g_dailyEMAHandle==INVALID_HANDLE || g_safetyFastHandle==INVALID_HANDLE || g_safetySlowHandle==INVALID_HANDLE || g_safetyATRHandle==INVALID_HANDLE || g_safetyADXHandle==INVALID_HANDLE || g_trendFastHandle==INVALID_HANDLE || g_trendSlowHandle==INVALID_HANDLE || g_trendATRHandle==INVALID_HANDLE || g_setupATRHandle==INVALID_HANDLE || g_safetyRSIHandle==INVALID_HANDLE || g_trendRSIHandle==INVALID_HANDLE || g_dailyRSIHandle==INVALID_HANDLE)
+   if(g_setupFastHandle==INVALID_HANDLE || g_setupSlowHandle==INVALID_HANDLE || g_setupRSIHandle==INVALID_HANDLE || g_fastHandle==INVALID_HANDLE || g_slowHandle==INVALID_HANDLE || g_rsiHandle==INVALID_HANDLE || g_atrHandle==INVALID_HANDLE || g_dailyEMAHandle==INVALID_HANDLE || g_safetyFastHandle==INVALID_HANDLE || g_safetySlowHandle==INVALID_HANDLE || g_safetyATRHandle==INVALID_HANDLE || g_safetyADXHandle==INVALID_HANDLE || g_trendFastHandle==INVALID_HANDLE || g_trendSlowHandle==INVALID_HANDLE || g_trendATRHandle==INVALID_HANDLE || g_setupATRHandle==INVALID_HANDLE || g_safetyRSIHandle==INVALID_HANDLE || g_trendRSIHandle==INVALID_HANDLE || g_dailyRSIHandle==INVALID_HANDLE)
      {
       Print("Aurum Guard: failed to create indicator handles. Error ",GetLastError());
       return INIT_FAILED;
@@ -2917,6 +3185,7 @@ int OnInit()
     // Never block the panel behind an HTTP request during initialization. The
     // first timer event paints/rechecks the UI before starting journal sync.
     g_journalNextSyncMs=GetTickCount64()+1000;
+    RestoreManualPlanState();
     RefreshAIAnalysisContext();
     UpdateChartPanel();
     ChartRedraw(0);
@@ -2926,6 +3195,7 @@ int OnInit()
 
 void OnDeinit(const int reason)
    {
+    if(g_symbol!="" && reason!=REASON_INITFAILED) SaveManualPlanState();
     EventKillTimer();
     Comment("");
     // MT5 deinitializes and immediately initializes the EA when only the chart
@@ -2955,6 +3225,9 @@ void OnDeinit(const int reason)
    if(g_trendSlowHandle!=INVALID_HANDLE) IndicatorRelease(g_trendSlowHandle);
    if(g_trendATRHandle!=INVALID_HANDLE) IndicatorRelease(g_trendATRHandle);
    if(g_setupATRHandle!=INVALID_HANDLE) IndicatorRelease(g_setupATRHandle);
+   if(g_setupFastHandle!=INVALID_HANDLE) IndicatorRelease(g_setupFastHandle);
+   if(g_setupSlowHandle!=INVALID_HANDLE) IndicatorRelease(g_setupSlowHandle);
+   if(g_setupRSIHandle!=INVALID_HANDLE) IndicatorRelease(g_setupRSIHandle);
    if(g_safetyRSIHandle!=INVALID_HANDLE) IndicatorRelease(g_safetyRSIHandle);
    if(g_trendRSIHandle!=INVALID_HANDLE) IndicatorRelease(g_trendRSIHandle);
    if(g_dailyRSIHandle!=INVALID_HANDLE) IndicatorRelease(g_dailyRSIHandle);
@@ -2962,6 +3235,8 @@ void OnDeinit(const int reason)
 
 void OnTimer()
    {
+    MonitorManualPlanOutcome();
+    SaveManualPlanState();
     // Paint first. WebRequest can wait on DNS, a cold endpoint, or the network;
     // keeping it after the redraw prevents the dashboard from vanishing while
     // MT5 is waiting for the journal endpoint.
@@ -2972,7 +3247,7 @@ void OnTimer()
     if(EnableJournalSync && GetTickCount64()>=g_journalNextSyncMs)
       {
        SynchronizeJournal();
-       g_journalNextSyncMs=GetTickCount64()+(ulong)(MathMax(15,JournalSyncSeconds)*1000);
+       g_journalNextSyncMs=GetTickCount64()+(ulong)(MathMax(15,JournalSyncSeconds)*1000*MathPow(2,g_journalFailures));
       }
    }
 
