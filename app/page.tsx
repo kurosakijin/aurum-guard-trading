@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChangePassword } from '@/components/change-password';
+import { deliveryPineScript } from '@/lib/delivery-pine';
 import { Show, SignIn, SignInButton, UserButton, useAuth, useSignUp, useUser } from '@clerk/react';
 import {
   ArrowUpRight,
@@ -2597,7 +2598,8 @@ export default function Home() {
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
-  const [pineScriptView, setPineScriptView] = useState<'structure' | 'volume' | 'combined'>('structure');
+  const [pineScriptView, setPineScriptView] = useState<'delivery' | 'structure' | 'volume' | 'combined'>('delivery');
+  const [deliveryCopyStatus, setDeliveryCopyStatus] = useState('');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
   const activeLiveMarket = liveMarkets.find((market) => market.key === liveMarket) ?? liveMarkets[0];
@@ -2987,6 +2989,24 @@ export default function Home() {
     await navigator.clipboard.writeText(pineScript);
     setScriptCopied(true);
     window.setTimeout(() => setScriptCopied(false), 1600);
+  }
+
+  async function copyDeliveryScript() {
+    try {
+      await navigator.clipboard.writeText(deliveryPineScript);
+      setDeliveryCopyStatus('Copied');
+    } catch {
+      setDeliveryCopyStatus('Clipboard unavailable—use Download or select the code below.');
+    }
+  }
+
+  function downloadDeliveryScript() {
+    const url = URL.createObjectURL(new Blob([deliveryPineScript], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'asheparte-engulfing-cisd.pine';
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function copyStructureScript() {
@@ -4265,7 +4285,8 @@ export default function Home() {
           </div>
 
           <div id="pine-script" className="min-w-0">
-            <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl border border-sky-300/15 bg-[#06182b]/70 p-1 shadow-[0_12px_40px_rgba(0,0,0,.18)] sm:grid-cols-3">
+            <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl border border-border bg-card p-1 sm:grid-cols-2 xl:grid-cols-4">
+              <Button type="button" variant="ghost" className={pineScriptView === 'delivery' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-muted-foreground'} onClick={() => setPineScriptView('delivery')}><CandlestickChart /> Engulfing + CISD</Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -4291,6 +4312,27 @@ export default function Home() {
                 <Code2 /> Combined Strategy
               </Button>
             </div>
+
+          {pineScriptView === 'delivery' && <Card>
+            <CardHeader>
+              <CardTitle>Engulfing + CISD · Gold/Silver confirmation</CardTitle>
+              <CardDescription>Analysis-only Pine v6 indicator. Labels reversal and continuation setups when both metals agree.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm leading-6 text-muted-foreground">Use standard Gold candles on M1, M15, M30 or H1. Select matching Gold and Silver feeds in settings. A strong body engulfing or close beyond the prior opposing candle’s extreme must appear on both metals in the same direction and time interval.</p>
+              <p className="text-sm leading-6 text-muted-foreground">Signals appear on the next bar using the previous closed candles, never backdated. Missing, stale or conflicting Silver data means WAIT. Reversal or continuation describes the direction against the preceding move—not a win probability.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={copyDeliveryScript}><Clipboard className="size-4" /> Copy indicator</Button>
+                <Button variant="outline" onClick={downloadDeliveryScript}><Download className="size-4" /> Download .pine</Button>
+              </div>
+              {deliveryCopyStatus && <p role="status" className="text-sm text-muted-foreground">{deliveryCopyStatus}</p>}
+              <p className="text-sm leading-6 text-muted-foreground">Paste into TradingView’s Pine Editor, save, and add to your Gold chart. Optional alerts: choose a bullish or bearish setup and Once Per Bar. This is the advisor’s pattern detector, not its complete MTF entry engine; no automated orders, news filter, or validated performance claims.</p>
+              <details className="rounded-xl border border-border p-3">
+                <summary className="cursor-pointer text-sm font-medium">View Pine Script source</summary>
+                <pre className="mt-3 max-h-[520px] overflow-auto rounded-lg bg-muted p-4 font-mono text-xs leading-6 text-foreground"><code>{deliveryPineScript}</code></pre>
+              </details>
+            </CardContent>
+          </Card>}
 
           <Card className={pineScriptView === 'volume' ? 'overflow-hidden border-yellow-300/18 bg-[linear-gradient(145deg,rgba(250,204,21,.065),rgba(18,22,27,.96)_42%)] shadow-[0_20px_70px_rgba(0,0,0,.2)]' : 'hidden'}>
             <CardHeader className="border-b border-white/7 pb-4">
