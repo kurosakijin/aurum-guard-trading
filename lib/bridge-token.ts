@@ -11,6 +11,14 @@ export function hashBridgeToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+// Read-only authorization for personalized downloads. Never accepts the legacy token.
+export async function personalBridgeTokenMatches(userId: string, token: string) {
+  const sql = database();
+  const rows = await sql`SELECT user_id FROM journal_bridge_tokens
+    WHERE user_id=${userId} AND token_hash=${hashBridgeToken(token)} LIMIT 1`;
+  return rows.length === 1;
+}
+
 async function initializeBridgeTokens() {
   const sql = database();
   await sql`CREATE TABLE IF NOT EXISTS journal_bridge_tokens (

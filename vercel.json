@@ -4,6 +4,9 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build:pages",
   "outputDirectory": "github-dist",
+  "functions": {
+    "api/advisor-download.ts": { "includeFiles": "advisor-templates/**" }
+  },
   "cleanUrls": true,
   "trailingSlash": false
 }

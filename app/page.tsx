@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChangePassword } from '@/components/change-password';
+import { AdvisorDownloads } from '@/components/advisor-downloads';
 import { deliveryPineScript } from '@/lib/delivery-pine';
 import { Show, SignIn, SignInButton, UserButton, useAuth, useSignUp, useUser } from '@clerk/react';
 import {
@@ -2571,7 +2572,9 @@ export default function Home() {
   const [journalFeedOnline, setJournalFeedOnline] = useState(false);
   const [bridgeTokenHasToken, setBridgeTokenHasToken] = useState(false);
   const [bridgeTokenLastFour, setBridgeTokenLastFour] = useState('');
-  const [bridgeTokenReveal, setBridgeTokenReveal] = useState('');
+  const [rawBridgeTokenReveal, setBridgeTokenReveal] = useState('');
+  const [bridgeTokenRevealOwner, setBridgeTokenRevealOwner] = useState('');
+  const bridgeTokenReveal = bridgeTokenRevealOwner === user?.id ? rawBridgeTokenReveal : '';
   const [bridgeTokenBusy, setBridgeTokenBusy] = useState(false);
   const [bridgeTokenCopied, setBridgeTokenCopied] = useState(false);
   const [bridgeTokenError, setBridgeTokenError] = useState('');
@@ -2615,6 +2618,11 @@ export default function Home() {
     : '';
   const signedInUserLabel = user?.username ? `@${user.username}` : user?.primaryEmailAddress?.emailAddress ?? 'Signed-in user';
   const signedInEmail = user?.primaryEmailAddress?.emailAddress ?? '';
+
+  useEffect(() => {
+    setBridgeTokenReveal('');
+    setBridgeTokenRevealOwner('');
+  }, [user?.id]);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('asheparte-theme');
@@ -2713,6 +2721,7 @@ export default function Home() {
       if (!response.ok) throw new Error('token unavailable');
       const result = await response.json() as { token: string; lastFour: string };
       setBridgeTokenReveal(result.token);
+      setBridgeTokenRevealOwner(user?.id ?? '');
       setBridgeTokenLastFour(result.lastFour);
       setBridgeTokenHasToken(true);
     } catch {
@@ -2740,6 +2749,7 @@ export default function Home() {
       setBridgeSyncCode(result.syncCode ?? '');
       if (result.token) {
         setBridgeTokenReveal(result.token);
+        setBridgeTokenRevealOwner(user?.id ?? '');
         setBridgeTokenLastFour(result.lastFour ?? result.token.slice(-4));
         setBridgeTokenHasToken(true);
         setBridgeTokenCopied(false);
@@ -2779,6 +2789,7 @@ export default function Home() {
       setJournalFeedOnline(false);
       setDemoJournalEnabled(false);
       setBridgeTokenReveal(result.token);
+      setBridgeTokenRevealOwner(user?.id ?? '');
       setBridgeTokenLastFour(result.lastFour ?? '');
       setBridgeTokenHasToken(true);
       setBridgeBindingStatus('unpaired');
@@ -3705,16 +3716,16 @@ export default function Home() {
             <CardContent className="space-y-6 pt-6">
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground">The advisor checks market direction, price structure and Gold/Silver agreement, then displays a possible entry, stop loss and targets. You review the plan and decide whether to trade.</p>
               <div className="flex flex-wrap gap-3">
-                <a href="./downloads/AurumGuardAnalysisAdvisor.ex5?v=3.26" download className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:opacity-90"><Download className="size-4" /> Download advisor v3.26</a>
                 <a href="./downloads/AurumGuardAI.zip?v=9.3" download className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-5 text-sm font-semibold text-secondary-foreground hover:opacity-90"><Sparkles className="size-4" /> Optional AI layer</a>
               </div>
+              <AdvisorDownloads key={user?.id ?? 'signed-out'} hasToken={bridgeTokenHasToken && Boolean(isSignedIn)} generatedToken={bridgeTokenRevealOwner === user?.id ? bridgeTokenReveal : ''} onManage={() => setManageAccountOpen(true)} />
               <div className="grid gap-6 border-t border-border pt-6 md:grid-cols-2">
                 <div>
                   <h2 className="text-base font-semibold">Get started</h2>
                   <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
                     <li>Copy the advisor to MT5’s <span className="font-mono text-foreground">MQL5/Experts</span> folder.</li>
-                    <li>Refresh Navigator, attach it to a Gold chart and set your Silver symbol.</li>
-                    <li>Keep MT5 open for updated analysis.</li>
+                    <li>Attach it to a Gold chart. In Inputs, choose Load and select your personal .set file, then check your Silver symbol.</li>
+                    <li>Allow WebRequest for https://asheparte-ai.vercel.app in MT5 options. Approve the detected pairing in Manage account and keep MT5 open.</li>
                   </ol>
                 </div>
                 <div>
