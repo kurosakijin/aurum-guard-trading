@@ -3712,6 +3712,7 @@ export default function Home() {
             <CardHeader className="border-b border-border pb-5">
               <CardTitle id="mt5-bot-heading" className="flex items-center gap-2 text-xl"><Bot className="size-5 text-primary" /> Asheparte AI Analysis Advisor</CardTitle>
               <CardDescription>Clear trade analysis for Gold and Silver, inside MetaTrader 5.</CardDescription>
+              {user?.publicMetadata?.trainingOnly === true && <p className="text-sm text-foreground">Private training account · MT5 demo accounts only. Place demo orders manually in MT5; this advisor only analyzes and records.</p>}
               <CardAction><Badge variant="outline">Analysis only</Badge></CardAction>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">

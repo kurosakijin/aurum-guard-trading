@@ -1,4 +1,5 @@
-import { authorizeBridgeAccount } from '../../lib/bridge-token.js';
+import { authorizeBridgeAccount, ownerForBridgeToken } from '../../lib/bridge-token.js';
+import { assertTrainingAccountMode } from '../../lib/training-account.js';
 import { ingestJournal, type BridgePayload } from '../../lib/hosted-journal.js';
 
 export default {
@@ -9,6 +10,11 @@ export default {
     try {
       const payload = await request.json() as BridgePayload;
       const account = payload.account;
+      const token = request.headers.get('x-asheparte-bridge-token');
+      const owner = await ownerForBridgeToken(token);
+      if (!owner) throw new Error('invalid_bridge_token');
+      // Reject a live/contest account before it can even become a pending pairing.
+      await assertTrainingAccountMode(owner, account?.tradeMode);
       const authorization = await authorizeBridgeAccount(request.headers.get('x-asheparte-bridge-token'), {
         provider: String(payload.provider ?? 'MT5'),
         server: String(account?.server ?? ''),
@@ -19,7 +25,7 @@ export default {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'invalid_payload';
       const status = message === 'invalid_bridge_token' ? 401 :
-        message === 'personal_bridge_token_required' ? 403 :
+        ['personal_bridge_token_required','training_account_demo_only'].includes(message) ? 403 :
         ['pairing_approval_required','account_binding_mismatch','account_already_linked'].includes(message) ? 409 :
         message === 'journal_storage_unavailable' ? 503 : 400;
       return Response.json({ error: message }, { status });
