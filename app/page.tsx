@@ -4315,18 +4315,18 @@ export default function Home() {
 
           {pineScriptView === 'delivery' && <Card>
             <CardHeader>
-              <CardTitle>Engulfing + CISD · Gold/Silver confirmation</CardTitle>
-              <CardDescription>Analysis-only Pine v6 indicator. Labels reversal and continuation setups when both metals agree.</CardDescription>
+              <CardTitle>Engulfing + CISD Watch v2 · Gold/Silver confirmation</CardTitle>
+              <CardDescription>Analysis-only Pine v6 indicator. A WATCH is not a confirmed entry or a prediction.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm leading-6 text-muted-foreground">Use standard Gold candles on M1, M15, M30 or H1. Select matching Gold and Silver feeds in settings. A strong body engulfing or close beyond the prior opposing candle’s extreme must appear on both metals in the same direction and time interval.</p>
-              <p className="text-sm leading-6 text-muted-foreground">Signals appear on the next bar using the previous closed candles, never backdated. Missing, stale or conflicting Silver data means WAIT. Reversal or continuation describes the direction against the preceding move—not a win probability.</p>
+              <p className="text-sm leading-6 text-muted-foreground">Use standard Gold candles on M1, M15, M30 or H1 with distinct XAU and XAG feeds in the same quote currency. CISD tracks a close through the opposing delivery leg’s first open. Gold must agree with closed Silver direction and Gold’s closed H1/D1 EMA and RSI filters. Settings also offer stricter Silver pattern matching.</p>
+              <p className="text-sm leading-6 text-muted-foreground">A watch starts only at the close of the bar after the pattern—an intentional extra confirmation delay. Oversized candles, excessive extension, broken bounds or stale data block it. Active watches retire when invalidated, extended, expired or no longer aligned. Historical WATCH markers are records, not current entry instructions.</p>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={copyDeliveryScript}><Clipboard className="size-4" /> Copy indicator</Button>
                 <Button variant="outline" onClick={downloadDeliveryScript}><Download className="size-4" /> Download .pine</Button>
               </div>
               {deliveryCopyStatus && <p role="status" className="text-sm text-muted-foreground">{deliveryCopyStatus}</p>}
-              <p className="text-sm leading-6 text-muted-foreground">Paste into TradingView’s Pine Editor, save, and add to your Gold chart. Optional alerts: choose a bullish or bearish setup and Once Per Bar. This is the advisor’s pattern detector, not its complete MTF entry engine; no automated orders, news filter, or validated performance claims.</p>
+              <p className="text-sm leading-6 text-muted-foreground">Paste into TradingView’s Pine Editor, save, and add to your Gold chart. Recreate any old alerts using WATCH started and Once Per Bar Close. Use the manual news-pause setting around releases; volatility checks are not a news calendar. This remains separate from the MT5 and Combined entry engines—do not combine their signals as votes. No automated orders or validated win-rate claims.</p>
               <details className="rounded-xl border border-border p-3">
                 <summary className="cursor-pointer text-sm font-medium">View Pine Script source</summary>
                 <pre className="mt-3 max-h-[520px] overflow-auto rounded-lg bg-muted p-4 font-mono text-xs leading-6 text-foreground"><code>{deliveryPineScript}</code></pre>
