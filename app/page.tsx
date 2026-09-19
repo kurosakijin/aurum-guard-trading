@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChangePassword } from '@/components/change-password';
 import { AuthLoading } from '@/components/auth-loading';
+import { JournalAccountSelect, type JournalAccountOption } from '@/components/journal-account-select';
 import { authView, type ResolvedAuthView } from '@/lib/auth-view';
 import { AdvisorDownloads } from '@/components/advisor-downloads';
 import { SignalJournal } from '@/components/signal-journal';
@@ -70,7 +71,6 @@ const liveMarkets = [
 
 type JournalTrade = { closed: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; entryPrice: number; exitPrice: number; costs: number; net: number };
 type BridgeAccount = { id: string; provider: string; server: string; loginMasked: string; login?: string };
-type JournalAccountOption = { id: string; provider: string; server: string; loginMasked: string; mode: string };
 type BridgeBindingStatus = 'unpaired' | 'pending' | 'linked';
 type JournalData = {
   connected: boolean;
@@ -2739,6 +2739,17 @@ export default function Home() {
     return () => { active = false; window.clearInterval(timer); };
   }, [getToken, isSignedIn, user?.id]);
 
+  function selectJournalAccount(accountId: string) {
+    if (accountId === selectedJournalAccount || !journalAccounts.some(account => account.id === accountId)) return;
+    setSelectedJournalAccount(accountId);
+    setJournalSwitchLoading(true);
+    setJournalLoadError('');
+    setJournalData(emptyJournal);
+    setDemoJournalEnabled(false);
+    setJournalFeedOnline(false);
+    setJournalPage(1);
+  }
+
   async function rotateUserBridgeToken() {
     if (!isSignedIn || bridgeTokenBusy) return;
     setBridgeTokenBusy(true);
@@ -3492,6 +3503,10 @@ export default function Home() {
                 <CardAction><Badge variant="outline" className={bridgeHeartbeatOnline ? 'border-emerald-300/25 text-emerald-200' : bridgeBindingStatus === 'linked' ? 'border-red-300/25 text-red-200' : 'border-amber-300/25 text-amber-200'}>{bridgeHeartbeatOnline ? 'ONLINE' : bridgeBindingStatus === 'linked' ? 'OFFLINE' : isSignedIn ? 'NOT LINKED' : 'LOCKED'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="pt-3 xl:pt-4">
+                {isSignedIn && journalAccounts.length > 0 && <div className="mb-3">
+                  <JournalAccountSelect id="connection-account" accounts={journalAccounts} value={selectedJournalAccount} onChange={selectJournalAccount} loading={journalSwitchLoading} />
+                  {journalLoadError && <p role="alert" className="mt-2 text-xs text-destructive">{journalLoadError}</p>}
+                </div>}
                 <div className="space-y-2 rounded-xl border border-sky-200/12 bg-sky-950/25 p-3">
                   <div className="flex items-start justify-between gap-3"><span className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Asheparte account</span><span className="min-w-0 text-right"><span className="block max-w-[175px] truncate font-mono text-[10px] text-cyan-200">{isSignedIn ? signedInUserLabel : 'Not signed in'}</span>{isSignedIn && signedInEmail && signedInEmail !== signedInUserLabel && <span className="mt-0.5 block max-w-[175px] truncate text-[9px] text-muted-foreground">{signedInEmail}</span>}</span></div>
                   <div className="border-t border-white/8 pt-2"><p className="text-[9px] uppercase tracking-[.11em] text-muted-foreground">Linked broker account</p><div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-sky-100"><Database className="size-4 text-cyan-300" /> {currentJournalEnabled ? `${journalData.account.provider} · ${journalData.account.brokerServer} · ${journalData.account.loginMasked}` : 'No account linked to this user'}</div></div>
@@ -3535,21 +3550,6 @@ export default function Home() {
             <p>{pendingBridgeAccounts.length} detected account{pendingBridgeAccounts.length === 1 ? '' : 's'} awaiting your confirmation.</p>
             <Button variant="outline" onClick={() => setAccountDialogOpen(true)}>Review accounts</Button>
           </div>}
-          {isSignedIn && journalAccounts.length > 1 && <div className="rounded-xl border border-border bg-card p-4 text-card-foreground">
-            <label htmlFor="journal-account" className="mb-2 block text-sm font-medium">Broker accounts ({journalAccounts.length})</label>
-            <select id="journal-account" className="w-full min-w-0 rounded-lg border border-border bg-background p-3 text-sm text-foreground" value={selectedJournalAccount} onChange={event => {
-              setSelectedJournalAccount(event.target.value);
-              setJournalSwitchLoading(true);
-              setJournalLoadError('');
-              setJournalData(emptyJournal);
-              setDemoJournalEnabled(false);
-              setJournalFeedOnline(false);
-              setJournalPage(1);
-            }}>
-              {journalAccounts.map(account => <option key={account.id} value={account.id}>{account.provider} · {account.server} · {account.loginMasked} · {account.mode} · {account.id.slice(-6)}</option>)}
-            </select>
-            <p className="mt-2 text-xs text-muted-foreground">Balance, performance and history belong only to the selected account.</p>
-          </div>}
           {isSignedIn && journalSwitchLoading && <p role="status" className="text-sm text-muted-foreground">Loading selected account…</p>}
           {isSignedIn && journalLoadError && <p role="alert" className="text-sm text-destructive">{journalLoadError}</p>}
           {authLoaded && !isSignedIn && (
@@ -3580,22 +3580,23 @@ export default function Home() {
               </CardContent>
             </Card>
           )}
-          {authLoaded && isSignedIn && currentJournalEnabled && <>
+          {authLoaded && isSignedIn && journalAccounts.length > 0 &&
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.16em] text-cyan-300">
                 <Database className="size-3.5" /> Account performance
               </div>
               <h1 id="trade-journal-heading" className="font-heading text-2xl font-semibold tracking-[-.03em] sm:text-3xl">Trading journal</h1>
+              <div className="mt-3 w-full max-w-sm">
+                <JournalAccountSelect id="journal-account" accounts={journalAccounts} value={selectedJournalAccount} onChange={selectJournalAccount} loading={journalSwitchLoading} />
+              </div>
               <p className="mt-1 text-sm text-muted-foreground">Your private ACCM / MT5 performance and trade history.</p>
-              {journalData.mode !== 'unknown' && <Badge variant="outline" className="mt-2">{journalData.mode === 'live' ? 'Live account' : journalData.mode === 'contest' ? 'Contest account' : 'Demo account'}</Badge>}
-              <p className="mt-1.5 font-mono text-[10px] text-cyan-200">{signedInUserLabel} → {currentJournalEnabled ? `${journalData.account.provider} / ${journalData.account.brokerServer} / ${journalData.account.loginMasked}` : 'no broker account linked'}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full min-w-0 flex-col items-start gap-2 lg:max-w-md lg:items-end">
               <Badge variant="outline" className={bridgeHeartbeatOnline ? 'w-fit border-emerald-300/25 bg-emerald-300/[.08] px-3 py-1.5 text-emerald-200' : bridgeBindingStatus === 'linked' ? 'w-fit border-red-300/25 bg-red-300/[.06] px-3 py-1.5 text-red-200' : 'w-fit border-amber-300/25 bg-amber-300/[.06] px-3 py-1.5 text-amber-200'}>{bridgeHeartbeatOnline ? 'BRIDGE ONLINE' : bridgeBindingStatus === 'linked' ? 'BRIDGE OFFLINE' : bridgeBindingStatus === 'pending' ? 'APPROVAL REQUIRED' : 'AWAITING BRIDGE'}</Badge>
             </div>
-          </div>
-
+          </div>}
+          {authLoaded && isSignedIn && currentJournalEnabled && <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               ['Net P/L', currentJournalEnabled ? `${journalData.summary.net >= 0 ? '+' : '−'}$${Math.abs(journalData.summary.net).toFixed(2)}` : '—', 'Profit − loss − costs', 'text-sky-100'],

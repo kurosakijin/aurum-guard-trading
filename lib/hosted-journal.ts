@@ -147,7 +147,7 @@ export async function readJournal(ownerUserId: string, selectedAccountKey?: stri
   if (!accounts.length) return { connected: false };
   const account = selectedAccountKey ? accounts.find(row => row.account_key === selectedAccountKey) : accounts[0];
   if (!account) throw new Error('account_not_found');
-  const accountList = accounts.map(row => ({ id: String(row.account_key), provider: String(row.provider), server: String(row.broker_server), loginMasked: String(row.login_masked), mode: row.trade_mode === 2 ? 'live' : row.trade_mode === 0 ? 'demo' : 'other' }));
+  const accountList = accounts.map(row => ({ id: String(row.account_key), provider: String(row.provider), server: String(row.broker_server), loginMasked: String(row.login_masked), updatedAt: row.updated_at, mode: row.trade_mode === 2 ? 'live' : row.trade_mode === 0 ? 'demo' : row.trade_mode === 1 ? 'contest' : 'unknown' }));
   const rows = await sql`SELECT * FROM journal_deals WHERE account_key=${account.account_key} AND owner_user_id=${ownerUserId}
     ORDER BY time_msc DESC LIMIT 500`;
 
