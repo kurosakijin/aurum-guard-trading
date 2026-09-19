@@ -41,6 +41,20 @@ async function initializeBridgeTokens() {
     WHERE bound_login IS NOT NULL`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS journal_bridge_sync_code_unique
     ON journal_bridge_tokens (sync_code) WHERE sync_code IS NOT NULL`;
+  await sql`CREATE TABLE IF NOT EXISTS journal_bridge_accounts (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, provider TEXT NOT NULL,
+    server TEXT NOT NULL, login TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')),
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sync_code TEXT,
+    UNIQUE(user_id,provider,server,login)
+  )`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS journal_approved_identity_unique
+    ON journal_bridge_accounts(provider,server,login) WHERE status='approved'`;
+  // Existing approvals survive the additive migration. Never approve old pending rows.
+  await sql`INSERT INTO journal_bridge_accounts(id,user_id,provider,server,login,status,sync_code)
+    SELECT 'legacy-' || user_id,user_id,LOWER(bound_provider),LOWER(bound_server),bound_login,'approved',sync_code
+    FROM journal_bridge_tokens WHERE bound_login IS NOT NULL
+    ON CONFLICT DO NOTHING`;
   return sql;
 }
 
@@ -71,27 +85,25 @@ function maskedLogin(login: string) {
 }
 
 export async function bridgeTokenStatus(userId: string) {
-  const sql = database();
+  const sql = await ensureBridgeTokens();
   const rows = await sql`SELECT token_last_four, created_at, rotated_at,
       bound_provider,bound_server,bound_login,pending_provider,pending_server,pending_login,pending_at,sync_code
     FROM journal_bridge_tokens WHERE user_id=${userId} LIMIT 1`;
   if (!rows.length) return { hasToken: false };
+  const bindings = await sql`SELECT * FROM journal_bridge_accounts WHERE user_id=${userId} ORDER BY detected_at,id`;
+  const present = (row: typeof bindings[number]) => ({ id: String(row.id), provider: String(row.provider), server: String(row.server), loginMasked: maskedLogin(String(row.login)), login: String(row.login) });
+  const approved = bindings.filter(row => row.status === 'approved');
+  const pending = bindings.filter(row => row.status === 'pending');
   return {
     hasToken: true,
     lastFour: String(rows[0].token_last_four),
     createdAt: rows[0].created_at,
     rotatedAt: rows[0].rotated_at,
-    bindingStatus: rows[0].bound_login ? 'linked' : rows[0].pending_login ? 'pending' : 'unpaired',
-    account: rows[0].bound_login ? {
-      provider: String(rows[0].bound_provider),
-      server: String(rows[0].bound_server),
-      loginMasked: maskedLogin(String(rows[0].bound_login)),
-    } : rows[0].pending_login ? {
-      provider: String(rows[0].pending_provider),
-      server: String(rows[0].pending_server),
-      loginMasked: maskedLogin(String(rows[0].pending_login)),
-    } : undefined,
-    syncCode: rows[0].sync_code ? String(rows[0].sync_code) : undefined,
+    bindingStatus: approved.length ? 'linked' : pending.length ? 'pending' : 'unpaired',
+    account: approved[0] ? present(approved[0]) : pending[0] ? present(pending[0]) : undefined,
+    accounts: approved.map(present),
+    pendingAccounts: pending.map(present),
+    syncCode: approved[0]?.sync_code,
     pendingAt: rows[0].pending_at ?? undefined,
   };
 }
@@ -108,34 +120,26 @@ export async function rotateBridgeToken(userId: string) {
   return { token, lastFour };
 }
 
-export async function approveBridgeAccount(userId: string) {
+export async function approveBridgeAccount(userId: string, accountId: string) {
   const sql = await ensureBridgeTokens();
-  const rows = await sql`SELECT pending_provider,pending_server,pending_login,sync_code
-    FROM journal_bridge_tokens WHERE user_id=${userId} LIMIT 1`;
-  if (!rows.length || !rows[0].pending_login) throw new Error('no_pending_account');
-  const syncCode = rows[0].sync_code ? String(rows[0].sync_code) :
-    `SYNC-${randomBytes(4).toString('hex').toUpperCase().slice(0, 4)}-${randomBytes(4).toString('hex').toUpperCase().slice(0, 4)}`;
+  const syncCode = `SYNC-${randomBytes(8).toString('hex').toUpperCase()}`;
   try {
-    await sql`UPDATE journal_bridge_tokens SET
-      bound_provider=pending_provider,bound_server=pending_server,bound_login=pending_login,
-      pending_provider=NULL,pending_server=NULL,pending_login=NULL,pending_at=NULL,sync_code=${syncCode}
-      WHERE user_id=${userId}`;
-  } catch {
-    throw new Error('account_already_linked');
+    const updated = await sql`UPDATE journal_bridge_accounts SET status='approved',sync_code=${syncCode}
+      WHERE user_id=${userId} AND id=${accountId} AND status='pending' RETURNING id`;
+    if (!updated.length) throw new Error('no_pending_account');
+  } catch (error) {
+    if ((error as { code?: string }).code === '23505') throw new Error('account_already_linked');
+    throw error;
   }
   return bridgeTokenStatus(userId);
 }
 
-export async function rejectPendingBridgeAccount(userId: string) {
+export async function rejectPendingBridgeAccount(userId: string, accountId: string) {
   const sql = await ensureBridgeTokens();
-  const token = `ash_live_${randomBytes(32).toString('base64url')}`;
-  const tokenHash = hashBridgeToken(token);
-  const lastFour = token.slice(-4);
-  await sql`UPDATE journal_bridge_tokens SET
-    token_hash=${tokenHash},token_last_four=${lastFour},rotated_at=NOW(),
-    pending_provider=NULL,pending_server=NULL,pending_login=NULL,pending_at=NULL
-    WHERE user_id=${userId} AND bound_login IS NULL`;
-  return { ...(await bridgeTokenStatus(userId)), token, lastFour };
+  const updated = await sql`UPDATE journal_bridge_accounts SET status='rejected'
+    WHERE user_id=${userId} AND id=${accountId} AND status='pending' RETURNING id`;
+  if (!updated.length) throw new Error('no_pending_account');
+  return bridgeTokenStatus(userId);
 }
 
 export async function resetUserJournal(userId: string) {
@@ -143,7 +147,9 @@ export async function resetUserJournal(userId: string) {
   const token = `ash_live_${randomBytes(32).toString('base64url')}`;
   const tokenHash = hashBridgeToken(token);
   const lastFour = token.slice(-4);
-  const rows = await sql`WITH deleted_deals AS (
+  const rows = await sql`WITH deleted_bindings AS (
+      DELETE FROM journal_bridge_accounts WHERE user_id=${userId} RETURNING 1
+    ), deleted_deals AS (
       DELETE FROM journal_deals WHERE owner_user_id=${userId} RETURNING 1
     ), deleted_accounts AS (
       DELETE FROM journal_accounts WHERE owner_user_id=${userId} RETURNING 1
@@ -182,20 +188,19 @@ export async function authorizeBridgeAccount(token: string | null, identityInput
     FROM journal_bridge_tokens WHERE token_hash=${hashBridgeToken(token)} LIMIT 1`;
   if (!rows.length) throw new Error('invalid_bridge_token');
   const row = rows[0];
-  if (row.bound_login) {
-    const matches = String(row.bound_provider).toLowerCase() === identity.provider.toLowerCase() &&
-      String(row.bound_server).toLowerCase() === identity.server.toLowerCase() &&
-      String(row.bound_login) === identity.login;
-    if (!matches) throw new Error('account_binding_mismatch');
-    return { ownerUserId: String(row.user_id), syncCode: String(row.sync_code ?? '') };
-  }
-  const conflicts = await sql`SELECT user_id FROM journal_bridge_tokens
-    WHERE bound_login=${identity.login} AND LOWER(bound_provider)=LOWER(${identity.provider})
-      AND LOWER(bound_server)=LOWER(${identity.server}) AND user_id<>${String(row.user_id)} LIMIT 1`;
+  const provider = identity.provider.toLowerCase();
+  const server = identity.server.toLowerCase();
+  const bindings = await sql`SELECT status,sync_code FROM journal_bridge_accounts
+    WHERE user_id=${String(row.user_id)} AND provider=${provider} AND server=${server} AND login=${identity.login}`;
+  if (bindings[0]?.status === 'approved') return { ownerUserId: String(row.user_id), syncCode: String(bindings[0].sync_code ?? '') };
+  if (bindings[0]?.status === 'rejected') throw new Error('pairing_rejected');
+  const conflicts = await sql`SELECT user_id FROM journal_bridge_accounts
+    WHERE login=${identity.login} AND provider=${provider}
+      AND server=${server} AND status='approved' AND user_id<>${String(row.user_id)} LIMIT 1`;
   if (conflicts.length) throw new Error('account_already_linked');
-  await sql`UPDATE journal_bridge_tokens SET
-    pending_provider=${identity.provider},pending_server=${identity.server},pending_login=${identity.login},pending_at=NOW()
-    WHERE user_id=${String(row.user_id)} AND bound_login IS NULL`;
+  await sql`INSERT INTO journal_bridge_accounts(id,user_id,provider,server,login,status)
+    VALUES (${randomBytes(16).toString('hex')},${String(row.user_id)},${provider},${server},${identity.login},'pending')
+    ON CONFLICT (user_id,provider,server,login) DO NOTHING`;
   throw new Error('pairing_approval_required');
 }
 

@@ -14,9 +14,10 @@ export default {
         return Response.json(await rotateBridgeToken(userId), { headers: { 'Cache-Control': 'no-store' } });
       }
       if (request.method === 'PATCH') {
-        const body = await request.json().catch(() => ({})) as { action?: string };
-        if (body.action === 'approve') return Response.json(await approveBridgeAccount(userId), { headers: { 'Cache-Control': 'no-store' } });
-        if (body.action === 'reject') return Response.json(await rejectPendingBridgeAccount(userId), { headers: { 'Cache-Control': 'no-store' } });
+        const body = await request.json().catch(() => ({})) as { action?: string; accountId?: string };
+        if (typeof body.accountId !== 'string' || !body.accountId || body.accountId.length > 160) return Response.json({ error: 'account_id_required' }, { status: 400 });
+        if (body.action === 'approve') return Response.json(await approveBridgeAccount(userId, body.accountId), { headers: { 'Cache-Control': 'no-store' } });
+        if (body.action === 'reject') return Response.json(await rejectPendingBridgeAccount(userId, body.accountId), { headers: { 'Cache-Control': 'no-store' } });
         return Response.json({ error: 'invalid_action' }, { status: 400 });
       }
       if (request.method === 'DELETE') {

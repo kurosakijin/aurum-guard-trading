@@ -141,11 +141,13 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
   return { accepted };
 }
 
-export async function readJournal(ownerUserId: string) {
+export async function readJournal(ownerUserId: string, selectedAccountKey?: string | null) {
   const sql = database();
-  const accounts = await sql`SELECT * FROM journal_accounts WHERE owner_user_id=${ownerUserId} ORDER BY updated_at DESC LIMIT 1`;
+  const accounts = await sql`SELECT * FROM journal_accounts WHERE owner_user_id=${ownerUserId} ORDER BY account_key`;
   if (!accounts.length) return { connected: false };
-  const account = accounts[0];
+  const account = selectedAccountKey ? accounts.find(row => row.account_key === selectedAccountKey) : accounts[0];
+  if (!account) throw new Error('account_not_found');
+  const accountList = accounts.map(row => ({ id: String(row.account_key), provider: String(row.provider), server: String(row.broker_server), loginMasked: String(row.login_masked), mode: row.trade_mode === 2 ? 'live' : row.trade_mode === 0 ? 'demo' : 'other' }));
   const rows = await sql`SELECT * FROM journal_deals WHERE account_key=${account.account_key} AND owner_user_id=${ownerUserId}
     ORDER BY time_msc DESC LIMIT 500`;
 
@@ -190,6 +192,8 @@ export async function readJournal(ownerUserId: string) {
   const losses = closedTrades - winners;
   return {
     connected: true,
+    accounts: accountList,
+    selectedAccountId: String(account.account_key),
     mode: account.trade_mode === 2 ? 'live' : account.trade_mode === 0 ? 'demo' : account.trade_mode === 1 ? 'contest' : 'unknown',
     account: {
       provider: account.provider,

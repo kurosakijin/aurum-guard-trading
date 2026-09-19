@@ -25,7 +25,7 @@ export default {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'invalid_payload';
       const status = message === 'invalid_bridge_token' ? 401 :
-        ['personal_bridge_token_required','training_account_demo_only'].includes(message) ? 403 :
+        ['personal_bridge_token_required','training_account_demo_only','pairing_rejected'].includes(message) ? 403 :
         ['pairing_approval_required','account_binding_mismatch','account_already_linked'].includes(message) ? 409 :
         message === 'journal_storage_unavailable' ? 503 : 400;
       return Response.json({ error: message }, { status });

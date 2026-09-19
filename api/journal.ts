@@ -7,12 +7,12 @@ export default {
     const userId = await authenticatedUserId(request);
     if (!userId) return Response.json({ error: 'authentication_required' }, { status: 401 });
     try {
-      return Response.json(await readJournal(userId), {
+      return Response.json(await readJournal(userId, new URL(request.url).searchParams.get('accountId')), {
         headers: { 'Cache-Control': 'no-store, max-age=0', 'CDN-Cache-Control': 'no-store' },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'journal_unavailable';
-      return Response.json({ connected: false, error: message }, { status: 503 });
+      return Response.json({ connected: false, error: message }, { status: message === 'account_not_found' ? 404 : 503 });
     }
   },
 };

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChangePassword } from '@/components/change-password';
+import { AuthLoading } from '@/components/auth-loading';
+import { authView, type ResolvedAuthView } from '@/lib/auth-view';
 import { AdvisorDownloads } from '@/components/advisor-downloads';
 import { SignalJournal } from '@/components/signal-journal';
 import { deliveryPineScript } from '@/lib/delivery-pine';
@@ -67,10 +69,13 @@ const liveMarkets = [
 ] as const;
 
 type JournalTrade = { closed: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; entryPrice: number; exitPrice: number; costs: number; net: number };
-type BridgeAccount = { provider: string; server: string; loginMasked: string };
+type BridgeAccount = { id: string; provider: string; server: string; loginMasked: string; login?: string };
+type JournalAccountOption = { id: string; provider: string; server: string; loginMasked: string; mode: string };
 type BridgeBindingStatus = 'unpaired' | 'pending' | 'linked';
 type JournalData = {
   connected: boolean;
+  accounts?: JournalAccountOption[];
+  selectedAccountId?: string;
   mode: 'demo' | 'live' | 'contest' | 'unknown';
   account: { provider: string; brokerServer: string; loginMasked: string; company: string; currency: string; balance: number; equity: number; freeMargin: number; floatingProfit: number; updatedAt: string };
   summary: { net: number; grossProfit: number; grossLoss: number; closedTrades: number; winRate: number; profitFactor: number; averageWin: number; averageLoss: number };
@@ -2551,6 +2556,11 @@ if barstate.islast
 
 export default function Home() {
   const { getToken, isLoaded: authLoaded, isSignedIn } = useAuth();
+  const previousAuth = useRef<ResolvedAuthView>(null);
+  const currentAuthView = authView(authLoaded, isSignedIn, previousAuth.current);
+  useEffect(() => {
+    if (authLoaded) previousAuth.current = isSignedIn ? 'signed-in' : 'signed-out';
+  }, [authLoaded, isSignedIn]);
   const { user } = useUser();
   const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
   const workspaceScrollRef = useRef<HTMLDivElement>(null);
@@ -2569,6 +2579,11 @@ export default function Home() {
   const [volumeScriptCopied, setVolumeScriptCopied] = useState(false);
   const [demoJournalEnabled, setDemoJournalEnabled] = useState(false);
   const [journalData, setJournalData] = useState<JournalData>(emptyJournal);
+  const [selectedJournalAccount, setSelectedJournalAccount] = useState('');
+  const [journalAccounts, setJournalAccounts] = useState<JournalAccountOption[]>([]);
+  const [journalSwitchLoading, setJournalSwitchLoading] = useState(false);
+  const [journalLoadError, setJournalLoadError] = useState('');
+  const [pendingBridgeAccounts, setPendingBridgeAccounts] = useState<BridgeAccount[]>([]);
   const [journalOwnerId, setJournalOwnerId] = useState('');
   const [journalFeedOnline, setJournalFeedOnline] = useState(false);
   const [bridgeTokenHasToken, setBridgeTokenHasToken] = useState(false);
@@ -2623,6 +2638,11 @@ export default function Home() {
   useEffect(() => {
     setBridgeTokenReveal('');
     setBridgeTokenRevealOwner('');
+    setSelectedJournalAccount('');
+    setJournalAccounts([]);
+    setPendingBridgeAccounts([]);
+    setJournalData(emptyJournal);
+    setDemoJournalEnabled(false);
   }, [user?.id]);
 
   useEffect(() => {
@@ -2648,7 +2668,7 @@ export default function Home() {
       }
       try {
         const token = await getToken();
-        const response = await fetch('/api/journal', {
+        const response = await fetch(`/api/journal${selectedJournalAccount ? `?accountId=${encodeURIComponent(selectedJournalAccount)}` : ''}`, {
           cache: 'no-store',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -2662,18 +2682,26 @@ export default function Home() {
             && heartbeatAge >= -30_000
             && heartbeatAge <= BRIDGE_HEARTBEAT_TIMEOUT_MS;
           setJournalData(next.connected ? next : emptyJournal);
+          setJournalAccounts(next.accounts ?? []);
+          if (!selectedJournalAccount && next.selectedAccountId) setSelectedJournalAccount(next.selectedAccountId);
           setJournalOwnerId(user.id);
           setJournalFeedOnline(heartbeatFresh);
           setDemoJournalEnabled(Boolean(next.connected));
+          setJournalSwitchLoading(false);
+          setJournalLoadError('');
         }
       } catch {
-        if (active) setJournalFeedOnline(false);
+        if (active) {
+          setJournalFeedOnline(false);
+          setJournalSwitchLoading(false);
+          setJournalLoadError('Could not load the selected journal. Retrying automatically…');
+        }
       }
     };
     void refreshJournal();
     const timer = window.setInterval(refreshJournal, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [getToken, isSignedIn, user?.id]);
+  }, [getToken, isSignedIn, user?.id, selectedJournalAccount]);
 
   useEffect(() => {
     let active = true;
@@ -2693,12 +2721,13 @@ export default function Home() {
         const token = await getToken();
         const response = await fetch('/api/bridge-token', { cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : {} });
         if (!response.ok) return;
-        const status = await response.json() as { hasToken: boolean; lastFour?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string };
+        const status = await response.json() as { hasToken: boolean; lastFour?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string; pendingAccounts?: BridgeAccount[] };
         if (active) {
           setBridgeTokenHasToken(status.hasToken);
           setBridgeTokenLastFour(status.lastFour ?? '');
           setBridgeBindingStatus(status.bindingStatus ?? 'unpaired');
           setBridgeAccount(status.account ?? null);
+          setPendingBridgeAccounts(status.pendingAccounts ?? []);
           setBridgeSyncCode(status.syncCode ?? '');
         }
       } catch {
@@ -2732,7 +2761,7 @@ export default function Home() {
     }
   }
 
-  async function updateBridgePairing(action: 'approve' | 'reject') {
+  async function updateBridgePairing(action: 'approve' | 'reject', accountId: string) {
     if (!isSignedIn || bridgeTokenBusy) return;
     setBridgeTokenBusy(true);
     setBridgeTokenError('');
@@ -2741,12 +2770,13 @@ export default function Home() {
       const response = await fetch('/api/bridge-token', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, accountId }),
       });
-      const result = await response.json() as { error?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string; token?: string; lastFour?: string };
+      const result = await response.json() as { error?: string; bindingStatus?: BridgeBindingStatus; account?: BridgeAccount; syncCode?: string; token?: string; lastFour?: string; pendingAccounts?: BridgeAccount[] };
       if (!response.ok) throw new Error(result.error ?? 'pairing unavailable');
       setBridgeBindingStatus(result.bindingStatus ?? 'unpaired');
       setBridgeAccount(result.account ?? null);
+      setPendingBridgeAccounts(result.pendingAccounts ?? []);
       setBridgeSyncCode(result.syncCode ?? '');
       if (result.token) {
         setBridgeTokenReveal(result.token);
@@ -2786,6 +2816,11 @@ export default function Home() {
       });
       const result = await response.json() as { token?: string; lastFour?: string; error?: string };
       if (!response.ok || !result.token) throw new Error(result.error ?? 'reset unavailable');
+      setSelectedJournalAccount('');
+      setJournalAccounts([]);
+      setPendingBridgeAccounts([]);
+      setJournalSwitchLoading(false);
+      setJournalLoadError('');
       setJournalData(emptyJournal);
       setJournalFeedOnline(false);
       setDemoJournalEnabled(false);
@@ -3081,20 +3116,12 @@ export default function Home() {
     </Dialog>
   );
 
-  if (!authLoaded) {
-    return (
-      <main className={`grid min-h-dvh place-items-center ${darkMode ? 'bg-[#070b14]' : 'bg-[#f7f6fb]'}`}>
-        <div role="status" aria-live="polite">
-          <span aria-hidden="true" className={`block size-9 animate-spin rounded-full border-[3px] motion-reduce:animate-none ${darkMode ? 'border-slate-700 border-t-violet-400' : 'border-violet-100 border-t-violet-600'}`} />
-          <span className="sr-only">Loading…</span>
-        </div>
-      </main>
-    );
-  }
+  if (currentAuthView === 'loading') return <AuthLoading darkMode={darkMode} />;
 
-  if (!isSignedIn) {
+  if (currentAuthView === 'login') {
     return (
       <main className="login-shell min-h-dvh bg-white text-slate-950">
+        {!authLoaded && <div className="fixed inset-0 z-[100]" aria-label="Completing sign-in"><AuthLoading darkMode={darkMode} /></div>}
         {registrationDialog}
         <div className="grid min-h-dvh place-items-center px-5 py-10">
           <section className="w-full max-w-[430px]" aria-labelledby="login-heading">
@@ -3112,7 +3139,7 @@ export default function Home() {
                   withSignUp={false}
                   fallbackRedirectUrl="/#desk"
                   appearance={{
-                    variables: { colorPrimary: '#6d28d9', colorBackground: '#ffffff', colorInputBackground: '#ffffff', colorInputText: '#0f172a', colorText: '#0f172a', colorTextSecondary: '#475569', borderRadius: '0.75rem' },
+                    variables: { colorPrimary: '#6d28d9', colorBackground: '#ffffff', borderRadius: '0.75rem' },
                     elements: { rootBox: 'w-full', cardBox: 'w-full shadow-none', card: 'w-full shadow-none border-0 p-0', headerTitle: 'hidden', headerSubtitle: 'hidden', footer: 'hidden', footerAction: 'hidden', formFieldLabel: 'text-slate-700', formFieldInput: 'border-slate-300 bg-white text-slate-950', formButtonPrimary: 'bg-violet-700 text-white hover:bg-violet-600' },
                   }}
                 />
@@ -3299,18 +3326,18 @@ export default function Home() {
                 <Button variant="outline" size="sm" className="mt-3 h-8 border-cyan-300/20 bg-cyan-300/[.05] text-[10px] text-cyan-100" onClick={copyUserBridgeToken}><Clipboard className="size-3.5" /> {bridgeTokenCopied ? 'Copied' : 'Copy key'}</Button>
               </div>
             )}
-            {bridgeBindingStatus === 'pending' && bridgeAccount && (
-              <div className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/[.06] p-3">
+            {pendingBridgeAccounts.map((pendingAccount) => (
+              <div key={pendingAccount.id} className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/[.06] p-3">
                 <p className="flex items-center gap-2 text-[10px] font-semibold text-amber-200"><TriangleAlert className="size-3.5" /> Confirm detected MT5 account</p>
-                <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
-                <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
-                <p className="mt-2 text-[9px] leading-4 text-muted-foreground">The running advisor requested this pairing. No trades are accepted until you approve it.</p>
+                <p className="mt-2 text-[10px] text-sky-100">{pendingAccount.provider} · {pendingAccount.server}</p>
+                <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">Login {pendingAccount.login ?? pendingAccount.loginMasked}</p>
+                <p className="mt-2 text-[9px] leading-4 text-muted-foreground">Add this account to your journal? Its history stays separate. No journal data is imported until you approve. This does not authorize trading.</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Button size="sm" className="h-8 bg-emerald-300 text-[10px] text-[#03121f] hover:bg-emerald-200" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('approve')}><Check className="size-3.5" /> Approve</Button>
-                  <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('reject')}>Reject &amp; revoke</Button>
+                  <Button size="sm" className="h-8 bg-emerald-300 text-[10px] text-[#03121f] hover:bg-emerald-200" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('approve', pendingAccount.id)}><Check className="size-3.5" /> Accept account</Button>
+                  <Button variant="outline" size="sm" className="h-8 border-white/10 bg-white/[.025] text-[10px]" disabled={bridgeTokenBusy} onClick={() => updateBridgePairing('reject', pendingAccount.id)}>Reject account</Button>
                 </div>
               </div>
-            )}
+            ))}
             {bridgeBindingStatus === 'linked' && bridgeAccount && (
               <div className={`mt-3 rounded-lg border p-3 ${bridgeHeartbeatOnline ? 'border-emerald-300/20 bg-emerald-300/[.05]' : 'border-red-300/20 bg-red-300/[.045]'}`}>
                 <div className="flex items-center justify-between gap-2">
@@ -3320,13 +3347,13 @@ export default function Home() {
                   </p>
                   <div className="flex items-center gap-1.5">
                     <Badge variant="outline" className={bridgeHeartbeatOnline ? 'border-emerald-300/20 text-[9px] text-emerald-200' : 'border-red-300/20 text-[9px] text-red-200'}>{bridgeHeartbeatOnline ? 'MT5 RUNNING' : 'NO HEARTBEAT'}</Badge>
-                    {bridgeSyncCode && <Badge variant="outline" className="border-cyan-300/20 font-mono text-[9px] text-cyan-200">{bridgeSyncCode}</Badge>}
+                    {bridgeSyncCode && journalAccounts.length <= 1 && <Badge variant="outline" className="border-cyan-300/20 font-mono text-[9px] text-cyan-200">{bridgeSyncCode}</Badge>}
                   </div>
                 </div>
-                <p className="mt-2 text-[10px] text-sky-100">{bridgeAccount.provider} · {bridgeAccount.server}</p>
-                <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {bridgeAccount.loginMasked}</p>
+                <p className="mt-2 text-[10px] text-sky-100">{currentJournalEnabled ? `${journalData.account.provider} · ${journalData.account.brokerServer}` : `${bridgeAccount.provider} · ${bridgeAccount.server}`}</p>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">Login {currentJournalEnabled ? journalData.account.loginMasked : bridgeAccount.loginMasked}</p>
                 <p className="mt-2 text-[9px] leading-4 text-muted-foreground">{bridgeHeartbeatOnline ? 'Recent snapshots are arriving from the paired terminal.' : 'No recent snapshot. MT5 may be closed, disconnected, or its WebRequest may be blocked.'}{bridgeLastSeen ? ` Last seen ${bridgeLastSeen}.` : ''}</p>
-                <p className="mt-1 text-[9px] leading-4 text-muted-foreground">Only this exact provider, server, and MT5 login can write to the journal.</p>
+                <p className="mt-1 text-[9px] leading-4 text-muted-foreground">Only accounts you explicitly approve can sync. Each account keeps a separate journal.</p>
               </div>
             )}
             {bridgeTokenHasToken && bridgeBindingStatus === 'unpaired' && <p className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[.04] p-3 text-[9px] leading-4 text-muted-foreground">Waiting for MT5 detection. The account is checked every five seconds.</p>}
@@ -3504,6 +3531,27 @@ export default function Home() {
         </div>
 
         <section id="trade-journal" className={workspacePanel === 'journal' ? 'space-y-4' : 'hidden'} aria-labelledby="trade-journal-heading">
+          {isSignedIn && pendingBridgeAccounts.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 text-card-foreground" role="status">
+            <p>{pendingBridgeAccounts.length} detected account{pendingBridgeAccounts.length === 1 ? '' : 's'} awaiting your confirmation.</p>
+            <Button variant="outline" onClick={() => setAccountDialogOpen(true)}>Review accounts</Button>
+          </div>}
+          {isSignedIn && journalAccounts.length > 1 && <div className="rounded-xl border border-border bg-card p-4 text-card-foreground">
+            <label htmlFor="journal-account" className="mb-2 block text-sm font-medium">Broker accounts ({journalAccounts.length})</label>
+            <select id="journal-account" className="w-full min-w-0 rounded-lg border border-border bg-background p-3 text-sm text-foreground" value={selectedJournalAccount} onChange={event => {
+              setSelectedJournalAccount(event.target.value);
+              setJournalSwitchLoading(true);
+              setJournalLoadError('');
+              setJournalData(emptyJournal);
+              setDemoJournalEnabled(false);
+              setJournalFeedOnline(false);
+              setJournalPage(1);
+            }}>
+              {journalAccounts.map(account => <option key={account.id} value={account.id}>{account.provider} · {account.server} · {account.loginMasked} · {account.mode} · {account.id.slice(-6)}</option>)}
+            </select>
+            <p className="mt-2 text-xs text-muted-foreground">Balance, performance and history belong only to the selected account.</p>
+          </div>}
+          {isSignedIn && journalSwitchLoading && <p role="status" className="text-sm text-muted-foreground">Loading selected account…</p>}
+          {isSignedIn && journalLoadError && <p role="alert" className="text-sm text-destructive">{journalLoadError}</p>}
           {authLoaded && !isSignedIn && (
             <Card className="mx-auto mt-8 max-w-xl border-cyan-300/20 bg-[linear-gradient(145deg,rgba(34,211,238,.07),rgba(5,18,32,.92))]">
               <CardContent className="px-6 py-10 text-center sm:px-10">
@@ -3519,7 +3567,7 @@ export default function Home() {
             </Card>
           )}
           {!authLoaded && <div className="grid min-h-64 place-items-center text-sm text-muted-foreground">Loading secure account…</div>}
-          {authLoaded && isSignedIn && !currentJournalEnabled && (
+          {authLoaded && isSignedIn && !currentJournalEnabled && !journalSwitchLoading && !journalLoadError && (
             <Card className="mx-auto mt-8 max-w-xl">
               <CardContent className="px-6 py-10 text-center">
                 <PlugZap className="mx-auto size-9 text-primary" />

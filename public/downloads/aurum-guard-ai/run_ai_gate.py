@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import os
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from aurum_guard_ai_core import AurumProbabilityModel, FEATURE_COLUMNS, build_feature_frame, candidate_direction
+from forward_diagnostics import append_diagnostics
 
 
 def parse_args() -> argparse.Namespace:
@@ -128,6 +130,7 @@ def main() -> int:
         raise SystemExit("Install requirements-ai.txt before running the gate") from exc
 
     model = AurumProbabilityModel.load(args.model)
+    model_sha256 = hashlib.sha256(args.model.read_bytes()).hexdigest()
     if not mt5.initialize(path=args.terminal):
         raise SystemExit(f"MT5 connection failed: {mt5.last_error()}")
     terminal = mt5.terminal_info()
@@ -155,6 +158,8 @@ def main() -> int:
                     plan_direction, plan_detail = four_timeframe_plan(mt5, args.gold)
                     m1_direction = int(candidate_direction(latest.to_frame().T).iloc[0])
                     raw_direction, long_probability, short_probability, no_trade_probability, health_code, drift_share = model.decide_frame_row(latest)
+                    model_direction = raw_direction
+                    model_health_code = health_code
                     if plan_direction == 0:
                         raw_direction = 0
                         health_code = "HTF_NOT_ALIGNED"
@@ -178,7 +183,6 @@ def main() -> int:
                         or args.max_equity_drawdown_percent <= 0.0
                         or equity_drawdown_percent >= args.max_equity_drawdown_percent
                     )
-                    model_health_code = health_code
                     if equity_guard:
                         health_code = "EQUITY_GUARD"
                     deployment_eligible = bool(model.metadata.get("deployment_eligible", False))
@@ -221,6 +225,24 @@ def main() -> int:
                             f"{no_trade_probability:.6f}", f"{drift_share:.6f}",
                             f"{balance:.2f}", f"{equity:.2f}", f"{equity_drawdown_percent:.4f}",
                         ])
+                        try:
+                            append_diagnostics(history_path, {
+                                "schema_version": 2, "generated_at": generated_at,
+                                "bar_time": bar_time, "model_id": model.model_id,
+                                "model_sha256": model_sha256, "symbol": args.gold,
+                                "silver_symbol": args.silver, "timeframe": "M1",
+                                "model_direction": model_direction, "model_health": model_health_code,
+                                "plan_direction": plan_direction, "m1_direction": m1_direction,
+                                "plan_detail": plan_detail, "filtered_direction": raw_direction,
+                                "effective_health": health_code, "equity_guard": int(equity_guard),
+                                "deployment_eligible": int(deployment_eligible),
+                                "published_direction": direction,
+                                "buy_probability": long_probability, "sell_probability": short_probability,
+                                "wait_probability": no_trade_probability, "threshold": model.threshold,
+                            })
+                        except Exception as diagnostic_error:
+                            # Diagnostics must not change or retry a published decision.
+                            print(f"AI diagnostic log unavailable: {diagnostic_error}")
                     label = raw_label if deployment_eligible else f"SHADOW {raw_label} (MODEL NOT PROMOTED)"
                     print(
                         f"{pd.to_datetime(bar_time, unit='s', utc=True)} | {label} | health={health_code} drift={drift_share:.1%} | "
