@@ -613,7 +613,7 @@ function FibonacciChartGuide() {
 }
 
 const pineScript = String.raw`//@version=6
-strategy("Asheparte AI Combined v59: Trend + Reversal", overlay = true, pyramiding = 0,
+strategy("Asheparte AI Combined v60: Trend + Reversal", overlay = true, pyramiding = 0,
      initial_capital = 10000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 0.5,
@@ -638,7 +638,7 @@ rewardRisk = input.float(2.14, "Final TP3 reward / risk", minval = 1.5, maxval =
 
 fastLength = input.int(20, "Fast EMA", minval = 2, group = "Confirmed trend engine")
 slowLength = input.int(50, "Slow EMA", minval = 3, group = "Confirmed trend engine")
-trendAtrMultiple = input.float(1.5, "ATR stop multiple", minval = 0.5, step = 0.1, group = "Confirmed trend engine")
+trendAtrMultiple = input.float(1.5, "Maximum structural stop distance (ATR)", minval = 0.5, step = 0.1, group = "Confirmed trend engine")
 slopeBars = input.int(3, "EMA slope lookback", minval = 1, group = "Confirmed trend engine")
 cooldownBars = input.int(10, "Bars between trend setups", minval = 1, group = "Confirmed trend engine")
 useDefendedTrendEntry = input.bool(true, "Require pullback + defended reclaim", group = "Confirmed trend engine")
@@ -1155,6 +1155,13 @@ if cycleLongMove or cycleShortMove
 cycleRetestTouched = cycleStage == 3 and bar_index > cycleMoveBar and low[1] <= cyclePOC + atrValue[1] * cyclePOCToleranceATR and high[1] >= cyclePOC - atrValue[1] * cyclePOCToleranceATR
 cycleLongEntry = cycleRetestTouched and cycleDirection == 1 and close > high[1] and close > cyclePOC and close > fastEMA and close > slowEMA and fastEMA > slowEMA and slowSlopeUp and higherTrendUp and signalBodyShare >= trendMinimumBodyShare and rsiValue >= 52 and rsiValue <= 66 and metalSyncLongOK and not fifteenMinuteRiskDetected and not shockPauseActive
 cycleShortEntry = cycleRetestTouched and cycleDirection == -1 and close < low[1] and close < cyclePOC and close < fastEMA and close < slowEMA and fastEMA < slowEMA and slowSlopeDown and higherTrendDown and signalBodyShare >= trendMinimumBodyShare and rsiValue <= 48 and rsiValue >= 34 and metalSyncShortOK and not fifteenMinuteRiskDetected and not shockPauseActive
+// Preserve invalidation. Skip oversized structural risk instead of moving SL inside it.
+trendLongStopCandidate = oneHourPrecisionActive ? low - atrValue * precisionStopBufferATR : recentStructureLow - syminfo.mintick * 2
+trendShortStopCandidate = oneHourPrecisionActive ? high + atrValue * precisionStopBufferATR : recentStructureHigh + syminfo.mintick * 2
+trendLongStopValid = not na(trendLongStopCandidate) and close - trendLongStopCandidate > syminfo.mintick and (oneHourPrecisionActive or close - trendLongStopCandidate <= atrValue * trendAtrMultiple)
+trendShortStopValid = not na(trendShortStopCandidate) and trendShortStopCandidate - close > syminfo.mintick and (oneHourPrecisionActive or trendShortStopCandidate - close <= atrValue * trendAtrMultiple)
+trendLongSetup := trendLongSetup and trendLongStopValid
+trendShortSetup := trendShortSetup and trendShortStopValid
 cycleLongEntryConfirmed = cycleLongEntry and trendLongSetup
 cycleShortEntryConfirmed = cycleShortEntry and trendShortSetup
 if cycleLongEntryConfirmed or cycleShortEntryConfirmed
@@ -1180,8 +1187,8 @@ trendShortSetup := trendShortSetup and (not cycleTimeframe or cycleShortEntryCon
 // Lower-timeframe room check. The projected structural/ATR stop is compared
 // with the next confirmed pivot liquidity level. If 1.5R is not available, the
 // old BUY/SELL is replaced by WAIT · NO ROOM.
-lowerTFLongStopEstimate = math.max(recentStructureLow - syminfo.mintick * 2, close - atrValue * trendAtrMultiple)
-lowerTFShortStopEstimate = math.min(recentStructureHigh + syminfo.mintick * 2, close + atrValue * trendAtrMultiple)
+lowerTFLongStopEstimate = trendLongStopCandidate
+lowerTFShortStopEstimate = trendShortStopCandidate
 lowerTFLongRiskEstimate = math.max(close - lowerTFLongStopEstimate, syminfo.mintick)
 lowerTFShortRiskEstimate = math.max(lowerTFShortStopEstimate - close, syminfo.mintick)
 lowerTFLongRoomToLiquidity = not na(priorSwingHigh) ? priorSwingHigh - close : na
@@ -1410,9 +1417,7 @@ if trendLongSetup
     pendingShortEntry := na
     pendingShortStop := na
     pendingShortBar := na
-    trendLongStructureStop = recentStructureLow - syminfo.mintick * 2
-    trendLongAtrStop = close - atrValue * trendAtrMultiple
-    trendStopPrice := oneHourPrecisionActive ? low - atrValue * precisionStopBufferATR : math.max(trendLongStructureStop, trendLongAtrStop)
+    trendStopPrice := trendLongStopCandidate
     trendLongRisk = close - trendStopPrice
     trendTargetPrice := close + trendLongRisk * rewardRisk
     plannedEntry := close
@@ -1449,9 +1454,7 @@ if trendShortSetup
     pendingShortEntry := na
     pendingShortStop := na
     pendingShortBar := na
-    trendShortStructureStop = recentStructureHigh + syminfo.mintick * 2
-    trendShortAtrStop = close + atrValue * trendAtrMultiple
-    trendStopPrice := oneHourPrecisionActive ? high + atrValue * precisionStopBufferATR : math.min(trendShortStructureStop, trendShortAtrStop)
+    trendStopPrice := trendShortStopCandidate
     trendShortRisk = trendStopPrice - close
     trendTargetPrice := close - trendShortRisk * rewardRisk
     plannedEntry := close
@@ -1710,27 +1713,29 @@ if fiveMinuteProtectionExit
     if showPriorityMarks
         label.new(bar_index, fiveMinuteLongProtectionExit ? high : low, "5M REVERSAL\nCLOSE REMAINDER", style = fiveMinuteLongProtectionExit ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 4), textcolor = color.black, size = size.small)
 
-longTP1Approached = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size > 0 and not tp1Reached and not longTP1Hit and high >= plannedEntry + activePlanRisk * tp1ApproachPercent
-shortTP1Approached = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size < 0 and not tp1Reached and not shortTP1Hit and low <= plannedEntry - activePlanRisk * tp1ApproachPercent
+longTP1Approached = validActivePlan and decisionBarReady and strategy.position_size > 0 and not tp1Reached and not longTP1Hit and high >= plannedEntry + activePlanRisk * tp1ApproachPercent
+shortTP1Approached = validActivePlan and decisionBarReady and strategy.position_size < 0 and not tp1Reached and not shortTP1Hit and low <= plannedEntry - activePlanRisk * tp1ApproachPercent
 if longTP1Approached or shortTP1Approached
     tp1ApproachArmed := true
 
-longTP1FailureWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size > 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not longTP1Hit and close <= plannedEntry + activePlanRisk * tp1GivebackPercent and close < open and close < close[1] and (close < fastEMA or rsiValue < 50)
-shortTP1FailureWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size < 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not shortTP1Hit and close >= plannedEntry - activePlanRisk * tp1GivebackPercent and close > open and close > close[1] and (close > fastEMA or rsiValue > 50)
+longTP1FailureWarning = validActivePlan and decisionBarReady and strategy.position_size > 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not longTP1Hit and close <= plannedEntry + activePlanRisk * tp1GivebackPercent and close < open and close < close[1] and (close < fastEMA or rsiValue < 50)
+shortTP1FailureWarning = validActivePlan and decisionBarReady and strategy.position_size < 0 and tp1ApproachArmed and not tp1Reached and not tp1FailureWarned and not shortTP1Hit and close >= plannedEntry - activePlanRisk * tp1GivebackPercent and close > open and close > close[1] and (close > fastEMA or rsiValue > 50)
 tp1FailureWarning = longTP1FailureWarning or shortTP1FailureWarning
 
 if tp1FailureWarning
     tp1FailureWarned := true
     tp1ApproachArmed := false
-    label.new(bar_index, longTP1FailureWarning ? high : low, oneMinuteRecoveryActive ? "TP1 FAILED · FLIP WATCH\nWAIT FOR OPPOSITE CLOSE" : "TP1 FAILED · POSSIBLE REVERSE\nMOMENTUM BACK TOWARD SL", style = longTP1FailureWarning ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 4), textcolor = color.black, size = size.small)
+    if showTradeHealth
+        label.new(bar_index, longTP1FailureWarning ? high : low, oneMinuteRecoveryActive ? "TP1 FAILED · FLIP WATCH\nWAIT FOR OPPOSITE CLOSE" : "TP1 FAILED · POSSIBLE REVERSE\nMOMENTUM BACK TOWARD SL", style = longTP1FailureWarning ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 4), textcolor = color.black, size = size.small)
 
-longHalfToSLWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size > 0 and not halfStopWarned and low <= plannedEntry - activePlanRisk * halfStopPercent and low > plannedStop
-shortHalfToSLWarning = showTradeHealth and validActivePlan and decisionBarReady and strategy.position_size < 0 and not halfStopWarned and high >= plannedEntry + activePlanRisk * halfStopPercent and high < plannedStop
+longHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size > 0 and not halfStopWarned and low <= plannedEntry - activePlanRisk * halfStopPercent and low > plannedStop
+shortHalfToSLWarning = validActivePlan and decisionBarReady and strategy.position_size < 0 and not halfStopWarned and high >= plannedEntry + activePlanRisk * halfStopPercent and high < plannedStop
 halfToSLWarning = longHalfToSLWarning or shortHalfToSLWarning
 
 if halfToSLWarning
     halfStopWarned := true
-    label.new(bar_index, longHalfToSLWarning ? low : high, oneMinuteRecoveryActive ? "½ TO SL · FLIP WATCH\nWAIT FOR OPPOSITE CLOSE" : "½ TO SL\nRISK DISTANCE CONSUMED", style = longHalfToSLWarning ? label.style_label_up : label.style_label_down, color = color.new(color.red, 4), textcolor = color.white, size = size.small)
+    if showTradeHealth
+        label.new(bar_index, longHalfToSLWarning ? low : high, oneMinuteRecoveryActive ? "½ TO SL · FLIP WATCH\nWAIT FOR OPPOSITE CLOSE" : "½ TO SL\nRISK DISTANCE CONSUMED", style = longHalfToSLWarning ? label.style_label_up : label.style_label_down, color = color.new(color.red, 4), textcolor = color.white, size = size.small)
 
 // On the 1-minute chart, half-to-SL or a failed TP1 only arms the recovery
 // logic. The active trade is closed only after a completed candle confirms an
@@ -1751,12 +1756,6 @@ if oneMinuteFlipLongConfirmed
     strategy.close_all(comment = "1M FAIL FLIP")
     if showPriorityMarks
         label.new(bar_index, low, "EXIT SELL\nBUY FLIP SCAN", style = label.style_label_up, color = color.new(color.lime, 4), textcolor = color.black, size = size.small)
-
-if not showTradeHealth
-    tp1ApproachArmed := false
-    tp1Reached := false
-    tp1FailureWarned := false
-    halfStopWarned := false
 
 positionJustClosed = strategy.position_size == 0 and strategy.position_size[1] != 0
 if positionJustClosed
@@ -4442,7 +4441,7 @@ export default function Home() {
 
           <Card className={pineScriptView === 'combined' ? 'overflow-hidden border-primary/15 bg-card/92 shadow-[0_24px_90px_rgba(0,0,0,.22)]' : 'hidden'}>
             <CardHeader className="border-b border-white/7 pb-4">
-              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v59</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-4 text-primary" /> Combined Trend + Reversal Strategy · Pine v6 · Build v60</CardTitle>
               <CardDescription>One free-plan script slot · M15/H1 four-stage POC cycle + Gold/Silver sync + three take-profit levels + strategy-compatible alerts</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" className="border-white/10 bg-white/[.03]" onClick={copyStrategy}>
@@ -4474,7 +4473,7 @@ export default function Home() {
 
               <div className="mb-4 rounded-xl border border-orange-300/20 bg-orange-300/[.045] p-4 text-[10px] leading-5 text-muted-foreground">
                 <p className="font-semibold text-orange-100">Important: TradingView does not automatically sync website updates.</p>
-                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Asheparte AI Combined v59</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
+                <p className="mt-1">Click <span className="font-semibold text-foreground">Copy combined script</span>, open Pine Editor, select all of the old code, paste the new copy, save it, then remove and re-add the strategy to the chart. The chart title must say <span className="font-semibold text-orange-100">Asheparte AI Combined v60</span>. The four-stage boxes appear only when the chart is set to 15m or 1H—not on 1m.</p>
               </div>
 
               <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/[.04] p-4">
@@ -4498,7 +4497,8 @@ export default function Home() {
               <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[.045] p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="max-w-2xl">
-                    <p className="text-xs font-semibold text-cyan-100">v59 · timeframe-specific Fibonacci maps</p>
+                    <p className="text-xs font-semibold text-cyan-100">v60 · protection and structural-stop corrections</p>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">Health-warning visibility no longer changes trade protection. Trend setups retain structural stops and are skipped if the required distance exceeds the existing ATR limit; 1H rejection-candle stops keep their original logic. Sizing, commission and targets are unchanged. Compare against v59 on the same test period—improved performance has not been established.</p>
                     <p className="mt-1 text-[10px] leading-4 text-muted-foreground">On 30m and 1H, Fibonacci uses the previous completed session’s full swing. On 1m through 15m, a separate eight-bar confirmed-pivot scanner follows local structure. The map stays off outside those ranges so an unsuitable timeframe cannot display misleading anchors.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.06em]">
@@ -4669,7 +4669,7 @@ export default function Home() {
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[.07em]">
                     <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Pine v6</Badge>
-                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v59</Badge>
+                    <Badge variant="outline" className="border-sky-300/20 text-sky-200">Build v60</Badge>
                     <Badge variant="outline" className="border-emerald-300/20 text-emerald-200">Paper strategy</Badge>
                   </div>
                 </div>
@@ -4688,7 +4688,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="max-w-3xl">
                     <p className="text-xs font-semibold text-yellow-100">Compact volume profile by default</p>
-                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v59 calculates the Volume Profile from the previous completed session only on 30m and 1H. Its translucent rows, POC, VAH and VAL stay inside that historical session instead of extending into future space or covering current candles.</p>
+                    <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Build v60 calculates the Volume Profile from the previous completed session only on 30m and 1H. Its translucent rows, POC, VAH and VAL stay inside that historical session instead of extending into future space or covering current candles.</p>
                   </div>
                   <Badge className="w-fit border border-yellow-300/25 bg-yellow-300/10 text-yellow-200">POC + VAH + VAL</Badge>
                 </div>
