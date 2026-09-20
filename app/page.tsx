@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChangePassword } from '@/components/change-password';
+import { ConfluencePine } from '@/components/confluence-pine';
 import { AuthLoading } from '@/components/auth-loading';
 import { JournalAccountSelect, type JournalAccountOption } from '@/components/journal-account-select';
 import { authView, type ResolvedAuthView } from '@/lib/auth-view';
@@ -2616,7 +2617,7 @@ export default function Home() {
   const [journalPage, setJournalPage] = useState(1);
   const [journalCalendarMode, setJournalCalendarMode] = useState<'month' | 'year'>('month');
   const [journalCalendarCursor, setJournalCalendarCursor] = useState({ year: 2026, month: 8 });
-  const [pineScriptView, setPineScriptView] = useState<'delivery' | 'structure' | 'volume' | 'combined'>('delivery');
+  const [pineScriptView, setPineScriptView] = useState<'confluence' | 'delivery' | 'structure' | 'volume' | 'combined'>('confluence');
   const [deliveryCopyStatus, setDeliveryCopyStatus] = useState('');
   const [liveMarket, setLiveMarket] = useState<LiveMarketKey>('gold');
   const [timeframe, setTimeframe] = useState('60');
@@ -4347,7 +4348,8 @@ export default function Home() {
           </div>
 
           <div id="pine-script" className="min-w-0">
-            <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl border border-border bg-card p-1 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl border border-border bg-card p-1 sm:grid-cols-2 xl:grid-cols-5">
+              <Button type="button" variant="ghost" className={pineScriptView === 'confluence' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-muted-foreground'} onClick={() => setPineScriptView('confluence')}><Code2 /> Confluence v1</Button>
               <Button type="button" variant="ghost" className={pineScriptView === 'delivery' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-muted-foreground'} onClick={() => setPineScriptView('delivery')}><CandlestickChart /> Engulfing + CISD</Button>
               <Button
                 type="button"
@@ -4375,6 +4377,7 @@ export default function Home() {
               </Button>
             </div>
 
+          {pineScriptView === 'confluence' && <ConfluencePine />}
           {pineScriptView === 'delivery' && <Card>
             <CardHeader>
               <CardTitle>Engulfing + CISD Watch v2 · Gold/Silver confirmation</CardTitle>

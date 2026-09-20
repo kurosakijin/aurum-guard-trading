@@ -1,0 +1,1985 @@
+//@version=6
+strategy(
+     "XAU A+ Strategy V2.6.3 STRUCTURE GHOST",
+     overlay=true,
+     max_lines_count=400,
+     max_boxes_count=150,
+     max_labels_count=100,
+     max_bars_back=5000,
+     pyramiding=0,
+     initial_capital=10000,
+     calc_on_every_tick=false,
+     calc_on_order_fills=false,
+     process_orders_on_close=true
+)
+
+// ============================================================================
+// XAU A+ V2.6.1 FILL AUDIT
+// XAUUSD - 5 MINUTE
+// Experimental lifecycle correction; not a demonstrated profitability upgrade.
+// Entry filters, risk inputs and targets are unchanged from the supplied V2.6.
+// Match commission, slippage and all Properties manually when comparing.
+// Breakeven updates at the next bar-close calculation after a confirmed TP1 fill.
+//
+// LONG:
+//   1H bullish
+//   4H NOT strongly bearish
+//
+// SHORT:
+//   1H bearish
+//   4H NOT strongly bullish
+//   AND (Daily bearish OR 4H strongly bearish)
+//
+// Confirmation:
+//   Liquidity sweep
+//   ADX / DMI
+//   VWAP
+//   BOS
+//   Retest / rejection
+//
+// Risk:
+//   A+    0.25%
+//   A     0.15%
+//   Retry 0.10%
+// ============================================================================
+
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+
+// DAILY
+int dailyFastLen = input.int(50, "Daily Fast EMA", minval=10, group="1. Daily Regime")
+int dailySlowLen = input.int(200, "Daily Slow EMA", minval=50, group="1. Daily Regime")
+
+// 4H
+string regimeTF = input.timeframe("240", "4H Regime", group="2. 4H Regime")
+int regimeFastLen = input.int(50, "4H Fast EMA", minval=10, group="2. 4H Regime")
+int regimeSlowLen = input.int(200, "4H Slow EMA", minval=50, group="2. 4H Regime")
+
+// 1H
+string biasTF = input.timeframe("60", "1H Bias", group="3. 1H Bias")
+int biasFastLen = input.int(50, "1H Fast EMA", minval=10, group="3. 1H Bias")
+int biasSlowLen = input.int(200, "1H Slow EMA", minval=50, group="3. 1H Bias")
+
+float minimumEMASeparation = input.float(
+     0.12,
+     "Minimum EMA Separation / ATR",
+     minval=0.0,
+     maxval=3.0,
+     step=0.01,
+     group="3. 1H Bias"
+)
+
+// MOMENTUM
+int dmiLength = input.int(14, "DMI Length", minval=5, group="4. Momentum")
+int adxSmoothing = input.int(14, "ADX Smoothing", minval=5, group="4. Momentum")
+
+float minimumADX = input.float(
+     14.0,
+     "Minimum ADX",
+     minval=5.0,
+     maxval=50.0,
+     step=1.0,
+     group="4. Momentum"
+)
+
+// LIQUIDITY
+string setupTF = input.timeframe("15", "A+ Liquidity TF", group="5. Liquidity")
+
+int setupSwingLookback = input.int(
+     10,
+     "15m Swing Lookback",
+     minval=3,
+     maxval=50,
+     group="5. Liquidity"
+)
+
+int localSweepLookback = input.int(
+     8,
+     "5m Local Sweep Lookback",
+     minval=3,
+     maxval=30,
+     group="5. Liquidity"
+)
+
+bool usePreviousDay = input.bool(true, "Previous Day H/L", group="5. Liquidity")
+bool useAsia = input.bool(true, "Asian H/L", group="5. Liquidity")
+bool use15mSwing = input.bool(true, "15m Swing Liquidity", group="5. Liquidity")
+bool use5mSweep = input.bool(true, "5m Local Liquidity", group="5. Liquidity")
+
+// ENTRY
+int structureLookback = input.int(
+     5,
+     "Structure Lookback",
+     minval=3,
+     maxval=20,
+     group="6. Entry"
+)
+
+int bosMaxBars = input.int(
+     28,
+     "Maximum Bars: Sweep -> BOS",
+     minval=3,
+     maxval=80,
+     group="6. Entry"
+)
+
+int retestMaxBars = input.int(
+     20,
+     "Maximum Bars: BOS -> Retest",
+     minval=2,
+     maxval=60,
+     group="6. Entry"
+)
+
+int atrLength = input.int(14, "ATR Length", minval=5, group="6. Entry")
+
+float displacementATR = input.float(
+     0.20,
+     "Minimum Displacement / ATR",
+     minval=0.05,
+     maxval=2.0,
+     step=0.05,
+     group="6. Entry"
+)
+
+float retestToleranceATR = input.float(
+     0.65,
+     "Retest Tolerance / ATR",
+     minval=0.10,
+     maxval=2.0,
+     step=0.05,
+     group="6. Entry"
+)
+
+// RISK
+float aPlusRisk = input.float(
+     0.25,
+     "A+ Risk %",
+     minval=0.05,
+     maxval=1.0,
+     step=0.05,
+     group="7. Risk"
+)
+
+float aRisk = input.float(
+     0.15,
+     "A Risk %",
+     minval=0.05,
+     maxval=1.0,
+     step=0.05,
+     group="7. Risk"
+)
+
+bool allowRetry = input.bool(
+     true,
+     "Allow One Re-entry",
+     group="7. Risk"
+)
+
+float retryRisk = input.float(
+     0.10,
+     "Re-entry Risk %",
+     minval=0.05,
+     maxval=0.50,
+     step=0.05,
+     group="7. Risk"
+)
+
+int retryCooldownBars = input.int(
+     8,
+     "Re-entry Cooldown Bars",
+     minval=1,
+     maxval=100,
+     group="7. Risk"
+)
+
+int retryExpiryBars = input.int(
+     36,
+     "Re-entry Expiry Bars",
+     minval=5,
+     maxval=200,
+     group="7. Risk"
+)
+
+float stopBufferATR = input.float(
+     0.35,
+     "SL Buffer / ATR",
+     minval=0.05,
+     maxval=2.0,
+     step=0.05,
+     group="7. Risk"
+)
+
+float minStopATR = input.float(
+     0.35,
+     "Minimum Stop / ATR",
+     minval=0.10,
+     maxval=5.0,
+     step=0.05,
+     group="7. Risk"
+)
+
+float maxStopATR = input.float(
+     4.00,
+     "Maximum Stop / ATR",
+     minval=1.0,
+     maxval=10.0,
+     step=0.25,
+     group="7. Risk"
+)
+
+float tp1R = input.float(
+     1.0,
+     "TP1 R",
+     minval=0.5,
+     maxval=5.0,
+     step=0.25,
+     group="7. Risk"
+)
+
+float tp2R = input.float(
+     2.0,
+     "TP2 R",
+     minval=1.0,
+     maxval=10.0,
+     step=0.25,
+     group="7. Risk"
+)
+
+float tp1Percent = input.float(
+     50.0,
+     "TP1 Position %",
+     minval=20.0,
+     maxval=80.0,
+     step=5.0,
+     group="7. Risk"
+)
+
+float breakevenATR = input.float(
+     0.05,
+     "BE Profit Offset / ATR",
+     minval=0.0,
+     maxval=0.50,
+     step=0.01,
+     group="7. Risk"
+)
+
+float qtyStep = input.float(
+     0.01,
+     "Quantity Step",
+     minval=0.001,
+     step=0.001,
+     group="7. Risk"
+)
+
+int maxTradesPerDay = input.int(
+     3,
+     "Maximum Entries / Day",
+     minval=1,
+     maxval=6,
+     group="7. Risk"
+)
+
+// SESSIONS
+string asiaSession = input.session(
+     "0000-0600",
+     "Asian Range",
+     group="8. Sessions"
+)
+
+string asiaTimezone = input.string(
+     "Etc/UTC",
+     "Asian Timezone",
+     group="8. Sessions"
+)
+
+bool tradeLondon = input.bool(true, "Trade London", group="8. Sessions")
+
+string londonSession = input.session(
+     "0600-1300",
+     "London Window",
+     group="8. Sessions"
+)
+
+bool tradeNY = input.bool(true, "Trade New York", group="8. Sessions")
+
+string newYorkSession = input.session(
+     "0700-1500",
+     "New York Window",
+     group="8. Sessions"
+)
+
+// DISPLAY
+bool showDashboard = input.bool(true, "Dashboard", group="9. Display")
+bool showVWAP = input.bool(true, "VWAP", group="9. Display")
+bool showLiquidity = input.bool(true, "Liquidity Levels", group="9. Display")
+bool showTradeLevels = input.bool(true, "Entry / SL / TP", group="9. Display")
+
+
+// ============================================================================
+// BASE DATA
+// ============================================================================
+
+float atr = ta.atr(atrLength)
+float vwapValue = ta.vwap(hlc3)
+
+bool correctTimeframe = timeframe.period == "5"
+
+float recentStructureHigh = ta.highest(high, structureLookback)[1]
+float recentStructureLow = ta.lowest(low, structureLookback)[1]
+
+float localSwingHigh = ta.highest(high, localSweepLookback)[1]
+float localSwingLow = ta.lowest(low, localSweepLookback)[1]
+
+[plusDI, minusDI, adxValue] = ta.dmi(dmiLength, adxSmoothing)
+
+bool bullishMomentum =
+     adxValue >= minimumADX and
+     plusDI > minusDI
+
+bool bearishMomentum =
+     adxValue >= minimumADX and
+     minusDI > plusDI
+
+
+// ============================================================================
+// DAILY REGIME
+// ============================================================================
+
+float dailyClose = request.security(
+     syminfo.tickerid,
+     "D",
+     close[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float dailyFast = request.security(
+     syminfo.tickerid,
+     "D",
+     ta.ema(close, dailyFastLen)[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float dailyFastOld = request.security(
+     syminfo.tickerid,
+     "D",
+     ta.ema(close, dailyFastLen)[2],
+     lookahead=barmerge.lookahead_on
+)
+
+float dailySlow = request.security(
+     syminfo.tickerid,
+     "D",
+     ta.ema(close, dailySlowLen)[1],
+     lookahead=barmerge.lookahead_on
+)
+
+bool dailyBull =
+     dailyClose > dailyFast and
+     dailyFast >= dailyFastOld
+
+bool dailyBear =
+     dailyClose < dailyFast and
+     dailyFast <= dailyFastOld
+
+bool dailyDeepBear =
+     dailyBear and
+     dailyFast < dailySlow
+
+
+// ============================================================================
+// 4H REGIME
+// ============================================================================
+
+float regimeClose = request.security(
+     syminfo.tickerid,
+     regimeTF,
+     close[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float regimeFast = request.security(
+     syminfo.tickerid,
+     regimeTF,
+     ta.ema(close, regimeFastLen)[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float regimeFastOld = request.security(
+     syminfo.tickerid,
+     regimeTF,
+     ta.ema(close, regimeFastLen)[2],
+     lookahead=barmerge.lookahead_on
+)
+
+float regimeSlow = request.security(
+     syminfo.tickerid,
+     regimeTF,
+     ta.ema(close, regimeSlowLen)[1],
+     lookahead=barmerge.lookahead_on
+)
+
+bool strong4HBull =
+     regimeClose > regimeSlow and
+     regimeFast > regimeSlow and
+     regimeFast > regimeFastOld
+
+bool strong4HBear =
+     regimeClose < regimeSlow and
+     regimeFast < regimeSlow and
+     regimeFast < regimeFastOld
+
+
+// ============================================================================
+// 1H BIAS
+// ============================================================================
+
+float biasClose = request.security(
+     syminfo.tickerid,
+     biasTF,
+     close[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float biasFast = request.security(
+     syminfo.tickerid,
+     biasTF,
+     ta.ema(close, biasFastLen)[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float biasFastOld = request.security(
+     syminfo.tickerid,
+     biasTF,
+     ta.ema(close, biasFastLen)[2],
+     lookahead=barmerge.lookahead_on
+)
+
+float biasSlow = request.security(
+     syminfo.tickerid,
+     biasTF,
+     ta.ema(close, biasSlowLen)[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float biasATR = request.security(
+     syminfo.tickerid,
+     biasTF,
+     ta.atr(14)[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float emaSeparation =
+     biasATR > 0
+     ? math.abs(biasFast - biasSlow) / biasATR
+     : 0.0
+
+bool separationOK =
+     emaSeparation >= minimumEMASeparation
+
+bool biasBull =
+     biasClose > biasSlow and
+     biasFast > biasSlow and
+     biasFast >= biasFastOld and
+     separationOK
+
+bool biasBear =
+     biasClose < biasSlow and
+     biasFast < biasSlow and
+     biasFast <= biasFastOld and
+     separationOK
+
+
+// ============================================================================
+// V2.6 ASYMMETRIC PERMISSION
+// ============================================================================
+
+// BUY:
+// 1H bullish.
+// Only blocked if 4H is strongly bearish.
+bool allowLong =
+     biasBull and
+     not strong4HBear
+
+// SELL:
+// 1H bearish mandatory.
+// Strong 4H bullish blocks SELL.
+// Either Daily bearish OR 4H strongly bearish supplies HTF confirmation.
+bool allowShort =
+     biasBear and
+     not strong4HBull and
+     (dailyBear or strong4HBear)
+
+
+// ============================================================================
+// PREVIOUS DAY HIGH / LOW
+// ============================================================================
+
+float previousDayHigh = request.security(
+     syminfo.tickerid,
+     "D",
+     high[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float previousDayLow = request.security(
+     syminfo.tickerid,
+     "D",
+     low[1],
+     lookahead=barmerge.lookahead_on
+)
+
+
+// ============================================================================
+// ASIAN RANGE
+// ============================================================================
+
+bool inAsia =
+     not na(time(timeframe.period, asiaSession, asiaTimezone))
+
+bool asiaStarted =
+     inAsia and not inAsia[1]
+
+var float asiaHigh = na
+var float asiaLow = na
+
+if asiaStarted
+    asiaHigh := high
+    asiaLow := low
+else if inAsia
+    asiaHigh := math.max(nz(asiaHigh, high), high)
+    asiaLow := math.min(nz(asiaLow, low), low)
+
+
+// ============================================================================
+// TRADING WINDOW
+// ============================================================================
+
+bool londonWindow =
+     tradeLondon and
+     not na(time(timeframe.period, londonSession, "Europe/London"))
+
+bool newYorkWindow =
+     tradeNY and
+     not na(time(timeframe.period, newYorkSession, "America/New_York"))
+
+bool tradingWindow =
+     londonWindow or newYorkWindow
+
+
+// ============================================================================
+// CONFIRMED 15m DATA
+// ============================================================================
+
+bool newSetupBar =
+     ta.change(time(setupTF)) != 0
+
+float setupHigh = request.security(
+     syminfo.tickerid,
+     setupTF,
+     high[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float setupLow = request.security(
+     syminfo.tickerid,
+     setupTF,
+     low[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float setupClose = request.security(
+     syminfo.tickerid,
+     setupTF,
+     close[1],
+     lookahead=barmerge.lookahead_on
+)
+
+float setupSwingHigh = request.security(
+     syminfo.tickerid,
+     setupTF,
+     ta.highest(high, setupSwingLookback)[2],
+     lookahead=barmerge.lookahead_on
+)
+
+float setupSwingLow = request.security(
+     syminfo.tickerid,
+     setupTF,
+     ta.lowest(low, setupSwingLookback)[2],
+     lookahead=barmerge.lookahead_on
+)
+
+
+// ============================================================================
+// A+ LIQUIDITY
+// ============================================================================
+
+bool sweepPDL =
+     usePreviousDay and
+     setupLow < previousDayLow and
+     setupClose > previousDayLow
+
+bool sweepPDH =
+     usePreviousDay and
+     setupHigh > previousDayHigh and
+     setupClose < previousDayHigh
+
+bool sweepAsiaLow =
+     useAsia and
+     not na(asiaLow) and
+     setupLow < asiaLow and
+     setupClose > asiaLow
+
+bool sweepAsiaHigh =
+     useAsia and
+     not na(asiaHigh) and
+     setupHigh > asiaHigh and
+     setupClose < asiaHigh
+
+bool sweep15mLow =
+     use15mSwing and
+     not na(setupSwingLow) and
+     setupLow < setupSwingLow and
+     setupClose > setupSwingLow
+
+bool sweep15mHigh =
+     use15mSwing and
+     not na(setupSwingHigh) and
+     setupHigh > setupSwingHigh and
+     setupClose < setupSwingHigh
+
+bool bullAPlus =
+     newSetupBar and
+     allowLong and
+     tradingWindow and
+     (sweepPDL or sweepAsiaLow or sweep15mLow)
+
+bool bearAPlus =
+     newSetupBar and
+     allowShort and
+     tradingWindow and
+     (sweepPDH or sweepAsiaHigh or sweep15mHigh)
+
+
+// ============================================================================
+// A-CLASS 5m LIQUIDITY
+// ============================================================================
+
+bool bullLocalSweep =
+     use5mSweep and
+     allowLong and
+     tradingWindow and
+     low < localSwingLow and
+     close > localSwingLow
+
+bool bearLocalSweep =
+     use5mSweep and
+     allowShort and
+     tradingWindow and
+     high > localSwingHigh and
+     close < localSwingHigh
+
+bool bullA =
+     bullLocalSweep and
+     not bullAPlus
+
+bool bearA =
+     bearLocalSweep and
+     not bearAPlus
+
+
+// ============================================================================
+// CANDLE QUALITY
+// ============================================================================
+
+float candleRange =
+     math.max(high - low, syminfo.mintick)
+
+float candleBody =
+     math.abs(close - open)
+
+float upperWick =
+     high - math.max(open, close)
+
+float lowerWick =
+     math.min(open, close) - low
+
+float closeLocation =
+     (close - low) / candleRange
+
+bool bullishDisplacement =
+     close > open and
+     candleBody >= atr * displacementATR and
+     closeLocation >= 0.58 and
+     bullishMomentum
+
+bool bearishDisplacement =
+     close < open and
+     candleBody >= atr * displacementATR and
+     closeLocation <= 0.42 and
+     bearishMomentum
+
+bool bullishRejection =
+     close > open and
+     closeLocation >= 0.52 and
+     (
+         lowerWick >= candleBody * 0.15 or
+         candleBody >= atr * 0.12
+     )
+
+bool bearishRejection =
+     close < open and
+     closeLocation <= 0.48 and
+     (
+         upperWick >= candleBody * 0.15 or
+         candleBody >= atr * 0.12
+     )
+
+
+// ============================================================================
+// SETUP STATE
+// ============================================================================
+
+var int longState = 0
+var int shortState = 0
+
+var int longSweepBar = na
+var int shortSweepBar = na
+
+var int longBOSBar = na
+var int shortBOSBar = na
+
+var float longSweepExtreme = na
+var float shortSweepExtreme = na
+
+var float longStructure = na
+var float shortStructure = na
+
+var float longBOSLevel = na
+var float shortBOSLevel = na
+
+var float pendingRisk = na
+
+var string pendingClass = "NONE"
+var string liquidityName = "WAIT"
+
+
+// ============================================================================
+// RETRY STATE
+// ============================================================================
+
+var bool retryEligible = false
+var int retryDirection = 0
+var int retryReadyBar = na
+var int retryExpiryBar = na
+
+// ============================================================================
+// ACTIVE TRADE STATE
+// ============================================================================
+
+var int activeDirection = 0
+
+var float activeEntry = na
+var float activeStop = na
+var float activeTP1 = na
+var float activeTP2 = na
+var float activeATR = na
+
+var float activeTotalQty = na
+var float activeTP1Qty = na
+var float activeRunnerQty = na
+
+var bool activeTP1Hit = false
+var bool activeWasRetry = false
+
+var string activeClass = "NONE"
+
+var bool buySignal = false
+var bool sellSignal = false
+
+buySignal := false
+sellSignal := false
+
+
+// ============================================================================
+// CONFIRMED EXIT FILLS
+// ============================================================================
+
+// Read each newly closed leg once. A TP1 bracket can fill at its stop;
+// the exit ID or a smaller position alone does not prove a TP1 profit fill.
+var int processedClosedTrades = 0
+bool hasNewClosedTrades = strategy.closedtrades > processedClosedTrades
+
+if hasNewClosedTrades
+    for tradeIndex = processedClosedTrades to strategy.closedtrades - 1
+        string filledEntry = strategy.closedtrades.entry_id(tradeIndex)
+        string filledExit = strategy.closedtrades.exit_id(tradeIndex)
+        string fillReason = strategy.closedtrades.exit_comment(tradeIndex)
+        bool matchesActiveTrade =
+             (activeDirection == 1 and filledEntry == "LONG" and filledExit == "LONG TP1") or
+             (activeDirection == -1 and filledEntry == "SHORT" and filledExit == "SHORT TP1")
+        if matchesActiveTrade and fillReason == "TP1 PROFIT"
+            activeTP1Hit := true
+    processedClosedTrades := strategy.closedtrades
+
+// ============================================================================
+// CLOSED POSITION / RETRY
+// ============================================================================
+
+// Ledger changes also detect positions opened and closed between calculations.
+bool positionJustClosed =
+     hasNewClosedTrades and
+     strategy.position_size == 0 and
+     activeDirection != 0
+
+if positionJustClosed
+
+    bool reachedTP1 =
+         activeTP1Hit
+
+
+
+    if allowRetry and not reachedTP1 and not activeWasRetry
+
+        retryEligible := true
+        retryDirection := activeDirection
+        retryReadyBar := bar_index + retryCooldownBars
+        retryExpiryBar := bar_index + retryExpiryBars
+
+    else
+
+        retryEligible := false
+        retryDirection := 0
+
+
+    // Discard any stale setup before another trade can be registered.
+    longState := 0
+    shortState := 0
+
+    activeDirection := 0
+
+    activeEntry := na
+    activeStop := na
+    activeTP1 := na
+    activeTP2 := na
+    activeATR := na
+
+    activeTotalQty := na
+    activeTP1Qty := na
+    activeRunnerQty := na
+
+    activeTP1Hit := false
+    activeWasRetry := false
+    activeClass := "NONE"
+
+
+
+if retryEligible and bar_index > retryExpiryBar
+    retryEligible := false
+    retryDirection := 0
+
+if retryEligible and retryDirection == 1 and not allowLong
+    retryEligible := false
+    retryDirection := 0
+
+if retryEligible and retryDirection == -1 and not allowShort
+    retryEligible := false
+    retryDirection := 0
+
+bool longRetryBlocked =
+     retryEligible and
+     retryDirection == 1 and
+     bar_index < retryReadyBar
+
+bool shortRetryBlocked =
+     retryEligible and
+     retryDirection == -1 and
+     bar_index < retryReadyBar
+
+
+// ============================================================================
+// REGISTER NEW SETUP
+// ============================================================================
+
+bool canRegister =
+     not positionJustClosed and
+     strategy.position_size == 0 and
+     longState == 0 and
+     shortState == 0
+
+if canRegister
+
+    if bullAPlus and not longRetryBlocked
+
+        longState := 1
+        shortState := 0
+
+        longSweepExtreme := setupLow
+        longSweepBar := bar_index
+        longStructure := recentStructureHigh
+
+        pendingRisk := aPlusRisk
+        pendingClass := "A+ LONG"
+
+        if sweepPDL
+            liquidityName := "PDL"
+        else if sweepAsiaLow
+            liquidityName := "ASIA LOW"
+        else
+            liquidityName := "15m SWING LOW"
+
+
+    else if bearAPlus and not shortRetryBlocked
+
+        shortState := 1
+        longState := 0
+
+        shortSweepExtreme := setupHigh
+        shortSweepBar := bar_index
+        shortStructure := recentStructureLow
+
+        pendingRisk := aPlusRisk
+        pendingClass := "A+ SHORT"
+
+        if sweepPDH
+            liquidityName := "PDH"
+        else if sweepAsiaHigh
+            liquidityName := "ASIA HIGH"
+        else
+            liquidityName := "15m SWING HIGH"
+
+
+    else if bullA and not longRetryBlocked
+
+        longState := 1
+        shortState := 0
+
+        longSweepExtreme := low
+        longSweepBar := bar_index
+        longStructure := recentStructureHigh
+
+        pendingRisk := aRisk
+        pendingClass := "A LONG"
+
+        liquidityName := "5m SWING LOW"
+
+
+    else if bearA and not shortRetryBlocked
+
+        shortState := 1
+        longState := 0
+
+        shortSweepExtreme := high
+        shortSweepBar := bar_index
+        shortStructure := recentStructureLow
+
+        pendingRisk := aRisk
+        pendingClass := "A SHORT"
+
+        liquidityName := "5m SWING HIGH"
+
+
+// ============================================================================
+// WAIT FOR LONG BOS
+// ============================================================================
+
+if longState == 1
+
+    longSweepExtreme :=
+         math.min(longSweepExtreme, low)
+
+    bool expired =
+         bar_index - longSweepBar > bosMaxBars
+
+    if expired or not allowLong or not tradingWindow
+
+        longState := 0
+
+    else if close > longStructure and close > vwapValue and bullishDisplacement
+
+        longBOSLevel := longStructure
+        longBOSBar := bar_index
+        longState := 2
+
+
+// ============================================================================
+// WAIT FOR SHORT BOS
+// ============================================================================
+
+if shortState == 1
+
+    shortSweepExtreme :=
+         math.max(shortSweepExtreme, high)
+
+    bool expired =
+         bar_index - shortSweepBar > bosMaxBars
+
+    if expired or not allowShort or not tradingWindow
+
+        shortState := 0
+
+    else if close < shortStructure and close < vwapValue and bearishDisplacement
+
+        shortBOSLevel := shortStructure
+        shortBOSBar := bar_index
+        shortState := 2
+
+
+// ============================================================================
+// DAILY LIMIT
+// ============================================================================
+
+bool newDay =
+     ta.change(time("D")) != 0
+
+var int tradesToday = 0
+
+if newDay
+    tradesToday := 0
+
+
+// ============================================================================
+// LONG ENTRY
+// ============================================================================
+
+if longState == 2 and strategy.position_size == 0 and correctTimeframe and not positionJustClosed and not longRetryBlocked
+
+    bool expired =
+         bar_index - longBOSBar > retestMaxBars
+
+    float tolerance =
+         atr * retestToleranceATR
+
+    bool retested =
+         bar_index > longBOSBar and
+         low <= longBOSLevel + tolerance and
+         high >= longBOSLevel - tolerance
+
+    bool validRetest =
+         retested and
+         close > longBOSLevel and
+         close > vwapValue and
+         allowLong and
+         bullishMomentum and
+         bullishRejection and
+         tradingWindow
+
+    if expired or not allowLong
+
+        longState := 0
+
+    else if validRetest and tradesToday < maxTradesPerDay
+
+        bool isRetry =
+             allowRetry and
+             retryEligible and
+             retryDirection == 1 and
+             bar_index >= retryReadyBar and
+             bar_index <= retryExpiryBar
+
+        float riskPct =
+             isRetry ? retryRisk : pendingRisk
+
+        float entryPrice =
+             close
+
+        float stopPrice =
+             longSweepExtreme - atr * stopBufferATR
+
+        float stopDistance =
+             entryPrice - stopPrice
+
+        float stopDistanceATR =
+             stopDistance / atr
+
+        float cashRisk =
+             strategy.equity * riskPct / 100.0
+
+        float cashRiskPerUnit =
+             stopDistance * syminfo.pointvalue
+
+        float rawQty =
+             cashRiskPerUnit > 0
+             ? cashRisk / cashRiskPerUnit
+             : na
+
+        int totalSteps =
+             not na(rawQty)
+             ? int(math.floor(rawQty / qtyStep))
+             : 0
+
+        int tp1Steps =
+             int(math.floor(totalSteps * tp1Percent / 100.0))
+
+        int runnerSteps =
+             totalSteps - tp1Steps
+
+        float totalQty =
+             totalSteps * qtyStep
+
+        float firstQty =
+             tp1Steps * qtyStep
+
+        float runnerQty =
+             runnerSteps * qtyStep
+
+        bool validSize =
+             stopDistance > 0 and
+             stopDistanceATR >= minStopATR and
+             stopDistanceATR <= maxStopATR and
+             totalSteps >= 2 and
+             tp1Steps >= 1 and
+             runnerSteps >= 1
+
+        if validSize
+
+            float target1 =
+                 entryPrice + stopDistance * tp1R
+
+            float target2 =
+                 entryPrice + stopDistance * tp2R
+
+            activeDirection := 1
+
+            activeEntry := entryPrice
+            activeStop := stopPrice
+            activeTP1 := target1
+            activeTP2 := target2
+            activeATR := atr
+
+            activeTotalQty := totalQty
+            activeTP1Qty := firstQty
+            activeRunnerQty := runnerQty
+
+            activeTP1Hit := false
+            activeWasRetry := isRetry
+
+            activeClass :=
+                 isRetry
+                 ? "RETRY LONG"
+                 : pendingClass
+
+            strategy.entry(
+                 "LONG",
+                 strategy.long,
+                 qty=totalQty
+            )
+
+            strategy.exit(
+                 "LONG TP1",
+                 from_entry="LONG",
+                 qty=firstQty,
+                 stop=stopPrice,
+                 limit=target1,
+                 comment_profit="TP1 PROFIT",
+                 comment_loss="INITIAL STOP"
+            )
+
+            strategy.exit(
+                 "LONG RUNNER",
+                 from_entry="LONG",
+                 qty=runnerQty,
+                 stop=stopPrice,
+                 limit=target2
+            )
+
+            tradesToday += 1
+            buySignal := true
+
+            // A retry opportunity belongs only to the next accepted trade.
+            retryEligible := false
+            retryDirection := 0
+
+            longState := 0
+            shortState := 0
+
+
+// ============================================================================
+// SHORT ENTRY
+// ============================================================================
+
+if shortState == 2 and strategy.position_size == 0 and correctTimeframe and not positionJustClosed and not shortRetryBlocked
+
+    bool expired =
+         bar_index - shortBOSBar > retestMaxBars
+
+    float tolerance =
+         atr * retestToleranceATR
+
+    bool retested =
+         bar_index > shortBOSBar and
+         high >= shortBOSLevel - tolerance and
+         low <= shortBOSLevel + tolerance
+
+    bool validRetest =
+         retested and
+         close < shortBOSLevel and
+         close < vwapValue and
+         allowShort and
+         bearishMomentum and
+         bearishRejection and
+         tradingWindow
+
+    if expired or not allowShort
+
+        shortState := 0
+
+    else if validRetest and tradesToday < maxTradesPerDay
+
+        bool isRetry =
+             allowRetry and
+             retryEligible and
+             retryDirection == -1 and
+             bar_index >= retryReadyBar and
+             bar_index <= retryExpiryBar
+
+        float riskPct =
+             isRetry ? retryRisk : pendingRisk
+
+        float entryPrice =
+             close
+
+        float stopPrice =
+             shortSweepExtreme + atr * stopBufferATR
+
+        float stopDistance =
+             stopPrice - entryPrice
+
+        float stopDistanceATR =
+             stopDistance / atr
+
+        float cashRisk =
+             strategy.equity * riskPct / 100.0
+
+        float cashRiskPerUnit =
+             stopDistance * syminfo.pointvalue
+
+        float rawQty =
+             cashRiskPerUnit > 0
+             ? cashRisk / cashRiskPerUnit
+             : na
+
+        int totalSteps =
+             not na(rawQty)
+             ? int(math.floor(rawQty / qtyStep))
+             : 0
+
+        int tp1Steps =
+             int(math.floor(totalSteps * tp1Percent / 100.0))
+
+        int runnerSteps =
+             totalSteps - tp1Steps
+
+        float totalQty =
+             totalSteps * qtyStep
+
+        float firstQty =
+             tp1Steps * qtyStep
+
+        float runnerQty =
+             runnerSteps * qtyStep
+
+        bool validSize =
+             stopDistance > 0 and
+             stopDistanceATR >= minStopATR and
+             stopDistanceATR <= maxStopATR and
+             totalSteps >= 2 and
+             tp1Steps >= 1 and
+             runnerSteps >= 1
+
+        if validSize
+
+            float target1 =
+                 entryPrice - stopDistance * tp1R
+
+            float target2 =
+                 entryPrice - stopDistance * tp2R
+
+            activeDirection := -1
+
+            activeEntry := entryPrice
+            activeStop := stopPrice
+            activeTP1 := target1
+            activeTP2 := target2
+            activeATR := atr
+
+            activeTotalQty := totalQty
+            activeTP1Qty := firstQty
+            activeRunnerQty := runnerQty
+
+            activeTP1Hit := false
+            activeWasRetry := isRetry
+
+            activeClass :=
+                 isRetry
+                 ? "RETRY SHORT"
+                 : pendingClass
+
+            strategy.entry(
+                 "SHORT",
+                 strategy.short,
+                 qty=totalQty
+            )
+
+            strategy.exit(
+                 "SHORT TP1",
+                 from_entry="SHORT",
+                 qty=firstQty,
+                 stop=stopPrice,
+                 limit=target1,
+                 comment_profit="TP1 PROFIT",
+                 comment_loss="INITIAL STOP"
+            )
+
+            strategy.exit(
+                 "SHORT RUNNER",
+                 from_entry="SHORT",
+                 qty=runnerQty,
+                 stop=stopPrice,
+                 limit=target2
+            )
+
+            tradesToday += 1
+            sellSignal := true
+
+            // A retry opportunity belongs only to the next accepted trade.
+            retryEligible := false
+            retryDirection := 0
+
+            shortState := 0
+            longState := 0
+
+
+// ============================================================================
+// RUNNER -> BREAKEVEN
+// ============================================================================
+
+if activeDirection == 1 and strategy.position_size > 0
+
+    float runnerStop =
+         activeTP1Hit
+         ? activeEntry + activeATR * breakevenATR
+         : activeStop
+
+    strategy.exit(
+         "LONG RUNNER",
+         from_entry="LONG",
+         qty=activeRunnerQty,
+         stop=runnerStop,
+         limit=activeTP2
+    )
+
+
+if activeDirection == -1 and strategy.position_size < 0
+
+    float runnerStop =
+         activeTP1Hit
+         ? activeEntry - activeATR * breakevenATR
+         : activeStop
+
+    strategy.exit(
+         "SHORT RUNNER",
+         from_entry="SHORT",
+         qty=activeRunnerQty,
+         stop=runnerStop,
+         limit=activeTP2
+    )
+
+
+// ============================================================================
+// PLOTS
+// ============================================================================
+
+plot(
+     showVWAP ? vwapValue : na,
+     "VWAP",
+     color=color.orange,
+     linewidth=2
+)
+
+plot(
+     showLiquidity and usePreviousDay ? previousDayHigh : na,
+     "PDH",
+     color=color.new(color.red, 55),
+     style=plot.style_linebr
+)
+
+plot(
+     showLiquidity and usePreviousDay ? previousDayLow : na,
+     "PDL",
+     color=color.new(color.green, 55),
+     style=plot.style_linebr
+)
+
+plot(
+     showLiquidity and useAsia ? asiaHigh : na,
+     "Asia High",
+     color=color.new(color.red, 75),
+     style=plot.style_linebr
+)
+
+plot(
+     showLiquidity and useAsia ? asiaLow : na,
+     "Asia Low",
+     color=color.new(color.green, 75),
+     style=plot.style_linebr
+)
+
+plot(
+     showTradeLevels and strategy.position_size != 0 ? activeEntry : na,
+     "Entry",
+     color=color.white,
+     linewidth=2,
+     style=plot.style_linebr
+)
+
+plot(
+     showTradeLevels and strategy.position_size != 0 ? activeStop : na,
+     "SL",
+     color=color.red,
+     linewidth=2,
+     style=plot.style_linebr
+)
+
+plot(
+     showTradeLevels and strategy.position_size != 0 ? activeTP1 : na,
+     "TP1",
+     color=color.new(color.green, 25),
+     linewidth=1,
+     style=plot.style_linebr
+)
+
+plot(
+     showTradeLevels and strategy.position_size != 0 ? activeTP2 : na,
+     "TP2",
+     color=color.green,
+     linewidth=2,
+     style=plot.style_linebr
+)
+
+
+// ============================================================================
+// SETUP MARKERS
+// ============================================================================
+
+plotshape(
+     bullAPlus,
+     title="A+ Bull",
+     text="A+",
+     style=shape.circle,
+     location=location.belowbar,
+     color=color.green,
+     textcolor=color.white,
+     size=size.tiny
+)
+
+plotshape(
+     bearAPlus,
+     title="A+ Bear",
+     text="A+",
+     style=shape.circle,
+     location=location.abovebar,
+     color=color.red,
+     textcolor=color.white,
+     size=size.tiny
+)
+
+plotshape(
+     bullA,
+     title="A Bull",
+     text="A",
+     style=shape.circle,
+     location=location.belowbar,
+     color=color.new(color.green, 40),
+     textcolor=color.white,
+     size=size.tiny
+)
+
+plotshape(
+     bearA,
+     title="A Bear",
+     text="A",
+     style=shape.circle,
+     location=location.abovebar,
+     color=color.new(color.red, 40),
+     textcolor=color.white,
+     size=size.tiny
+)
+
+
+// ============================================================================
+// REAL ENTRIES
+// ============================================================================
+
+plotshape(
+     buySignal,
+     title="BUY",
+     text="BUY",
+     style=shape.labelup,
+     location=location.belowbar,
+     color=color.green,
+     textcolor=color.white,
+     size=size.small
+)
+
+plotshape(
+     sellSignal,
+     title="SELL",
+     text="SELL",
+     style=shape.labeldown,
+     location=location.abovebar,
+     color=color.red,
+     textcolor=color.white,
+     size=size.small
+)
+
+
+// ============================================================================
+// DASHBOARD
+// ============================================================================
+
+var table dashboard =
+     table.new(position.top_right, 2, 14, border_width=1)
+
+if barstate.islast and showDashboard
+
+    string dailyText =
+         dailyBull
+         ? "BULL"
+         : dailyBear
+         ? "BEAR"
+         : "NEUTRAL"
+
+    string regimeText =
+         strong4HBull
+         ? "STRONG BULL"
+         : strong4HBear
+         ? "STRONG BEAR"
+         : "NEUTRAL"
+
+    string biasText =
+         biasBull
+         ? "BULL"
+         : biasBear
+         ? "BEAR"
+         : "NEUTRAL"
+
+    string setupText =
+         longState == 1
+         ? "LONG BOS"
+         : shortState == 1
+         ? "SHORT BOS"
+         : longState == 2
+         ? "LONG RETEST"
+         : shortState == 2
+         ? "SHORT RETEST"
+         : "WAIT"
+
+    string positionText =
+         strategy.position_size > 0
+         ? "LONG"
+         : strategy.position_size < 0
+         ? "SHORT"
+         : "FLAT"
+
+    string retryText =
+         retryEligible
+         ? retryDirection == 1
+             ? "LONG"
+             : "SHORT"
+         : "NO"
+
+    color dailyColor =
+         dailyBull
+         ? color.green
+         : dailyBear
+         ? color.red
+         : color.gray
+
+    color regimeColor =
+         strong4HBull
+         ? color.green
+         : strong4HBear
+         ? color.red
+         : color.gray
+
+    color biasColor =
+         biasBull
+         ? color.green
+         : biasBear
+         ? color.red
+         : color.gray
+
+    color adxColor =
+         adxValue >= minimumADX
+         ? color.green
+         : color.red
+
+    color sepColor =
+         separationOK
+         ? color.green
+         : color.red
+
+
+    table.cell(dashboard, 0, 0, "XAU V2.6")
+    table.cell(
+         dashboard,
+         1,
+         0,
+         correctTimeframe ? "5m OK" : "USE 5m",
+         text_color=correctTimeframe ? color.green : color.red
+    )
+
+    table.cell(dashboard, 0, 1, "Daily")
+    table.cell(dashboard, 1, 1, dailyText, text_color=dailyColor)
+
+    table.cell(dashboard, 0, 2, "4H")
+    table.cell(dashboard, 1, 2, regimeText, text_color=regimeColor)
+
+    table.cell(dashboard, 0, 3, "1H")
+    table.cell(dashboard, 1, 3, biasText, text_color=biasColor)
+
+    table.cell(dashboard, 0, 4, "BUY Allowed")
+    table.cell(
+         dashboard,
+         1,
+         4,
+         allowLong ? "YES" : "NO",
+         text_color=allowLong ? color.green : color.red
+    )
+
+    table.cell(dashboard, 0, 5, "SELL Allowed")
+    table.cell(
+         dashboard,
+         1,
+         5,
+         allowShort ? "YES" : "NO",
+         text_color=allowShort ? color.green : color.red
+    )
+
+    table.cell(dashboard, 0, 6, "ADX")
+    table.cell(
+         dashboard,
+         1,
+         6,
+         str.tostring(adxValue, "#.0"),
+         text_color=adxColor
+    )
+
+    table.cell(dashboard, 0, 7, "EMA Sep")
+    table.cell(
+         dashboard,
+         1,
+         7,
+         str.tostring(emaSeparation, "#.00"),
+         text_color=sepColor
+    )
+
+    table.cell(dashboard, 0, 8, "Momentum")
+    table.cell(
+         dashboard,
+         1,
+         8,
+         bullishMomentum
+         ? "BULL"
+         : bearishMomentum
+         ? "BEAR"
+         : "WEAK"
+    )
+
+    table.cell(dashboard, 0, 9, "Liquidity")
+    table.cell(dashboard, 1, 9, liquidityName)
+
+    table.cell(dashboard, 0, 10, "Setup")
+    table.cell(dashboard, 1, 10, setupText)
+
+    table.cell(dashboard, 0, 11, "VWAP")
+    table.cell(
+         dashboard,
+         1,
+         11,
+         close > vwapValue ? "ABOVE" : "BELOW"
+    )
+
+    table.cell(dashboard, 0, 12, "Position")
+    table.cell(dashboard, 1, 12, positionText)
+
+    table.cell(dashboard, 0, 13, "Re-entry")
+    table.cell(dashboard, 1, 13, retryText)
+
+
+// ============================================================================
+// ALERTS
+// ============================================================================
+
+if buySignal
+    alert(
+         "XAU V2.6 BUY | " +
+         activeClass +
+         " | Entry " +
+         str.tostring(activeEntry, format.mintick) +
+         " | SL " +
+         str.tostring(activeStop, format.mintick) +
+         " | TP1 " +
+         str.tostring(activeTP1, format.mintick) +
+         " | TP2 " +
+         str.tostring(activeTP2, format.mintick),
+         alert.freq_once_per_bar_close
+    )
+
+if sellSignal
+    alert(
+         "XAU V2.6 SELL | " +
+         activeClass +
+         " | Entry " +
+         str.tostring(activeEntry, format.mintick) +
+         " | SL " +
+         str.tostring(activeStop, format.mintick) +
+         " | TP1 " +
+         str.tostring(activeTP1, format.mintick) +
+         " | TP2 " +
+         str.tostring(activeTP2, format.mintick),
+         alert.freq_once_per_bar_close
+    )
+
+// ============================================================================
+// GHOST SCENARIO - VISUAL ONLY, NEVER USED BY ORDERS
+// ============================================================================
+// Illustrative momentum continuation, NOT future OHLC or a calibrated forecast.
+// Refreshes from closed candles only. Old drawings are replaced, not archived.
+bool ghostEnabled = input.bool(true, "Show ghost candles", group="Ghost scenario")
+int ghostBars = input.int(8, "Bars ahead", minval=2, maxval=30, group="Ghost scenario")
+int ghostLength = input.int(14, "Momentum lookback", minval=3, maxval=100, group="Ghost scenario")
+bool ghostEnvelope = input.bool(true, "Show illustrative range", group="Ghost scenario")
+color ghostBull = input.color(color.teal, "Rising candle", group="Ghost scenario")
+color ghostBear = input.color(color.orange, "Falling candle", group="Ghost scenario")
+
+float ghostMomentum = ta.ema(ta.change(close), ghostLength)
+float ghostVolatility = ta.atr(ghostLength)
+var array<line> ghostDrawings = array.new<line>()
+var label ghostCaption = na
+
+if barstate.islast or barstate.islastconfirmedhistory
+    while array.size(ghostDrawings) > 0
+        line.delete(array.pop(ghostDrawings))
+    if not na(ghostCaption)
+        label.delete(ghostCaption)
+        ghostCaption := na
+
+    // On an unclosed live bar, use the previous bar, never its fluid OHLC.
+    int ghostOffset = barstate.isconfirmed ? 0 : 1
+    float ghostBase = close[ghostOffset]
+    float ghostATR = ghostVolatility[ghostOffset]
+    float ghostDrift = ghostMomentum[ghostOffset]
+    int ghostAnchor = bar_index - ghostOffset
+
+    if ghostEnabled and correctTimeframe and not na(ghostATR) and ghostATR > 0 and not na(ghostDrift)
+        // Clip extreme momentum and decay it rather than extrapolating forever.
+        float ghostStep = math.max(-ghostATR * 0.30, math.min(ghostATR * 0.30, ghostDrift))
+        float ghostPrevious = ghostBase
+        float ghostUpper = ghostBase
+        float ghostLower = ghostBase
+        for step = 1 to ghostBars
+            int ghostX = ghostAnchor + step
+            float ghostOpen = ghostPrevious
+            float ghostClose = math.max(syminfo.mintick, ghostOpen + ghostStep * math.pow(0.88, step - 1))
+            float ghostWick = ghostATR * 0.25
+            float ghostHigh = math.max(ghostOpen, ghostClose) + ghostWick
+            float ghostLow = math.max(syminfo.mintick, math.min(ghostOpen, ghostClose) - ghostWick)
+            int ghostFade = int(math.round(50.0 + 30.0 * step / ghostBars))
+            color ghostColor = color.new(ghostClose >= ghostOpen ? ghostBull : ghostBear, ghostFade)
+            array.push(ghostDrawings, line.new(ghostX, ghostLow, ghostX, ghostHigh, xloc=xloc.bar_index, color=ghostColor, width=1))
+            // Thick vertical body stays centered on one future bar.
+            float ghostBodyTop = math.max(ghostOpen, ghostClose)
+            float ghostBodyBottom = math.min(ghostOpen, ghostClose)
+            if ghostBodyTop - ghostBodyBottom < syminfo.mintick
+                ghostBodyTop := ghostBodyBottom + syminfo.mintick
+            array.push(ghostDrawings, line.new(ghostX, ghostBodyBottom, ghostX, ghostBodyTop, xloc=xloc.bar_index, color=ghostColor, width=6))
+
+            // Heuristic range, not a statistical confidence interval.
+            float ghostSpread = ghostATR * math.sqrt(step)
+            float ghostNextUpper = ghostClose + ghostSpread
+            float ghostNextLower = math.max(syminfo.mintick, ghostClose - ghostSpread)
+            if ghostEnvelope
+                array.push(ghostDrawings, line.new(ghostX - 1, ghostUpper, ghostX, ghostNextUpper, xloc=xloc.bar_index, color=color.new(chart.fg_color, 75), style=line.style_dashed))
+                array.push(ghostDrawings, line.new(ghostX - 1, ghostLower, ghostX, ghostNextLower, xloc=xloc.bar_index, color=color.new(chart.fg_color, 75), style=line.style_dashed))
+            ghostUpper := ghostNextUpper
+            ghostLower := ghostNextLower
+            ghostPrevious := ghostClose
+
+        ghostCaption := label.new(ghostAnchor + ghostBars, ghostUpper + ghostATR * 0.3,
+             "GHOST SCENARIO · NOT A PREDICTION\nClosed-bar momentum · illustrative range",
+             xloc=xloc.bar_index, style=label.style_label_down,
+             color=color.new(chart.bg_color, 10), textcolor=chart.fg_color, size=size.small)
+
+// ============================================================================
+// MARKET STRUCTURE & ORDER BLOCKS - DISPLAY ONLY
+// Adapted from the user-supplied "Market Structure Break & Order Block",
+// short title "Jin Kurosaki". Swing origins are historical; recognition is later.
+// ============================================================================
+
+bool msbEnabled = input.bool(true, "Show structure and zones", group="Structure & order blocks")
+int msbLength = input.int(9, "Zigzag length", minval=2, maxval=100, group="Structure & order blocks")
+bool msbZigzag = input.bool(true, "Show confirmed zigzag", group="Structure & order blocks")
+float msbFactor = input.float(0.273, "Break confirmation factor", minval=0, maxval=1, step=0.001, group="Structure & order blocks")
+bool msbDeleteBroken = input.bool(true, "Delete broken zones", group="Structure & order blocks")
+int msbZoneLimit = input.int(40, "Maximum active zones", minval=4, maxval=60, group="Structure & order blocks")
+bool msbAlerts = input.bool(false, "Structure / zone alerts", group="Structure & order blocks")
+color msbBullColor = input.color(color.teal, "Bullish color", group="Structure & order blocks")
+color msbBearColor = input.color(color.orange, "Bearish color", group="Structure & order blocks")
+string msbTextSize = input.string(size.tiny, "Zone text size", options=[size.tiny, size.small, size.normal], group="Structure & order blocks")
+
+var array<float> msbHighs = array.new<float>()
+var array<int> msbHighBars = array.new<int>()
+var array<float> msbLows = array.new<float>()
+var array<int> msbLowBars = array.new<int>()
+var array<line> msbLines = array.new<line>()
+var array<label> msbLabels = array.new<label>()
+var array<box> msbZones = array.new<box>()
+var array<int> msbZoneSides = array.new<int>()
+var array<bool> msbInside = array.new<bool>()
+var array<box> msbArchived = array.new<box>()
+
+msbPoint(array<float> prices, array<int> bars, int offset) =>
+    int count = array.size(prices)
+    [count > offset ? array.get(prices, count - 1 - offset) : float(na),
+     count > offset ? array.get(bars, count - 1 - offset) : int(na)]
+
+msbDrawLine(int x1, float y1, int x2, float y2, color tint, int thickness) =>
+    if not na(x1) and not na(x2) and x1 >= bar_index - 4900 and x2 >= bar_index - 4900
+        array.push(msbLines, line.new(x1, y1, x2, y2, color=tint, width=thickness))
+        if array.size(msbLines) > 100
+            line.delete(array.shift(msbLines))
+    0
+
+// Search only a valid, ordered interval within the last 500 candles.
+// Return no zone when no qualifying candle exists (never reuse a stale candle).
+msbFindCandle(int startBar, int endBar, bool bearishCandle) =>
+    int result = na
+    if not na(startBar) and not na(endBar) and startBar <= endBar and endBar <= bar_index
+        int newest = math.max(0, bar_index - endBar)
+        int oldest = math.min(500, math.min(bar_index, bar_index - startBar))
+        if newest <= oldest
+            for offset = newest to oldest
+                if bearishCandle ? open[offset] > close[offset] : open[offset] < close[offset]
+                    result := offset
+                    break
+    result
+
+msbAddZone(int offset, int direction, string caption, color tint) =>
+    if not na(offset)
+        box zone = box.new(bar_index - offset, high[offset], bar_index + 10, low[offset],
+             bgcolor=color.new(tint, 88), border_color=color.new(tint, 35),
+             text=caption, text_color=chart.fg_color, text_halign=text.align_right, text_size=msbTextSize)
+        array.push(msbZones, zone)
+        array.push(msbZoneSides, direction)
+        array.push(msbInside, false)
+        if array.size(msbZones) > msbZoneLimit
+            box.delete(array.shift(msbZones))
+            array.shift(msbZoneSides)
+            array.shift(msbInside)
+    0
+
+bool msbToUp = high >= ta.highest(high, msbLength)
+bool msbToDown = low <= ta.lowest(low, msbLength)
+int msbSinceUp = ta.barssince(msbToUp[1])
+int msbSinceDown = ta.barssince(msbToDown[1])
+int msbLowWindow = math.min(4900, math.max(1, nz(msbSinceUp, 1)))
+int msbHighWindow = math.min(4900, math.max(1, nz(msbSinceDown, 1)))
+float msbLow = ta.lowest(low, msbLowWindow)
+float msbHigh = ta.highest(high, msbHighWindow)
+int msbLowIndex = bar_index - ta.barssince(msbLow == low)
+int msbHighIndex = bar_index - ta.barssince(msbHigh == high)
+var int msbTrend = 1
+int msbPreviousTrend = msbTrend
+if barstate.isconfirmed
+    msbTrend := msbTrend == 1 and msbToDown ? -1 : msbTrend == -1 and msbToUp ? 1 : msbTrend
+bool msbSwingChanged = msbTrend != msbPreviousTrend
+
+if msbSwingChanged
+    if msbTrend == 1
+        array.push(msbLows, msbLow)
+        array.push(msbLowBars, msbLowIndex)
+        if array.size(msbLows) > 5
+            array.shift(msbLows)
+            array.shift(msbLowBars)
+    else
+        array.push(msbHighs, msbHigh)
+        array.push(msbHighBars, msbHighIndex)
+        if array.size(msbHighs) > 5
+            array.shift(msbHighs)
+            array.shift(msbHighBars)
+
+[msbH0, msbH0i] = msbPoint(msbHighs, msbHighBars, 0)
+[msbH1, msbH1i] = msbPoint(msbHighs, msbHighBars, 1)
+[msbL0, msbL0i] = msbPoint(msbLows, msbLowBars, 0)
+[msbL1, msbL1i] = msbPoint(msbLows, msbLowBars, 1)
+
+if msbEnabled and msbZigzag and msbSwingChanged
+    msbDrawLine(msbH0i, msbH0, msbL0i, msbL0, color.new(chart.fg_color, 65), 1)
+
+var int msbMarket = 1
+var float msbLastLow = na
+var float msbLastHigh = na
+int msbPreviousMarket = msbMarket
+bool msbReady = not na(msbH1) and not na(msbL1)
+bool msbUsedSwing = (not na(msbLastLow) and msbLastLow == msbL0) or (not na(msbLastHigh) and msbLastHigh == msbH0)
+if barstate.isconfirmed and msbReady and not msbUsedSwing
+    msbMarket := msbMarket == 1 and msbL0 < msbL1 - math.abs(msbH0 - msbL1) * msbFactor ? -1 : msbMarket == -1 and msbH0 > msbH1 + math.abs(msbH1 - msbL0) * msbFactor ? 1 : msbMarket
+bool msbBreak = msbMarket != msbPreviousMarket
+
+if msbBreak
+    msbLastLow := msbL0
+    msbLastHigh := msbH0
+    if msbEnabled
+        color tint = msbMarket == 1 ? msbBullColor : msbBearColor
+        float level = msbMarket == 1 ? msbH1 : msbL1
+        int origin = msbMarket == 1 ? msbH1i : msbL1i
+        msbDrawLine(origin, level, bar_index, level, tint, 2)
+        // Label recognition now, not as a signal on a past swing candle.
+        array.push(msbLabels, label.new(bar_index, level, msbMarket == 1 ? "Bull MSB" : "Bear MSB",
+             color=color.new(tint, 85), textcolor=chart.fg_color,
+             style=msbMarket == 1 ? label.style_label_down : label.style_label_up, size=size.small))
+        if array.size(msbLabels) > 50
+            label.delete(array.shift(msbLabels))
+        if msbMarket == 1
+            msbAddZone(msbFindCandle(msbH1i, msbL0i[msbLength], true), 1, "Bu-OB", tint)
+            msbAddZone(msbFindCandle(msbL1i - msbLength, msbH1i, false), 1, msbL0 < msbL1 ? "Bu-BB" : "Bu-MB", tint)
+        else
+            msbAddZone(msbFindCandle(msbL1i, msbH0i[msbLength], false), -1, "Be-OB", tint)
+            msbAddZone(msbFindCandle(msbH1i - msbLength, msbL1i, true), -1, msbH0 > msbH1 ? "Be-BB" : "Be-MB", tint)
+        if msbAlerts
+            alert(msbMarket == 1 ? "Bullish MSB confirmed (visual overlay)" : "Bearish MSB confirmed (visual overlay)", alert.freq_once_per_bar_close)
+
+// Iterate backwards and remove the exact invalidated zone, not the first box.
+if msbEnabled and barstate.isconfirmed and array.size(msbZones) > 0
+    int zoneIndex = array.size(msbZones) - 1
+    while zoneIndex >= 0
+        box zone = array.get(msbZones, zoneIndex)
+        int direction = array.get(msbZoneSides, zoneIndex)
+        float top = box.get_top(zone)
+        float bottom = box.get_bottom(zone)
+        bool broken = direction == 1 ? close < bottom : close > top
+        bool inside = close >= bottom and close <= top
+        if broken
+            box.set_right(zone, bar_index)
+            if msbDeleteBroken
+                box.delete(zone)
+            else
+                box.set_bgcolor(zone, color.new(chart.fg_color, 95))
+                box.set_border_color(zone, color.new(chart.fg_color, 85))
+                box.set_text(zone, box.get_text(zone) + " · broken")
+                array.push(msbArchived, zone)
+                if array.size(msbArchived) > 60
+                    box.delete(array.shift(msbArchived))
+            array.remove(msbZones, zoneIndex)
+            array.remove(msbZoneSides, zoneIndex)
+            array.remove(msbInside, zoneIndex)
+        else
+            box.set_right(zone, bar_index + 10)
+            if msbAlerts and inside and not array.get(msbInside, zoneIndex)
+                alert("Price entered " + box.get_text(zone) + " (visual overlay)", alert.freq_once_per_bar_close)
+            array.set(msbInside, zoneIndex, inside)
+        zoneIndex -= 1

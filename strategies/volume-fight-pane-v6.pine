@@ -1,0 +1,71 @@
+//@version=6
+indicator("Volume Fight · Community adaptation", shorttitle="Volume Fight", overlay=false, max_bars_back=1000)
+
+// ============================================================================
+// VOLUME FIGHT - COMMUNITY SCRIPT ADAPTATION
+// Credit: "Volume fight", online community script supplied by the user.
+// Original author, source URL and license were not provided; attribution unverified.
+// English wording, Pine v6 compatibility and safety integration added here.
+// Candle-derived volume estimate, not measured buyer/seller order-flow delta.
+// Visual only: never changes the XAU strategy's orders or risk.
+// ============================================================================
+
+bool vfEnabled = input.bool(true, "Show Volume Fight", group="Volume Fight")
+int vfLength = input.int(24, "Lookback bars", minval=1, maxval=500, group="Volume Fight",
+     tooltip="Number of candles used to compare bullish and bearish volume estimates. A longer lookback smooths short-term changes but reacts more slowly.")
+float vfFlatPercent = input.float(15.0, "Neutral-zone threshold (%)", minval=0, maxval=100, step=0.5, group="Volume Fight",
+     tooltip="How much one volume estimate must dominate before a bullish or bearish zone is shown. Higher values create more neutral readings. Zero is most sensitive; 50% or more suppresses directional zones with this formula.")
+bool vfBackground = input.bool(false, "Show background zones", group="Volume Fight",
+     tooltip="Shade bullish zones green and bearish zones red. Neutral zones have no background.")
+bool vfResetNeutral = input.bool(false, "Allow a new signal after a neutral zone", group="Volume Fight",
+     tooltip="Off: another signal requires the opposite directional zone first. On: a neutral zone also resets the signal, allowing a fresh same-direction signal. This does not signal on every candle.")
+bool vfAlerts = input.bool(false, "Volume Fight alerts", group="Volume Fight")
+
+bool vfHasVolume = not na(volume) and volume > 0
+float vfRange = high - low
+// Flat candles split evenly instead of dividing by zero.
+float vfBullVolume = vfHasVolume ? (close > open ? volume : vfRange > 0 ? volume * math.max(0.0, math.min(1.0, (high - open) / vfRange)) : volume * 0.5) : na
+float vfBearVolume = vfHasVolume ? (open > close ? volume : vfRange > 0 ? volume * math.max(0.0, math.min(1.0, (open - low) / vfRange)) : volume * 0.5) : na
+// Preserve the supplied VWMA weighting, even though its inputs already use volume.
+float vfAverageBull = ta.vwma(vfBullVolume, vfLength)
+float vfAverageBear = ta.vwma(vfBearVolume, vfLength)
+float vfNormalized = vfHasVolume ? (vfAverageBull - vfAverageBear) / volume : na
+float vfDifference = ta.sma(vfNormalized, vfLength)
+float vfFlat = math.abs(vfAverageBull + vfAverageBear) / 2.0
+// Require a complete valid window for both smoothing stages; no stale readings
+// after zero/missing volume, even though moving averages can skip na samples.
+float vfWindowValid = ta.lowest(vfHasVolume ? 1.0 : 0.0, 2 * vfLength - 1)
+bool vfReady = bar_index >= 2 * vfLength - 2 and vfWindowValid == 1 and not na(vfDifference)
+bool vfBull = vfReady and vfAverageBull > vfAverageBear and vfAverageBull > 0 and vfFlat / vfAverageBull < 1.0 - vfFlatPercent / 100.0
+bool vfBear = vfReady and vfAverageBear > vfAverageBull and vfAverageBear > 0 and vfFlat / vfAverageBear < 1.0 - vfFlatPercent / 100.0
+
+var int vfUp = 0
+var int vfDown = 0
+if barstate.isconfirmed
+    if not vfReady
+        vfUp := 0
+        vfDown := 0
+    else if vfBull
+        vfUp += 1
+        vfDown := 0
+    else if vfBear
+        vfDown += 1
+        vfUp := 0
+    else if vfResetNeutral
+        vfUp := 0
+        vfDown := 0
+
+bool vfBuy = vfEnabled and barstate.isconfirmed and vfBull and vfUp == 1
+bool vfSell = vfEnabled and barstate.isconfirmed and vfBear and vfDown == 1
+color vfColor = vfBull ? color.green : vfBear ? color.red : color.new(color.gray, 50)
+
+plotshape(vfBuy, title="UP", location=location.bottom, style=shape.triangleup, color=color.green, size=size.tiny)
+plotshape(vfSell, title="DOWN", location=location.top, style=shape.triangledown, color=color.red, size=size.tiny)
+bgcolor(vfEnabled and vfBackground and vfReady ? (vfBull ? color.new(color.green, 85) : vfBear ? color.new(color.red, 85) : na) : na, title="Volume Fight zones")
+plot(vfEnabled and vfReady ? vfDifference : na, title="Volume difference", style=plot.style_area, color=vfColor)
+hline(0, "Neutral baseline", color=color.new(chart.fg_color, 70))
+alertcondition(vfAlerts and vfBuy, title="UP", message="Volume Fight: bullish volume estimate · {{exchange}}:{{ticker}}")
+alertcondition(vfAlerts and vfSell, title="DOWN", message="Volume Fight: bearish volume estimate · {{exchange}}:{{ticker}}")
+var table vfStatus = table.new(position.top_right, 1, 1)
+if barstate.islast
+    table.cell(vfStatus, 0, 0, vfEnabled and not vfReady ? "Volume unavailable or warming up" : "", text_color=chart.fg_color, bgcolor=color.new(chart.bg_color, 20))
