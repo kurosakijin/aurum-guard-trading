@@ -1885,6 +1885,7 @@ var array<label> msbLabels = array.new<label>()
 var array<box> msbZones = array.new<box>()
 var array<int> msbZoneSides = array.new<int>()
 var array<bool> msbInside = array.new<bool>()
+var array<string> msbZoneNames = array.new<string>()
 var array<box> msbArchived = array.new<box>()
 
 msbPoint(array<float> prices, array<int> bars, int offset) =>
@@ -1921,10 +1922,12 @@ msbAddZone(int offset, int direction, string caption, color tint) =>
         array.push(msbZones, zone)
         array.push(msbZoneSides, direction)
         array.push(msbInside, false)
+        array.push(msbZoneNames, caption)
         if array.size(msbZones) > msbZoneLimit
             box.delete(array.shift(msbZones))
             array.shift(msbZoneSides)
             array.shift(msbInside)
+            array.shift(msbZoneNames)
     0
 
 bool msbToUp = high >= ta.highest(high, msbLength)
@@ -2015,17 +2018,18 @@ if msbEnabled and barstate.isconfirmed and array.size(msbZones) > 0
             else
                 box.set_bgcolor(zone, color.new(chart.fg_color, 95))
                 box.set_border_color(zone, color.new(chart.fg_color, 85))
-                box.set_text(zone, box.get_text(zone) + " · broken")
+                box.set_text(zone, array.get(msbZoneNames, zoneIndex) + " · broken")
                 array.push(msbArchived, zone)
                 if array.size(msbArchived) > 60
                     box.delete(array.shift(msbArchived))
             array.remove(msbZones, zoneIndex)
             array.remove(msbZoneSides, zoneIndex)
             array.remove(msbInside, zoneIndex)
+            array.remove(msbZoneNames, zoneIndex)
         else
             box.set_right(zone, bar_index + 10)
             if msbAlerts and inside and not array.get(msbInside, zoneIndex)
-                alert("Price entered " + box.get_text(zone) + " (visual overlay)", alert.freq_once_per_bar_close)
+                alert("Price entered " + array.get(msbZoneNames, zoneIndex) + " (visual overlay)", alert.freq_once_per_bar_close)
             array.set(msbInside, zoneIndex, inside)
         zoneIndex -= 1
 

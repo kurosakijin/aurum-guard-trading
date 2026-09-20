@@ -19,3 +19,9 @@ test('browser source uses canonical Pine file and preserves legacy tabs', () => 
   assert.ok(page.includes("pineScriptView === 'confluence' && <ConfluencePine />"));
   for (const name of ['delivery', 'structure', 'volume', 'combined']) assert.ok(page.includes(`pineScriptView === '${name}'`));
 });
+
+test('zone captions use synchronized metadata rather than unsupported box.get_text', () => {
+  const source = read('strategies/asheparte-confluence-v1.pine');
+  assert.doesNotMatch(source, /box\.get_text\s*\(/);
+  for (const expression of ['array.push(msbZoneNames, caption)', 'array.shift(msbZoneNames)', 'array.remove(msbZoneNames, zoneIndex)', 'array.get(msbZoneNames, zoneIndex)']) assert.ok(source.includes(expression));
+});
