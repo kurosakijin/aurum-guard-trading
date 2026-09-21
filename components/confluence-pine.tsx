@@ -44,7 +44,7 @@ export function ConfluencePine() {
       <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm leading-6">
         <p>Defaults: Fib factor 0.273 · white SMA 200 · PSAR dots and state filling off · forecast 7 / 100 · Volume Fight 24 / 15%.</p>
         <p className="mt-2">Paste the complete script into TradingView’s Pine Editor on a standard 5-minute XAUUSD chart. Match commissions, slippage and other backtest settings. The chart title should read “Asheparte Confluence v1”.</p>
-        <p className="mt-2">Overlays do not add entry requirements or change exits. Forecast candles replay a historical color-pattern example—not a guaranteed prediction. The optional Volume Fight graph uses a separate lower-pane indicator.</p>
+        <p className="mt-2">Each confirmed PSAR Buy/Sell attaches a visual position plan: entry at the signal close, one stop at its PSAR value, and three labeled targets—TP1 at 1R, TP2 at 2R, TP3 at 3R. These boxes do not place orders or alter Strategy Tester trades. Overlays do not add entry requirements or change exits. Forecast candles replay a historical color-pattern example—not a guaranteed prediction. The optional Volume Fight graph uses a separate lower-pane indicator.</p>
       </div>
       <p className="text-sm text-muted-foreground">Validation: local source checks passed; TradingView compilation and performance remain unverified. No win-rate or profit guarantee.</p>
       <details className="rounded-lg border border-border">

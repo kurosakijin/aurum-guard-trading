@@ -2150,3 +2150,63 @@ plot(vfEnabled and vfReady ? vfDifference : na, title="Volume Fight difference (
 plot(vfEnabled ? (vfReady ? 1 : 0) : na, title="Volume Fight data ready (1=yes)", display=display.data_window)
 if vfAlerts and (vfBuy or vfSell)
     alert("Volume Fight " + (vfBuy ? "UP · bullish volume estimate" : "DOWN · bearish volume estimate") + " · " + syminfo.tickerid + " · not a strategy entry", alert.freq_once_per_bar_close)
+
+// ============================================================================
+// PSAR ATTACHED THREE-TARGET POSITION PLANS - VISUAL ONLY
+// Same confirmed candle as the PSAR label, without extra indicator conditions.
+// Fixed levels: candle close entry, signal PSAR stop, TP1/TP2/TP3 at 1R/2R/3R.
+// Boxes are plans, not executed trades or evidence that either exit was filled.
+// ============================================================================
+bool psarPlans = input.bool(true, "Attach TP1 / TP2 / TP3 position to PSAR signals", group="PSAR · Position plan")
+int psarPlanWidth = input.int(12, "Position box width (bars)", minval=1, maxval=100, group="PSAR · Position plan")
+int psarPlanHistory = input.int(3, "Recent position plans", minval=1, maxval=12, group="PSAR · Position plan")
+var array<box> psarRiskBoxes = array.new<box>()
+var array<box> psarRewardBoxes = array.new<box>()
+var array<line> psarEntryLines = array.new<line>()
+var array<line> psarTargetLines = array.new<line>()
+var array<label> psarTargetLabels = array.new<label>()
+var array<label> psarPlanLabels = array.new<label>()
+var int psarLastPlanBar = na
+
+if psarEnabled and psarPlans and (psarBuy or psarSell) and (na(psarLastPlanBar) or psarLastPlanBar != bar_index)
+    float planEntry = math.round_to_mintick(close)
+    float planStop = math.round_to_mintick(psarValue)
+    int planDirection = psarBuy ? 1 : -1
+    float planRisk = (planEntry - planStop) * planDirection
+    float planTP1 = math.round_to_mintick(planEntry + planDirection * planRisk)
+    float planTP2 = math.round_to_mintick(planEntry + planDirection * planRisk * 2.0)
+    float planTarget = math.round_to_mintick(planEntry + planDirection * planRisk * 3.0)
+    if planRisk > 0 and planTarget > 0
+        // Remove oldest complete plan before allocating new drawings.
+        while array.size(psarRiskBoxes) >= psarPlanHistory
+            box.delete(array.shift(psarRiskBoxes))
+            box.delete(array.shift(psarRewardBoxes))
+            line.delete(array.shift(psarEntryLines))
+            label.delete(array.shift(psarPlanLabels))
+            for targetIndex = 1 to 3
+                line.delete(array.shift(psarTargetLines))
+                label.delete(array.shift(psarTargetLabels))
+        int planRight = bar_index + psarPlanWidth
+        array.push(psarRiskBoxes, box.new(bar_index, math.max(planEntry, planStop), planRight, math.min(planEntry, planStop),
+             border_color=color.new(color.red, 35), bgcolor=color.new(color.red, 85),
+             text="SL · 1R", text_color=chart.fg_color, text_size=size.tiny, text_halign=text.align_right))
+        array.push(psarRewardBoxes, box.new(bar_index, math.max(planEntry, planTarget), planRight, math.min(planEntry, planTarget),
+             border_color=color.new(color.teal, 35), bgcolor=color.new(color.teal, 85),
+             text="", text_color=chart.fg_color, text_size=size.tiny, text_halign=text.align_right))
+        array.push(psarEntryLines, line.new(bar_index, planEntry, planRight, planEntry, color=chart.fg_color, style=line.style_dashed))
+        for targetIndex = 1 to 3
+            float targetPrice = targetIndex == 1 ? planTP1 : targetIndex == 2 ? planTP2 : planTarget
+            array.push(psarTargetLines, line.new(bar_index, targetPrice, planRight, targetPrice,
+                 color=color.teal, style=targetIndex == 3 ? line.style_solid : line.style_dashed))
+            array.push(psarTargetLabels, label.new(planRight, targetPrice,
+                 "TP" + str.tostring(targetIndex) + " · " + str.tostring(targetIndex) + "R · " + str.tostring(targetPrice, format.mintick),
+                 style=label.style_label_left, color=color.new(chart.bg_color, 15), textcolor=chart.fg_color, size=size.tiny))
+        array.push(psarPlanLabels, label.new(planRight, planEntry,
+             (psarBuy ? "PSAR LONG" : "PSAR SHORT") +
+             "\nEntry " + str.tostring(planEntry, format.mintick) +
+             "\nSL " + str.tostring(planStop, format.mintick) +
+             "\nTP1 " + str.tostring(planTP1, format.mintick) +
+             "\nTP2 " + str.tostring(planTP2, format.mintick) +
+             "\nTP3 " + str.tostring(planTarget, format.mintick) + "\nVisual plan",
+             style=label.style_label_left, color=color.new(chart.bg_color, 15), textcolor=chart.fg_color, size=size.small))
+        psarLastPlanBar := bar_index

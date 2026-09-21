@@ -2,6 +2,8 @@
 
 ## Website release: Asheparte Confluence v1
 
+PSAR labels now attach visual three-target position plans on the same confirmed signal candle, with no additional SMA/MSB/volume prerequisites. Entry is signal close; one shared stop is that candle's PSAR value; TP1, TP2 and TP3 are entry ± 1R, 2R and 3R, rounded to the symbol tick. Each target has its own line and price label. Invalid zero-risk/nonpositive-target plans are skipped. Levels stay fixed and are not trailed. Boxes extend 12 bars by default; this is drawing width, not a timed exit. The latest three plans are retained (configurable 1–12). These drawings are not executed trades or win/loss measurements and do not change Strategy Tester orders or results; no partial-close allocation has been added. Existing PSAR dots and state-fill defaults remain off.
+
 `asheparte-confluence-v1.pine` is the named v1 release of the V2.6.6 combination. Only the title/header and alert branding changed; trading logic and settings remain identical. The website's default Pine tab imports this exact file, with copy/download actions and a separate Volume Fight pane download. Older tabs remain available. Credits and validation limitations are visible in the UI. Local website integration does not constitute Vercel publication or TradingView compilation.
 
 ## Volume Fight integration
