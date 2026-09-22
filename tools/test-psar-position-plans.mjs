@@ -14,9 +14,17 @@ test('plans use the same PSAR reversal with no additional entry filters', () => 
   assert.ok(module.includes('planRisk > 0 and planTarget > 0'));
 });
 test('drawings are bounded, synchronized and deduplicated per bar', () => {
+  assert.ok(module.includes('input.int(1, "Recent position plans"'));
+  assert.ok(module.includes('planRight + (targetIndex - 1) * psarLabelSpacing'));
+  assert.ok(module.includes('label.new(targetLabelX, targetPrice,'));
+  assert.ok(module.includes('table.new(position.bottom_right, 1, 1)'));
+  assert.ok(source.includes('text="BUY"'));
+  assert.ok(source.includes('text="SELL"'));
+  assert.ok(module.includes('table.clear(psarPlanPanel, 0, 0, 0, 0)'));
+  assert.doesNotMatch(module, /psarPlanLabels|label.new\(planRight.*planEntry/);
   assert.ok(module.includes('psarLastPlanBar != bar_index'));
   assert.ok(module.includes('minval=1, maxval=12'));
-  for (const name of ['psarRiskBoxes', 'psarRewardBoxes', 'psarEntryLines', 'psarPlanLabels', 'psarTargetLines', 'psarTargetLabels']) assert.ok(module.includes(`array.shift(${name})`));
+  for (const name of ['psarRiskBoxes', 'psarRewardBoxes', 'psarEntryLines', 'psarTargetLines', 'psarTargetLabels']) assert.ok(module.includes(`array.shift(${name})`));
   // Structure zones + forecast event boxes + position plans.
   assert.ok(120 + 3 + 2 * 12 <= 150);
   assert.ok(100 + 333 + 4 * 12 <= 500);

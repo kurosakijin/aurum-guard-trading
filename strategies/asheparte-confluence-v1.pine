@@ -1987,17 +1987,17 @@ if msbBreak
         int origin = msbMarket == 1 ? msbH1i : msbL1i
         msbDrawLine(origin, level, bar_index, level, tint, 2)
         // Label recognition now, not as a signal on a past swing candle.
-        array.push(msbLabels, label.new(bar_index, level, msbMarket == 1 ? "Bull MSB" : "Bear MSB",
+        array.push(msbLabels, label.new(bar_index, level, msbMarket == 1 ? "Bullish Market Structure Break" : "Bearish Market Structure Break",
              color=color.new(tint, 85), textcolor=chart.fg_color,
              style=msbMarket == 1 ? label.style_label_down : label.style_label_up, size=size.small))
         if array.size(msbLabels) > 50
             label.delete(array.shift(msbLabels))
         if msbMarket == 1
-            msbAddZone(msbFindCandle(msbH1i, msbL0i[msbLength], true), 1, "Bu-OB", tint)
-            msbAddZone(msbFindCandle(msbL1i - msbLength, msbH1i, false), 1, msbL0 < msbL1 ? "Bu-BB" : "Bu-MB", tint)
+            msbAddZone(msbFindCandle(msbH1i, msbL0i[msbLength], true), 1, "Bullish Order Block", tint)
+            msbAddZone(msbFindCandle(msbL1i - msbLength, msbH1i, false), 1, msbL0 < msbL1 ? "Bullish Breaker Block" : "Bullish Mitigation Block", tint)
         else
-            msbAddZone(msbFindCandle(msbL1i, msbH0i[msbLength], false), -1, "Be-OB", tint)
-            msbAddZone(msbFindCandle(msbH1i - msbLength, msbL1i, true), -1, msbH0 > msbH1 ? "Be-BB" : "Be-MB", tint)
+            msbAddZone(msbFindCandle(msbL1i, msbH0i[msbLength], false), -1, "Bearish Order Block", tint)
+            msbAddZone(msbFindCandle(msbH1i - msbLength, msbL1i, true), -1, msbH0 > msbH1 ? "Bearish Breaker Block" : "Bearish Mitigation Block", tint)
         if msbAlerts
             alert(msbMarket == 1 ? "Bullish MSB confirmed (visual overlay)" : "Bearish MSB confirmed (visual overlay)", alert.freq_once_per_bar_close)
 
@@ -2061,11 +2061,11 @@ bool psarBuy = barstate.isconfirmed and not na(psarValue[1]) and psarDirection =
 bool psarSell = barstate.isconfirmed and not na(psarValue[1]) and psarDirection == -1 and psarDirection[1] == 1
 plotshape(psarEnabled and psarBuy and psarHighlightStarts ? psarValue : na, title="PSAR Long Start",
      location=location.absolute, style=shape.circle, size=size.tiny, color=color.green)
-plotshape(psarEnabled and psarBuy and psarShowLabels ? psarValue : na, title="PSAR Buy Label", text="PSAR Buy",
+plotshape(psarEnabled and psarBuy and psarShowLabels ? psarValue : na, title="PSAR Buy Label", text="BUY",
      location=location.absolute, style=shape.labelup, size=size.tiny, color=color.green, textcolor=color.white)
 plotshape(psarEnabled and psarSell and psarHighlightStarts ? psarValue : na, title="PSAR Short Start",
      location=location.absolute, style=shape.circle, size=size.tiny, color=color.red)
-plotshape(psarEnabled and psarSell and psarShowLabels ? psarValue : na, title="PSAR Sell Label", text="PSAR Sell",
+plotshape(psarEnabled and psarSell and psarShowLabels ? psarValue : na, title="PSAR Sell Label", text="SELL",
      location=location.absolute, style=shape.labeldown, size=size.tiny, color=color.red, textcolor=color.white)
 
 psarMiddle = plot(psarEnabled ? ohlc4 : na, title="PSAR midpoint", display=display.none, editable=false)
@@ -2142,8 +2142,8 @@ bool vfBuy = vfEnabled and barstate.isconfirmed and vfBull and vfUp == 1
 bool vfSell = vfEnabled and barstate.isconfirmed and vfBear and vfDown == 1
 color vfColor = vfBull ? color.green : vfBear ? color.red : color.new(color.gray, 50)
 
-plotshape(vfBuy, title="Volume Fight UP", text="VF", location=location.belowbar, style=shape.triangleup, color=color.green, size=size.tiny)
-plotshape(vfSell, title="Volume Fight DOWN", text="VF", location=location.abovebar, style=shape.triangledown, color=color.red, size=size.tiny)
+plotshape(vfBuy, title="Volume Fight UP", text="Volume Fight", location=location.belowbar, style=shape.triangleup, color=color.green, size=size.tiny)
+plotshape(vfSell, title="Volume Fight DOWN", text="Volume Fight", location=location.abovebar, style=shape.triangledown, color=color.red, size=size.tiny)
 bgcolor(vfEnabled and vfBackground and vfReady ? (vfBull ? color.new(color.green, 85) : vfBear ? color.new(color.red, 85) : na) : na, title="Volume Fight zones")
 // Keep normalized volume off the price scale; use companion for the area graph.
 plot(vfEnabled and vfReady ? vfDifference : na, title="Volume Fight difference (Data Window)", color=vfColor, display=display.data_window)
@@ -2159,13 +2159,15 @@ if vfAlerts and (vfBuy or vfSell)
 // ============================================================================
 bool psarPlans = input.bool(true, "Attach TP1 / TP2 / TP3 position to PSAR signals", group="PSAR · Position plan")
 int psarPlanWidth = input.int(12, "Position box width (bars)", minval=1, maxval=100, group="PSAR · Position plan")
-int psarPlanHistory = input.int(3, "Recent position plans", minval=1, maxval=12, group="PSAR · Position plan")
+int psarPlanHistory = input.int(1, "Recent position plans", minval=1, maxval=12, group="PSAR · Position plan", tooltip="One keeps the latest plan readable. Higher values retain overlapping historical plans.")
+int psarLabelSpacing = input.int(8, "Target label spacing (bars)", minval=4, maxval=30, group="PSAR · Position plan", tooltip="Staggers target labels horizontally when price levels are close. Does not change entry, stop or target prices.")
 var array<box> psarRiskBoxes = array.new<box>()
 var array<box> psarRewardBoxes = array.new<box>()
 var array<line> psarEntryLines = array.new<line>()
 var array<line> psarTargetLines = array.new<line>()
 var array<label> psarTargetLabels = array.new<label>()
-var array<label> psarPlanLabels = array.new<label>()
+var table psarPlanPanel = table.new(position.bottom_right, 1, 1)
+var string psarPlanSummary = ""
 var int psarLastPlanBar = na
 
 if psarEnabled and psarPlans and (psarBuy or psarSell) and (na(psarLastPlanBar) or psarLastPlanBar != bar_index)
@@ -2182,31 +2184,38 @@ if psarEnabled and psarPlans and (psarBuy or psarSell) and (na(psarLastPlanBar) 
             box.delete(array.shift(psarRiskBoxes))
             box.delete(array.shift(psarRewardBoxes))
             line.delete(array.shift(psarEntryLines))
-            label.delete(array.shift(psarPlanLabels))
             for targetIndex = 1 to 3
                 line.delete(array.shift(psarTargetLines))
                 label.delete(array.shift(psarTargetLabels))
         int planRight = bar_index + psarPlanWidth
         array.push(psarRiskBoxes, box.new(bar_index, math.max(planEntry, planStop), planRight, math.min(planEntry, planStop),
              border_color=color.new(color.red, 35), bgcolor=color.new(color.red, 85),
-             text="SL · 1R", text_color=chart.fg_color, text_size=size.tiny, text_halign=text.align_right))
+             text="", text_color=chart.fg_color, text_size=size.tiny, text_halign=text.align_right))
         array.push(psarRewardBoxes, box.new(bar_index, math.max(planEntry, planTarget), planRight, math.min(planEntry, planTarget),
              border_color=color.new(color.teal, 35), bgcolor=color.new(color.teal, 85),
              text="", text_color=chart.fg_color, text_size=size.tiny, text_halign=text.align_right))
         array.push(psarEntryLines, line.new(bar_index, planEntry, planRight, planEntry, color=chart.fg_color, style=line.style_dashed))
         for targetIndex = 1 to 3
             float targetPrice = targetIndex == 1 ? planTP1 : targetIndex == 2 ? planTP2 : planTarget
-            array.push(psarTargetLines, line.new(bar_index, targetPrice, planRight, targetPrice,
+            int targetLabelX = planRight + (targetIndex - 1) * psarLabelSpacing
+            array.push(psarTargetLines, line.new(bar_index, targetPrice, targetLabelX, targetPrice,
                  color=color.teal, style=targetIndex == 3 ? line.style_solid : line.style_dashed))
-            array.push(psarTargetLabels, label.new(planRight, targetPrice,
+            array.push(psarTargetLabels, label.new(targetLabelX, targetPrice,
                  "TP" + str.tostring(targetIndex) + " · " + str.tostring(targetIndex) + "R · " + str.tostring(targetPrice, format.mintick),
                  style=label.style_label_left, color=color.new(chart.bg_color, 15), textcolor=chart.fg_color, size=size.tiny))
-        array.push(psarPlanLabels, label.new(planRight, planEntry,
-             (psarBuy ? "PSAR LONG" : "PSAR SHORT") +
+        // Store the latest plan for a viewport-fixed panel, not a price label.
+        psarPlanSummary := (psarBuy ? "BUY · LONG" : "SELL · SHORT") +
              "\nEntry " + str.tostring(planEntry, format.mintick) +
              "\nSL " + str.tostring(planStop, format.mintick) +
              "\nTP1 " + str.tostring(planTP1, format.mintick) +
              "\nTP2 " + str.tostring(planTP2, format.mintick) +
-             "\nTP3 " + str.tostring(planTarget, format.mintick) + "\nVisual plan",
-             style=label.style_label_left, color=color.new(chart.bg_color, 15), textcolor=chart.fg_color, size=size.small))
+             "\nTP3 " + str.tostring(planTarget, format.mintick) +
+             "\nRisk " + str.tostring(planRisk, format.mintick) + "\nLatest visual plan"
         psarLastPlanBar := bar_index
+
+if barstate.islast or barstate.islastconfirmedhistory
+    if psarEnabled and psarPlans and psarPlanSummary != ""
+        table.cell(psarPlanPanel, 0, 0, psarPlanSummary, text_halign=text.align_left,
+             text_size=size.small, text_color=chart.fg_color, bgcolor=color.new(chart.bg_color, 10))
+    else
+        table.clear(psarPlanPanel, 0, 0, 0, 0)

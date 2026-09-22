@@ -7,7 +7,13 @@ test('v1 base only changes product naming, not strategy behavior', () => {
   const expected = prior.replace('XAU A+ Strategy V2.6.6 ALL-IN-ONE + VOLUME FIGHT', 'Asheparte Confluence v1')
     .replace('// XAU A+ V2.6.1 FILL AUDIT', '// Asheparte Confluence v1 — based on the supplied XAU A+ strategy')
     .replaceAll('"XAU V2.6 BUY | ', '"Asheparte Confluence v1 BUY | ')
-    .replaceAll('"XAU V2.6 SELL | ', '"Asheparte Confluence v1 SELL | ');
+    .replaceAll('"XAU V2.6 SELL | ', '"Asheparte Confluence v1 SELL | ')
+    .replaceAll('"Bu-OB"', '"Bullish Order Block"').replaceAll('"Be-OB"', '"Bearish Order Block"')
+    .replaceAll('"Bu-BB"', '"Bullish Breaker Block"').replaceAll('"Be-BB"', '"Bearish Breaker Block"')
+    .replaceAll('"Bu-MB"', '"Bullish Mitigation Block"').replaceAll('"Be-MB"', '"Bearish Mitigation Block"')
+    .replaceAll('text="PSAR Buy"', 'text="BUY"').replaceAll('text="PSAR Sell"', 'text="SELL"')
+    .replaceAll('"Bull MSB"', '"Bullish Market Structure Break"').replaceAll('"Bear MSB"', '"Bearish Market Structure Break"')
+    .replaceAll('text="VF"', 'text="Volume Fight"');
   const actual = read('strategies/asheparte-confluence-v1.pine').split('// ============================================================================\n// PSAR ATTACHED THREE-TARGET POSITION PLANS')[0];
   assert.equal(actual.trimEnd(), expected.trimEnd());
 });
