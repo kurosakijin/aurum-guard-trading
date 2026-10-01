@@ -4,7 +4,7 @@
 //|   Analysis only: never opens, modifies, or closes positions.     |
 //+------------------------------------------------------------------+
 #property copyright "Asheparte AI"
-#property version   "3.28"
+#property version   "3.29"
 #property strict
 #property description "Asheparte AI analysis-only EA: POC, engulfing/delivery-state confirmation, Gold/Silver sync, MTF direction and manual guidance. Never trades."
 
@@ -1867,7 +1867,7 @@ bool BeginSignalRecord(const datetime bar,const int direction,const double entry
                        const double tp1,const double tp2,const double tp3)
   {
    string record=StringFormat(
-      "{\"schema\":1,\"type\":\"CREATED\",\"eventId\":%s,\"planId\":%s,\"version\":\"3.28\",\"recordedAt\":%I64d,"
+      "{\"schema\":1,\"type\":\"CREATED\",\"eventId\":%s,\"planId\":%s,\"version\":\"3.29\",\"recordedAt\":%I64d,"
       "\"symbol\":%s,\"timeframe\":%s,\"strategy\":%s,\"direction\":%d,\"entry\":%.10f,\"stop\":%.10f,"
       "\"tp1\":%.10f,\"tp2\":%.10f,\"tp3\":%.10f,\"ruleScore\":%d,\"mtfScore\":%d,\"aiOpinion\":%s,\"explanation\":%s}",
       JournalJsonString(SignalPlanId(bar)+"/CREATED"),JournalJsonString(SignalPlanId(bar)),(long)TimeGMT()*1000,
@@ -2947,7 +2947,7 @@ void DrawAnalysisPanel()
 
    PanelRectangle("FOOTER",x,y+524,PanelWidth,31,header,C'52,57,67');
    PanelLabel("FOOT_LEFT","ANALYSIS ONLY · NO ORDERS",x+10,y+533,good,PanelFontSize);
-    PanelLabel("FOOT_RIGHT","v3.28",right,y+533,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
+    PanelLabel("FOOT_RIGHT","v3.29",right,y+533,muted,PanelFontSize,ANCHOR_RIGHT_UPPER);
   }
 
 void UpdateChartPanel()
@@ -3017,8 +3017,9 @@ string JournalJsonString(const string value)
 
 bool IsJournalTradeDeal(const ENUM_DEAL_TYPE dealType)
   {
-   // Deposits, withdrawals, credits and corrections are intentionally excluded.
-   return dealType==DEAL_TYPE_BUY || dealType==DEAL_TYPE_SELL;
+   // Balance movements are synced for journal funding totals, but remain separate from trade P/L.
+   // Credits, bonuses, corrections and charges are intentionally excluded.
+   return dealType==DEAL_TYPE_BUY || dealType==DEAL_TYPE_SELL || dealType==DEAL_TYPE_BALANCE;
   }
 
 string JournalDealJson(const ulong ticket)
@@ -3063,7 +3064,7 @@ bool JournalPostPayload(const string payload)
 
    const string headers="Content-Type: application/json\r\n"+
                         "X-Asheparte-Bridge-Token: "+JournalBridgeToken+"\r\n"+
-                        "X-Asheparte-Bridge-Version: combined-3.28\r\n";
+                        "X-Asheparte-Bridge-Version: combined-3.29\r\n";
    ResetLastError();
    const int status=WebRequest("POST",journalUrl,headers,1500,
                                requestData,responseData,responseHeaders);
@@ -3270,8 +3271,8 @@ int OnInit()
     // from an earlier localhost or user connection on the same MT5 account.
     const int tokenLength=StringLen(JournalBridgeToken);
     const string tokenScope=tokenLength>8 ? StringSubstr(JournalBridgeToken,tokenLength-8) : JournalBridgeToken;
-    g_journalTimeKey="Asheparte327Time_"+IntegerToString(journalLogin)+"_"+tokenScope;
-    g_journalTicketKey="Asheparte327Ticket_"+IntegerToString(journalLogin)+"_"+tokenScope;
+    g_journalTimeKey="Asheparte329Time_"+IntegerToString(journalLogin)+"_"+tokenScope;
+    g_journalTicketKey="Asheparte329Ticket_"+IntegerToString(journalLogin)+"_"+tokenScope;
     ApplyAurumChartTheme();
     ChartSetInteger(0,CHART_EVENT_OBJECT_DELETE,true);
     if(!SymbolSelect(g_symbol,true))

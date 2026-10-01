@@ -39,9 +39,9 @@ export function SignalJournal() {
       </div>
     </div>
     <input ref={input} className="sr-only" type="file" accept=".jsonl" multiple aria-label="Select MT5 signal journal files" onChange={event => { void importFiles(event.target.files); event.target.value = ''; }} />
-    <p className="text-sm leading-6 text-muted-foreground">In MT5, choose File → Open Data Folder → MQL5 → Files → AsheparteSignals. Select the .jsonl file created by advisor v3.28. Files are processed only in this browser tab; nothing is uploaded or saved to browser storage. Refreshing clears this view.</p>
+    <p className="text-sm leading-6 text-muted-foreground">In MT5, choose File → Open Data Folder → MQL5 → Files → AsheparteSignals. Select the .jsonl file created by advisor v3.29. Files are processed only in this browser tab; nothing is uploaded or saved to browser storage. Refreshing clears this view.</p>
     <p role="status" className="break-words text-sm text-foreground">{message}</p>
-    {plans.length === 0 ? <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">No signal history imported. New plans are recorded after installing v3.28; earlier signals cannot be reconstructed.</p> : <>
+    {plans.length === 0 ? <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">No signal history imported. New plans are recorded after installing v3.29; earlier signals cannot be reconstructed.</p> : <>
       <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">Setup timeframe
         <select className="rounded-lg border border-border bg-background p-2 text-foreground" value={filter} onChange={e => { setFilter(e.target.value); setLimit(20); }}>
           {['All', 'PERIOD_M1', 'PERIOD_M15', 'PERIOD_M30', 'PERIOD_H1'].map(value => <option key={value} value={value}>{value.replace('PERIOD_', '')}</option>)}

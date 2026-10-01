@@ -81,17 +81,17 @@ type JournalData = {
   quality?: { incompleteTrades: number; invalidDeals: number };
   mode: 'demo' | 'live' | 'contest' | 'unknown';
   account: { provider: string; brokerServer: string; loginMasked: string; company: string; currency: string; balance: number; equity: number; freeMargin: number; floatingProfit: number; updatedAt: string };
-  summary: { net: number; grossProfit: number; grossLoss: number; closedTrades: number; winRate: number; profitFactor: number; averageWin: number; averageLoss: number };
+  summary: { net: number; grossProfit: number; grossLoss: number; closedTrades: number; winRate: number; profitFactor: number; averageWin: number; averageLoss: number; deposits: number; withdrawals: number; netFunding: number };
   trades: JournalTrade[];
   daily: Record<string, number>;
-  dailyBreakdown?: Record<string, { net: number; profit: number; loss: number; trades: number }>;
+  dailyBreakdown?: Record<string, { net: number; profit: number; loss: number; trades: number; deposits: number; withdrawals: number }>;
 };
 
 const emptyJournal: JournalData = {
   connected: false,
   mode: 'demo',
   account: { provider: 'ACCM', brokerServer: 'Not connected', loginMasked: '—', company: '', currency: 'USD', balance: 0, equity: 0, freeMargin: 0, floatingProfit: 0, updatedAt: '' },
-  summary: { net: 0, grossProfit: 0, grossLoss: 0, closedTrades: 0, winRate: 0, profitFactor: 0, averageWin: 0, averageLoss: 0 },
+  summary: { net: 0, grossProfit: 0, grossLoss: 0, closedTrades: 0, winRate: 0, profitFactor: 0, averageWin: 0, averageLoss: 0, deposits: 0, withdrawals: 0, netFunding: 0 },
   trades: [],
   daily: {},
   dailyBreakdown: {},
@@ -3601,12 +3601,14 @@ export default function Home() {
             </div>
           </div>}
           {authLoaded && isSignedIn && currentJournalEnabled && <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {[
               ['Net P/L', currentJournalEnabled ? `${journalData.summary.net >= 0 ? '+' : '−'}$${Math.abs(journalData.summary.net).toFixed(2)}` : '—', 'Profit − loss − costs', 'text-sky-100'],
               ['Gross profit', currentJournalEnabled ? `$${journalData.summary.grossProfit.toFixed(2)}` : '—', 'Sum of winning trades', 'text-emerald-300'],
               ['Gross loss', currentJournalEnabled ? `−$${Math.abs(journalData.summary.grossLoss).toFixed(2)}` : '—', 'Sum of losing trades', 'text-red-300'],
               ['Closed trades', currentJournalEnabled ? String(journalData.summary.closedTrades) : '—', 'Completed deals only', 'text-amber-200'],
+              ['Deposits', currentJournalEnabled ? `+$${journalData.summary.deposits.toFixed(2)}` : '—', 'Funding · excluded from P/L', 'text-cyan-300'],
+              ['Withdrawals', currentJournalEnabled ? `−$${Math.abs(journalData.summary.withdrawals).toFixed(2)}` : '—', 'Cash out · excluded from P/L', 'text-violet-300'],
             ].map(([label, value, note, tone]) => (
               <Card key={label} className="border-sky-300/15 bg-[linear-gradient(145deg,rgba(56,189,248,.055),rgba(5,18,32,.78))]" size="sm">
                 <CardContent>
@@ -3621,7 +3623,7 @@ export default function Home() {
           <Card className="overflow-hidden border-fuchsia-300/15 bg-[linear-gradient(145deg,rgba(192,132,252,.045),rgba(5,18,32,.84)_48%)]">
             <CardHeader className="border-b border-white/7 pb-3">
               <CardTitle className="flex items-center gap-2"><Clock3 className="size-4 text-fuchsia-300" /> Profit &amp; loss calendar</CardTitle>
-              <CardDescription>Green days are profitable, red days are losses, and empty days have no closed trades.</CardDescription>
+              <CardDescription>Trading P/L stays separate from deposits and withdrawals so funding never inflates performance.</CardDescription>
               <CardAction>
                 <div className="flex rounded-lg border border-white/10 bg-black/15 p-0.5">
                   {(['month', 'year'] as const).map((mode) => (
@@ -3648,12 +3650,12 @@ export default function Home() {
                   <div className="mt-1.5 grid grid-cols-7 gap-1.5">
                     {journalCalendarCells.map((day, index) => {
                       const dateKey = day ? `${journalCalendarCursor.year}-${String(journalCalendarCursor.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
-                      const result = currentJournalEnabled ? journalData.daily[dateKey] : undefined;
                       const breakdown = journalData.dailyBreakdown?.[dateKey];
+                      const result = currentJournalEnabled ? (breakdown ? breakdown.net : journalData.daily[dateKey]) : undefined;
                       const tradeCount = breakdown?.trades ?? journalData.trades.filter((trade) => (trade.dateKey ?? journalDateKey(trade.closed)) === dateKey).length;
                       return (
-                        <div key={`${index}-${day ?? 'blank'}`} className={`min-h-16 rounded-lg border p-2 sm:min-h-24 ${day === null ? 'border-transparent bg-transparent' : result === undefined ? 'border-white/7 bg-white/[.018]' : result >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-red-300/20 bg-red-300/[.07]'}`}>
-                          {day !== null && <><p className="text-[10px] text-muted-foreground">{day}</p>{result !== undefined && <><p className={`mt-1.5 font-mono text-[11px] font-semibold ${result >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>Net {result >= 0 ? '+' : '−'}${Math.abs(result).toFixed(2)}</p><div className="mt-1 space-y-0.5 font-mono text-[8px]"><p className="text-emerald-400">Profit +${(breakdown?.profit ?? 0).toFixed(2)}</p><p className="text-red-400">Loss −${Math.abs(breakdown?.loss ?? 0).toFixed(2)}</p></div><p className="mt-1 text-[8px] text-muted-foreground">{tradeCount} {tradeCount === 1 ? 'trade' : 'trades'}</p></>}</>}
+                        <div key={`${index}-${day ?? 'blank'}`} className={`min-h-16 rounded-lg border p-2 sm:min-h-28 ${day === null ? 'border-transparent bg-transparent' : result === undefined ? 'border-white/7 bg-white/[.018]' : result >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-red-300/20 bg-red-300/[.07]'}`}>
+                          {day !== null && <><p className="text-[10px] text-muted-foreground">{day}</p>{result !== undefined && <><p className={`mt-1.5 font-mono text-[11px] font-semibold ${result >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>Net {result >= 0 ? '+' : '−'}${Math.abs(result).toFixed(2)}</p><div className="mt-1 space-y-0.5 font-mono text-[8px]"><p className="text-emerald-400">Profit +${(breakdown?.profit ?? 0).toFixed(2)}</p><p className="text-red-400">Loss −${Math.abs(breakdown?.loss ?? 0).toFixed(2)}</p>{(breakdown?.deposits ?? 0) > 0 && <p className="text-cyan-400">Deposit +${(breakdown?.deposits ?? 0).toFixed(2)}</p>}{(breakdown?.withdrawals ?? 0) < 0 && <p className="text-violet-300">Withdrawal −${Math.abs(breakdown?.withdrawals ?? 0).toFixed(2)}</p>}</div><p className="mt-1 text-[8px] text-muted-foreground">{tradeCount} {tradeCount === 1 ? 'trade' : 'trades'}</p></>}</>}
                         </div>
                       );
                     })}
@@ -3664,13 +3666,15 @@ export default function Home() {
                   {journalMonthNames.map((month, monthIndex) => {
                     const monthPrefix = `${journalCalendarCursor.year}-${String(monthIndex + 1).padStart(2, '0')}-`;
                     const monthResults = Object.entries(journalData.daily).filter(([date]) => date.startsWith(monthPrefix));
-                    const value = currentJournalEnabled && monthResults.length ? monthResults.reduce((sum, [, result]) => sum + result, 0) : undefined;
-                    const monthBreakdown = Object.entries(journalData.dailyBreakdown ?? {}).filter(([date]) => date.startsWith(monthPrefix)).reduce((total, [, day]) => ({ profit: total.profit + day.profit, loss: total.loss + day.loss, trades: total.trades + day.trades }), { profit: 0, loss: 0, trades: 0 });
+                    const monthActivity = Object.entries(journalData.dailyBreakdown ?? {}).filter(([date]) => date.startsWith(monthPrefix));
+                    const value = currentJournalEnabled && (monthActivity.length || monthResults.length) ? (monthActivity.length ? monthActivity.reduce((sum, [, day]) => sum + day.net, 0) : monthResults.reduce((sum, [, result]) => sum + result, 0)) : undefined;
+                    const monthBreakdown = monthActivity.reduce((total, [, day]) => ({ profit: total.profit + day.profit, loss: total.loss + day.loss, trades: total.trades + day.trades, deposits: total.deposits + day.deposits, withdrawals: total.withdrawals + day.withdrawals }), { profit: 0, loss: 0, trades: 0, deposits: 0, withdrawals: 0 });
                     return (
                       <button key={month} type="button" onClick={() => { setJournalCalendarCursor({ year: journalCalendarCursor.year, month: monthIndex }); setJournalCalendarMode('month'); }} className={`rounded-xl border p-3 text-left transition hover:border-fuchsia-300/25 ${value === undefined ? 'border-white/8 bg-white/[.02]' : value >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.06]' : 'border-red-300/20 bg-red-300/[.06]'}`}>
                         <p className="text-[10px] font-medium text-muted-foreground">{month.slice(0, 3)}</p>
                         <p className={`mt-2 font-mono text-sm font-semibold ${value === undefined ? 'text-sky-100' : value >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{value === undefined ? '—' : `${value >= 0 ? '+' : '−'}$${Math.abs(value).toFixed(2)}`}</p>
                         {value !== undefined && <div className="mt-1 font-mono text-[9px]"><span className="text-emerald-400">P +${monthBreakdown.profit.toFixed(2)}</span><span className="ml-2 text-red-400">L −${Math.abs(monthBreakdown.loss).toFixed(2)}</span></div>}
+                        {value !== undefined && (monthBreakdown.deposits > 0 || monthBreakdown.withdrawals < 0) && <div className="mt-1 font-mono text-[9px]"><span className="text-cyan-400">D +${monthBreakdown.deposits.toFixed(2)}</span>{monthBreakdown.withdrawals < 0 && <span className="ml-2 text-violet-300">W −${Math.abs(monthBreakdown.withdrawals).toFixed(2)}</span>}</div>}
                         <p className="mt-1 text-[9px] text-muted-foreground">{value === undefined ? 'No trades' : `${monthBreakdown.trades} ${monthBreakdown.trades === 1 ? 'trade' : 'trades'}`}</p>
                       </button>
                     );

@@ -114,14 +114,15 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
   // Reject malformed trade events before changing either snapshot or history.
   for (const deal of payload.deals) {
     if (!deal || !Number.isInteger(Number(deal.type))) throw new Error('invalid_trade_deal');
-    if (![0, 1].includes(Number(deal.type))) continue;
     if (!String(deal.ticket ?? '') || !Number.isSafeInteger(Number(deal.timeMsc)) ||
         Number(deal.timeMsc) < 946684800000 || Number(deal.timeMsc) > 4133980800000 ||
-        ![0, 1, 2, 3].includes(Number(deal.entry)) || !(Number(deal.volume) > 0) ||
-        !['volume', 'price', 'profit', 'commission', 'swap', 'fee'].every(field =>
+        !['profit', 'commission', 'swap', 'fee'].every(field =>
           Number.isFinite(Number(deal[field as keyof DealInput] ?? 0)))) {
       throw new Error('invalid_trade_deal');
     }
+    if ([0, 1].includes(Number(deal.type)) &&
+        (![0, 1, 2, 3].includes(Number(deal.entry)) || !(Number(deal.volume) > 0) || !Number.isFinite(Number(deal.price))))
+      throw new Error('invalid_trade_deal');
   }
   const sql = await ensureJournalSchema();
 
@@ -141,7 +142,7 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
   for (const deal of payload.deals) {
     const ticket = text(deal.ticket, 64);
     const dealType = Math.trunc(finiteNumber(deal.type));
-    if (!ticket || (dealType !== 0 && dealType !== 1)) continue;
+    if (!ticket || ![0, 1, 2].includes(dealType)) continue;
     const inserted = await sql`INSERT INTO journal_deals
       (account_key,owner_user_id,ticket,position_id,time_msc,deal_type,deal_entry,symbol,volume,price,commission,swap,fee,profit)
       VALUES (${key},${ownerUserId},${ticket},${text(deal.positionId, 64)},${Math.trunc(finiteNumber(deal.timeMsc))},
@@ -169,7 +170,7 @@ export async function readJournal(ownerUserId: string, selectedAccountKey?: stri
   // Reconstruct positions from all imported fills, not just the last 500 events.
   const rows = await sql`SELECT * FROM journal_deals WHERE account_key=${account.account_key} AND owner_user_id=${ownerUserId}
     ORDER BY time_msc ASC, ticket ASC`;
-  const { trades, daily, dailyBreakdown, summary, quality } = calculateJournal(rows);
+  const { trades, cashMovements, daily, dailyBreakdown, summary, quality } = calculateJournal(rows);
   return {
     connected: true,
     accounts: accountList,
@@ -190,6 +191,7 @@ export async function readJournal(ownerUserId: string, selectedAccountKey?: stri
     summary,
     quality,
     trades,
+    cashMovements,
     daily,
     dailyBreakdown,
   };

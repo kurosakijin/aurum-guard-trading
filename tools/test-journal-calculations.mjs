@@ -76,7 +76,7 @@ test('breakevens do not dilute average loss', () => {
 test('daily breakdown exposes separate gross profit, loss, net and real trade count', () => {
   const r = calculateJournal([deal(1, 0), deal(2, 1, { profit: 20 }), deal(3, 0), deal(4, 1, { profit: -7 })]);
   const day = r.dailyBreakdown['2026-09-30'];
-  assert.deepEqual(day, { net: 13, profit: 20, loss: -7, trades: 2 });
+  assert.deepEqual(day, { net: 13, profit: 20, loss: -7, trades: 2, deposits: 0, withdrawals: 0 });
   near(day.profit + day.loss, day.net);
   near(r.daily['2026-09-30'], day.net);
 });
@@ -88,15 +88,23 @@ test('calendar and display retain MT5 date across browser timezone and midnight'
   assert.equal(r.daily['2026-10-01'], undefined);
   near(Object.values(r.daily).reduce((a, b) => a + b, 0), r.summary.net);
 });
-test('invalid timestamps are flagged without crashing and cash deposits excluded', () => {
-  const r = calculateJournal([deal(1, 1, { time_msc: 0 }), deal(2, 1, { time_msc: Infinity }), deal(3, 1, { deal_type: 2, profit: 10000 })]);
+test('cash funding is reported separately and never added to trading P/L', () => {
+  const r = calculateJournal([deal(1, 1, { time_msc: 0 }), deal(2, 1, { time_msc: Infinity }),
+    deal(3, 1, { deal_type: 2, profit: 10000 }), deal(4, 1, { deal_type: 2, profit: -250 })]);
   assert.equal(r.trades.length, 0);
   assert.equal(r.quality.invalidDeals, 2);
+  assert.equal(r.summary.net, 0);
+  assert.equal(r.summary.deposits, 10000);
+  assert.equal(r.summary.withdrawals, -250);
+  assert.equal(r.summary.netFunding, 9750);
+  assert.equal(r.cashMovements.length, 2);
+  assert.deepEqual(r.dailyBreakdown['2026-09-30'], { net: 0, profit: 0, loss: 0, trades: 0, deposits: 10000, withdrawals: -250 });
 });
 test('re-import can update corrections and reads retain owner/account scope', () => {
   const source = readFileSync('lib/hosted-journal.ts', 'utf8');
   assert.ok(source.includes('ON CONFLICT (account_key,ticket) DO UPDATE SET'));
   assert.ok(source.includes('WHERE account_key=${account.account_key} AND owner_user_id=${ownerUserId}'));
+  assert.ok(source.includes('![0, 1, 2].includes(dealType)'));
 });
 
 test('standalone bridge pages oldest-first and advances same-millisecond tickets', () => {
@@ -105,7 +113,7 @@ test('standalone bridge pages oldest-first and advances same-millisecond tickets
   assert.ok(source.includes('const int first = 0;'));
   assert.ok(source.includes('if(sent_count>=safe_limit) break;'));
   assert.ok(source.includes('newest_time_msc == last_time_msc && newest_ticket > last_ticket'));
-  assert.ok(source.includes('AsheJ101Time_'));
+  assert.ok(source.includes('AsheJ102Time_'));
   const rows = Array.from({ length: 1103 }, (_, ticket) => ({ time: 1000 + Math.floor(ticket / 800), ticket: ticket + 1 })).reverse();
   rows.sort((a, b) => a.time - b.time || a.ticket - b.ticket);
   const received = [];

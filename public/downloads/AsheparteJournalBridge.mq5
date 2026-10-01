@@ -1,6 +1,6 @@
 #property copyright "Asheparte AI"
 #property link      "https://asheparte-ai.vercel.app/"
-#property version   "1.01"
+#property version   "1.02"
 #property strict
 #property description "Read-only MT5/ACCM journal bridge. This EA never opens, modifies or closes trades."
 
@@ -264,8 +264,8 @@ int OnInit()
    uint identity_hash=2166136261;
    for(int i=0;i<StringLen(identity);i++) identity_hash=(identity_hash^(uint)StringGetCharacter(identity,i))*16777619;
    string cursor_scope=IntegerToString(login)+"_"+IntegerToString((long)identity_hash)+"_"+token_scope;
-   g_time_key = "AsheJ101Time_" + cursor_scope;
-   g_ticket_key = "AsheJ101Ticket_" + cursor_scope;
+   g_time_key = "AsheJ102Time_" + cursor_scope;
+   g_ticket_key = "AsheJ102Ticket_" + cursor_scope;
    EventSetTimer(MathMax(15, InpSyncSeconds));
    Print("Asheparte Journal Bridge loaded in READ-ONLY mode. It contains no trade functions.");
    SynchronizeJournal();
