@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
+import { calculateJournal } from './journal-calculations.js';
 
 type DealInput = {
   ticket?: string | number;
@@ -110,6 +111,18 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
   if (ownerUserId === 'legacy-demo' && tradeMode !== 0) throw new Error('personal_bridge_token_required');
   if (!Array.isArray(payload.deals) || payload.deals.length > 1000) throw new Error('invalid_deals');
 
+  // Reject malformed trade events before changing either snapshot or history.
+  for (const deal of payload.deals) {
+    if (!deal || !Number.isInteger(Number(deal.type))) throw new Error('invalid_trade_deal');
+    if (![0, 1].includes(Number(deal.type))) continue;
+    if (!String(deal.ticket ?? '') || !Number.isSafeInteger(Number(deal.timeMsc)) ||
+        Number(deal.timeMsc) < 946684800000 || Number(deal.timeMsc) > 4133980800000 ||
+        ![0, 1, 2, 3].includes(Number(deal.entry)) || !(Number(deal.volume) > 0) ||
+        !['volume', 'price', 'profit', 'commission', 'swap', 'fee'].every(field =>
+          Number.isFinite(Number(deal[field as keyof DealInput] ?? 0)))) {
+      throw new Error('invalid_trade_deal');
+    }
+  }
   const sql = await ensureJournalSchema();
 
   const key = accountKey(ownerUserId, `${provider}|${server}`, login);
@@ -135,7 +148,12 @@ export async function ingestJournal(payload: BridgePayload, ownerUserId: string)
         ${dealType},${Math.trunc(finiteNumber(deal.entry))},${text(deal.symbol, 64)},${finiteNumber(deal.volume)},
         ${finiteNumber(deal.price)},${finiteNumber(deal.commission)},${finiteNumber(deal.swap)},
         ${finiteNumber(deal.fee)},${finiteNumber(deal.profit)})
-      ON CONFLICT (account_key,ticket) DO NOTHING RETURNING ticket`;
+      ON CONFLICT (account_key,ticket) DO UPDATE SET
+        position_id=EXCLUDED.position_id,time_msc=EXCLUDED.time_msc,deal_type=EXCLUDED.deal_type,
+        deal_entry=EXCLUDED.deal_entry,symbol=EXCLUDED.symbol,volume=EXCLUDED.volume,
+        price=EXCLUDED.price,commission=EXCLUDED.commission,swap=EXCLUDED.swap,
+        fee=EXCLUDED.fee,profit=EXCLUDED.profit
+      RETURNING ticket`;
     accepted += inserted.length;
   }
   return { accepted };
@@ -148,48 +166,10 @@ export async function readJournal(ownerUserId: string, selectedAccountKey?: stri
   const account = selectedAccountKey ? accounts.find(row => row.account_key === selectedAccountKey) : accounts[0];
   if (!account) throw new Error('account_not_found');
   const accountList = accounts.map(row => ({ id: String(row.account_key), provider: String(row.provider), server: String(row.broker_server), loginMasked: String(row.login_masked), updatedAt: row.updated_at, mode: row.trade_mode === 2 ? 'live' : row.trade_mode === 0 ? 'demo' : row.trade_mode === 1 ? 'contest' : 'unknown' }));
+  // Reconstruct positions from all imported fills, not just the last 500 events.
   const rows = await sql`SELECT * FROM journal_deals WHERE account_key=${account.account_key} AND owner_user_id=${ownerUserId}
-    ORDER BY time_msc DESC LIMIT 500`;
-
-  const opens = new Map<string, (typeof rows)[number]>();
-  const trades: Array<Record<string, unknown>> = [];
-  const daily: Record<string, number> = {};
-  let net = 0;
-  let grossProfit = 0;
-  let grossLoss = 0;
-  let winners = 0;
-
-  for (const row of [...rows].reverse()) {
-    if (Number(row.deal_entry) === 0) {
-      opens.set(String(row.position_id), row);
-      continue;
-    }
-    if (![1, 2, 3].includes(Number(row.deal_entry))) continue;
-    const opening = opens.get(String(row.position_id));
-    const result = finiteNumber(row.profit) + finiteNumber(row.commission) + finiteNumber(row.swap) + finiteNumber(row.fee);
-    net += result;
-    if (result > 0) {
-      grossProfit += result;
-      winners += 1;
-    } else if (result < 0) grossLoss += result;
-    const closedAt = new Date(Number(row.time_msc));
-    const dateKey = closedAt.toISOString().slice(0, 10);
-    daily[dateKey] = (daily[dateKey] ?? 0) + result;
-    const side = opening ? (Number(opening.deal_type) === 0 ? 'BUY' : 'SELL') : (Number(row.deal_type) === 1 ? 'BUY' : 'SELL');
-    trades.unshift({
-      closed: closedAt.toISOString(),
-      symbol: String(row.symbol),
-      side,
-      volume: finiteNumber(row.volume),
-      entryPrice: opening ? finiteNumber(opening.price) : 0,
-      exitPrice: finiteNumber(row.price),
-      costs: finiteNumber(row.commission) + finiteNumber(row.swap) + finiteNumber(row.fee),
-      net: result,
-    });
-  }
-
-  const closedTrades = trades.length;
-  const losses = closedTrades - winners;
+    ORDER BY time_msc ASC, ticket ASC`;
+  const { trades, daily, dailyBreakdown, summary, quality } = calculateJournal(rows);
   return {
     connected: true,
     accounts: accountList,
@@ -207,17 +187,10 @@ export async function readJournal(ownerUserId: string, selectedAccountKey?: stri
       floatingProfit: finiteNumber(account.floating_profit),
       updatedAt: account.updated_at,
     },
-    summary: {
-      net,
-      grossProfit,
-      grossLoss,
-      closedTrades,
-      winRate: closedTrades ? (winners * 100) / closedTrades : 0,
-      profitFactor: grossLoss < 0 ? grossProfit / Math.abs(grossLoss) : grossProfit > 0 ? 999 : 0,
-      averageWin: winners ? grossProfit / winners : 0,
-      averageLoss: losses ? grossLoss / losses : 0,
-    },
+    summary,
+    quality,
     trades,
     daily,
+    dailyBreakdown,
   };
 }

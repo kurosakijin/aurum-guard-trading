@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChangePassword } from '@/components/change-password';
 import { ConfluencePine } from '@/components/confluence-pine';
+import { journalDateKey, journalDateLabel } from '@/lib/journal-date';
 import { AuthLoading } from '@/components/auth-loading';
 import { JournalAccountSelect, type JournalAccountOption } from '@/components/journal-account-select';
 import { authView, type ResolvedAuthView } from '@/lib/auth-view';
@@ -70,18 +71,20 @@ const liveMarkets = [
   { key: 'silver', label: 'Silver', short: 'XAG / USD', symbol: 'OANDA:XAGUSD' },
 ] as const;
 
-type JournalTrade = { closed: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; entryPrice: number; exitPrice: number; costs: number; net: number };
+type JournalTrade = { ticket?: string; dateKey?: string; incompleteHistory?: boolean; closed: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; entryPrice: number | null; exitPrice: number; costs: number; net: number };
 type BridgeAccount = { id: string; provider: string; server: string; loginMasked: string; login?: string };
 type BridgeBindingStatus = 'unpaired' | 'pending' | 'linked';
 type JournalData = {
   connected: boolean;
   accounts?: JournalAccountOption[];
   selectedAccountId?: string;
+  quality?: { incompleteTrades: number; invalidDeals: number };
   mode: 'demo' | 'live' | 'contest' | 'unknown';
   account: { provider: string; brokerServer: string; loginMasked: string; company: string; currency: string; balance: number; equity: number; freeMargin: number; floatingProfit: number; updatedAt: string };
   summary: { net: number; grossProfit: number; grossLoss: number; closedTrades: number; winRate: number; profitFactor: number; averageWin: number; averageLoss: number };
   trades: JournalTrade[];
   daily: Record<string, number>;
+  dailyBreakdown?: Record<string, { net: number; profit: number; loss: number; trades: number }>;
 };
 
 const emptyJournal: JournalData = {
@@ -91,6 +94,7 @@ const emptyJournal: JournalData = {
   summary: { net: 0, grossProfit: 0, grossLoss: 0, closedTrades: 0, winRate: 0, profitFactor: 0, averageWin: 0, averageLoss: 0 },
   trades: [],
   daily: {},
+  dailyBreakdown: {},
 };
 
 // The advisor normally sends a snapshot every 60 seconds. Allow enough time for
@@ -3645,10 +3649,11 @@ export default function Home() {
                     {journalCalendarCells.map((day, index) => {
                       const dateKey = day ? `${journalCalendarCursor.year}-${String(journalCalendarCursor.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
                       const result = currentJournalEnabled ? journalData.daily[dateKey] : undefined;
-                      const tradeCount = journalData.trades.filter((trade) => new Date(trade.closed).toLocaleDateString('en-CA') === dateKey).length;
+                      const breakdown = journalData.dailyBreakdown?.[dateKey];
+                      const tradeCount = breakdown?.trades ?? journalData.trades.filter((trade) => (trade.dateKey ?? journalDateKey(trade.closed)) === dateKey).length;
                       return (
-                        <div key={`${index}-${day ?? 'blank'}`} className={`min-h-16 rounded-lg border p-2 sm:min-h-20 ${day === null ? 'border-transparent bg-transparent' : result === undefined ? 'border-white/7 bg-white/[.018]' : result >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-red-300/20 bg-red-300/[.07]'}`}>
-                          {day !== null && <><p className="text-[10px] text-muted-foreground">{day}</p>{result !== undefined && <><p className={`mt-2 font-mono text-[11px] font-semibold ${result >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{result >= 0 ? '+' : '−'}${Math.abs(result).toFixed(2)}</p><p className="mt-1 text-[8px] text-muted-foreground">{tradeCount} {tradeCount === 1 ? 'trade' : 'trades'}</p></>}</>}
+                        <div key={`${index}-${day ?? 'blank'}`} className={`min-h-16 rounded-lg border p-2 sm:min-h-24 ${day === null ? 'border-transparent bg-transparent' : result === undefined ? 'border-white/7 bg-white/[.018]' : result >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-red-300/20 bg-red-300/[.07]'}`}>
+                          {day !== null && <><p className="text-[10px] text-muted-foreground">{day}</p>{result !== undefined && <><p className={`mt-1.5 font-mono text-[11px] font-semibold ${result >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>Net {result >= 0 ? '+' : '−'}${Math.abs(result).toFixed(2)}</p><div className="mt-1 space-y-0.5 font-mono text-[8px]"><p className="text-emerald-400">Profit +${(breakdown?.profit ?? 0).toFixed(2)}</p><p className="text-red-400">Loss −${Math.abs(breakdown?.loss ?? 0).toFixed(2)}</p></div><p className="mt-1 text-[8px] text-muted-foreground">{tradeCount} {tradeCount === 1 ? 'trade' : 'trades'}</p></>}</>}
                         </div>
                       );
                     })}
@@ -3660,11 +3665,13 @@ export default function Home() {
                     const monthPrefix = `${journalCalendarCursor.year}-${String(monthIndex + 1).padStart(2, '0')}-`;
                     const monthResults = Object.entries(journalData.daily).filter(([date]) => date.startsWith(monthPrefix));
                     const value = currentJournalEnabled && monthResults.length ? monthResults.reduce((sum, [, result]) => sum + result, 0) : undefined;
+                    const monthBreakdown = Object.entries(journalData.dailyBreakdown ?? {}).filter(([date]) => date.startsWith(monthPrefix)).reduce((total, [, day]) => ({ profit: total.profit + day.profit, loss: total.loss + day.loss, trades: total.trades + day.trades }), { profit: 0, loss: 0, trades: 0 });
                     return (
                       <button key={month} type="button" onClick={() => { setJournalCalendarCursor({ year: journalCalendarCursor.year, month: monthIndex }); setJournalCalendarMode('month'); }} className={`rounded-xl border p-3 text-left transition hover:border-fuchsia-300/25 ${value === undefined ? 'border-white/8 bg-white/[.02]' : value >= 0 ? 'border-emerald-300/20 bg-emerald-300/[.06]' : 'border-red-300/20 bg-red-300/[.06]'}`}>
                         <p className="text-[10px] font-medium text-muted-foreground">{month.slice(0, 3)}</p>
                         <p className={`mt-2 font-mono text-sm font-semibold ${value === undefined ? 'text-sky-100' : value >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{value === undefined ? '—' : `${value >= 0 ? '+' : '−'}$${Math.abs(value).toFixed(2)}`}</p>
-                        <p className="mt-1 text-[9px] text-muted-foreground">{value === undefined ? 'No trades' : '3 trades'}</p>
+                        {value !== undefined && <div className="mt-1 font-mono text-[9px]"><span className="text-emerald-400">P +${monthBreakdown.profit.toFixed(2)}</span><span className="ml-2 text-red-400">L −${Math.abs(monthBreakdown.loss).toFixed(2)}</span></div>}
+                        <p className="mt-1 text-[9px] text-muted-foreground">{value === undefined ? 'No trades' : `${monthBreakdown.trades} ${monthBreakdown.trades === 1 ? 'trade' : 'trades'}`}</p>
                       </button>
                     );
                   })}
@@ -3677,7 +3684,9 @@ export default function Home() {
             <Card className="min-w-0 overflow-hidden border-sky-300/18">
               <CardHeader className="border-b border-white/7 pb-3">
                 <CardTitle className="flex items-center gap-2"><BookOpenCheck className="size-4 text-cyan-300" /> Trade history</CardTitle>
-                <CardDescription>{currentJournalEnabled ? `Showing 10 trades per page · ${journalData.trades.length} closed trades` : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
+                <CardDescription>{currentJournalEnabled ? `10 closing deals per page · ${journalData.trades.length} closing deals · MT5-reported time (no browser timezone conversion)` : 'One row per closed MT5 deal · broker-reported values'}</CardDescription>
+                {currentJournalEnabled && !!((journalData.quality?.incompleteTrades ?? 0) + (journalData.quality?.invalidDeals ?? 0)) && <p role="status" className="text-xs text-amber-500">History needs reconciliation: {journalData.quality?.incompleteTrades ?? 0} closing deals have missing/inconsistent entries; {journalData.quality?.invalidDeals ?? 0} invalid records were excluded. Totals may be incomplete until MT5 history is re-synced.</p>}
+                {currentJournalEnabled && <p className="text-xs text-muted-foreground">Net includes broker-reported profit, swap, fees and proportional opening commissions. Opening costs are attributed to the closing date; this is not the account cash ledger. Amounts are in {journalData.account.currency || 'account currency'}.</p>}
                 <CardAction><Badge variant="outline" className={currentJournalEnabled ? 'border-fuchsia-300/20 text-fuchsia-200' : 'border-white/10 text-muted-foreground'}>{currentJournalEnabled ? `PAGE ${journalPage} / ${journalTotalPages}` : 'All time'}</Badge></CardAction>
               </CardHeader>
               <CardContent className="p-0">
@@ -3688,12 +3697,12 @@ export default function Home() {
                   {currentJournalEnabled ? (
                     <div className="min-w-[760px] divide-y divide-white/6">
                       {journalPageTrades.map((trade, index) => (
-                        <div key={`${trade.closed}-${trade.side}-${trade.symbol}-${index}`} className="grid grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 px-4 py-3 text-[10px] text-sky-50">
-                          <span className="text-muted-foreground">{new Date(trade.closed).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                        <div key={trade.ticket ?? `${trade.closed}-${trade.side}-${trade.symbol}-${index}`} title={trade.incompleteHistory ? 'Opening history is missing or inconsistent. Entry costs may be incomplete; re-sync MT5 history.' : 'Net includes exit costs and the proportional opening costs.'} className="grid grid-cols-[1.1fr_.7fr_.55fr_.6fr_1fr_.7fr_.7fr] gap-3 px-4 py-3 text-[10px] text-sky-50">
+                          <span className="text-muted-foreground">{journalDateLabel(trade.closed)}{trade.ticket && <span className="block">Deal #{trade.ticket}</span>}{trade.incompleteHistory && <span className="block text-amber-500">Incomplete opening history</span>}</span>
                           <span>{trade.symbol}</span>
                           <span className={trade.side === 'BUY' ? 'text-emerald-300' : 'text-red-300'}>{trade.side}</span>
                           <span className="font-mono">{trade.volume.toFixed(2)}</span>
-                          <span className="font-mono text-muted-foreground">{trade.entryPrice.toLocaleString()} → {trade.exitPrice.toLocaleString()}</span>
+                          <span className="font-mono text-muted-foreground">{trade.entryPrice == null ? 'Unknown' : trade.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 8 })} → {trade.exitPrice.toLocaleString(undefined, { maximumFractionDigits: 8 })}</span>
                           <span className="font-mono text-muted-foreground">{trade.costs < 0 ? '−' : ''}${Math.abs(trade.costs).toFixed(2)}</span>
                           <span className={`text-right font-mono font-semibold ${trade.net >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{trade.net >= 0 ? '+' : '−'}${Math.abs(trade.net).toFixed(2)}</span>
                         </div>

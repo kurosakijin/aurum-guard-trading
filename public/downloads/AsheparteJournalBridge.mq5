@@ -1,6 +1,6 @@
 #property copyright "Asheparte AI"
 #property link      "https://asheparte-ai.vercel.app/"
-#property version   "1.00"
+#property version   "1.01"
 #property strict
 #property description "Read-only MT5/ACCM journal bridge. This EA never opens, modifies or closes trades."
 
@@ -13,6 +13,35 @@ input int    InpMaxDeals       = 250;
 
 string g_time_key;
 string g_ticket_key;
+
+struct JournalOrderedDeal
+{
+   ulong ticket;
+   long time;
+};
+
+bool JournalBefore(const JournalOrderedDeal &a,const JournalOrderedDeal &b)
+{
+   return a.time<b.time || (a.time==b.time && a.ticket<b.ticket);
+}
+
+void SortJournalHistory(JournalOrderedDeal &items[],const int left,const int right)
+{
+   int i=left,j=right;
+   JournalOrderedDeal pivot=items[(left+right)/2];
+   while(i<=j)
+   {
+      while(JournalBefore(items[i],pivot)) i++;
+      while(JournalBefore(pivot,items[j])) j--;
+      if(i<=j)
+      {
+         JournalOrderedDeal temp=items[i]; items[i]=items[j]; items[j]=temp;
+         i++; j--;
+      }
+   }
+   if(left<j) SortJournalHistory(items,left,j);
+   if(i<right) SortJournalHistory(items,i,right);
+}
 
 string JsonEscape(string value)
 {
@@ -147,9 +176,22 @@ void SynchronizeJournal()
       return;
    }
 
-   const int total = HistoryDealsTotal();
+   const int history_total = HistoryDealsTotal();
+   JournalOrderedDeal ordered[];
+   ArrayResize(ordered,history_total);
+   int total=0;
+   for(int i=0;i<history_total;i++)
+   {
+      ulong ticket=HistoryDealGetTicket(i);
+      if(ticket==0 || !IsJournalDeal((ENUM_DEAL_TYPE)HistoryDealGetInteger(ticket,DEAL_TYPE))) continue;
+      ordered[total].ticket=ticket;
+      ordered[total].time=HistoryDealGetInteger(ticket,DEAL_TIME_MSC);
+      total++;
+   }
+   if(total>1) SortJournalHistory(ordered,0,total-1);
    const int safe_limit = MathMax(1, MathMin(1000, InpMaxDeals));
-   const int first = MathMax(0, total - safe_limit);
+   const int first = 0;
+   int sent_count=0;
    string deals_json = "[";
    bool needs_comma = false;
    long newest_time_msc = last_time_msc;
@@ -157,7 +199,7 @@ void SynchronizeJournal()
 
    for(int index = first; index < total; index++)
    {
-      const ulong ticket = HistoryDealGetTicket(index);
+      const ulong ticket = ordered[index].ticket;
       if(ticket == 0)
          continue;
 
@@ -172,12 +214,14 @@ void SynchronizeJournal()
          deals_json += ",";
       deals_json += DealJson(ticket);
       needs_comma = true;
+      sent_count++;
 
       if(deal_time_msc > newest_time_msc || (deal_time_msc == newest_time_msc && ticket > newest_ticket))
       {
          newest_time_msc = deal_time_msc;
          newest_ticket = ticket;
       }
+      if(sent_count>=safe_limit) break;
    }
    deals_json += "]";
 
@@ -198,7 +242,7 @@ void SynchronizeJournal()
       deals_json
    );
 
-   if(PostPayload(payload) && newest_time_msc > last_time_msc)
+   if(PostPayload(payload) && (newest_time_msc > last_time_msc || (newest_time_msc == last_time_msc && newest_ticket > last_ticket)))
    {
       GlobalVariableSet(g_time_key, (double)newest_time_msc);
       GlobalVariableSet(g_ticket_key, (double)newest_ticket);
@@ -214,8 +258,14 @@ int OnInit()
    const string token_scope = token_length > 8
       ? StringSubstr(InpBridgeToken, token_length - 8)
       : InpBridgeToken;
-   g_time_key = "AsheparteJournalTime_" + IntegerToString(login) + "_" + token_scope;
-   g_ticket_key = "AsheparteJournalTicket_" + IntegerToString(login) + "_" + token_scope;
+   // New cursor namespace replays the configured initial window once, repairing
+   // old newest-only batches without deleting stored history or changing keys.
+   string identity=AccountInfoString(ACCOUNT_SERVER)+"|"+InpProvider+"|"+InpBridgeEndpoint;
+   uint identity_hash=2166136261;
+   for(int i=0;i<StringLen(identity);i++) identity_hash=(identity_hash^(uint)StringGetCharacter(identity,i))*16777619;
+   string cursor_scope=IntegerToString(login)+"_"+IntegerToString((long)identity_hash)+"_"+token_scope;
+   g_time_key = "AsheJ101Time_" + cursor_scope;
+   g_ticket_key = "AsheJ101Ticket_" + cursor_scope;
    EventSetTimer(MathMax(15, InpSyncSeconds));
    Print("Asheparte Journal Bridge loaded in READ-ONLY mode. It contains no trade functions.");
    SynchronizeJournal();
